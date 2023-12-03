@@ -31,6 +31,10 @@ const edgeTypes = {
   smart: SmartStepEdge,
 };
 
+const proOptions = {
+  hideAttribution: true,
+};
+
 const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: UserOptions) => {
   const elkOptions: LayoutOptions = {
     "elk.algorithm": "layered",
@@ -175,6 +179,30 @@ export const Renderer = ({ source }: RendererProps) => {
   const cachedNodesMap = useRef<Map<string, Node>>(new Map());
   const options = useOptions();
 
+  // computed reactflow props
+  const fitViewOptions = useMemo(
+    () => ({
+      padding: options.renderer.direction === "horizontal" ? 0.15 : 0.5,
+    }),
+    [options.renderer]
+  );
+
+  // auto layout
+  const handleAutoLayout = useCallback(() => {
+    getLayoutedElements(getNodes(), getEdges(), options).then(
+      ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+        setNodes(layoutedNodes);
+        setEdges(layoutedEdges);
+        if (options.renderer.autoFitView) {
+          // FIXME: flicker when changing orientation
+          requestIdleCallback(() => fitView(fitViewOptions));
+        }
+      }
+    );
+  }, [fitView, fitViewOptions, getEdges, getNodes, options, setEdges, setNodes]);
+  const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
+
+  // parse source
   const parser = useRef<ModelParser>(new ModelParser(source));
   const models = useMemo(() => {
     parser.current.setSource(source);
@@ -185,19 +213,7 @@ export const Renderer = ({ source }: RendererProps) => {
 
   // console.log({ parsedNodes, parsedEdges });
 
-  // auto layout
-  const handleAutoLayout = useCallback(() => {
-    getLayoutedElements(getNodes(), getEdges(), options).then(
-      ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
-        setNodes(layoutedNodes);
-        setEdges(layoutedEdges);
-        if (options.renderer.autoFitView) requestAnimationFrame(() => fitView());
-      }
-    );
-  }, [fitView, getEdges, getNodes, options, setEdges, setNodes]);
-  const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
-
-  // update nodes and edges
+  // update nodes and edges after parsing
   useLayoutEffect(() => {
     const updatedNodes = parsedNodes.map((node) => {
       const cachedNode = cachedNodesMap.current.get(node.id);
@@ -219,7 +235,7 @@ export const Renderer = ({ source }: RendererProps) => {
     requestAnimationFrame(handleAutoLayout);
   }, [handleAutoLayout, parsedEdges, parsedNodes, setEdges, setNodes]);
 
-  // cache nodes
+  // cache computed nodes
   useLayoutEffect(() => {
     cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
   }, [nodes]);
@@ -237,12 +253,12 @@ export const Renderer = ({ source }: RendererProps) => {
 
   return (
     <ReactFlow
-      attributionPosition="top-right"
       edgeTypes={edgeTypes}
       edges={edges}
+      fitViewOptions={fitViewOptions}
       nodeTypes={nodeTypes}
       nodes={nodes}
-      proOptions={{ hideAttribution: true }}
+      proOptions={proOptions}
       fitView
       onEdgesChange={onEdgesChange}
       onInit={handleInit}
