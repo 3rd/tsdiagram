@@ -178,6 +178,7 @@ export const Renderer = ({ source }: RendererProps) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const cachedNodesMap = useRef<Map<string, Node>>(new Map());
   const options = useOptions();
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // computed reactflow props
   const fitViewOptions = useMemo(
@@ -253,9 +254,13 @@ export const Renderer = ({ source }: RendererProps) => {
   }, [handleAutoLayout, options.renderer]);
 
   // interaction handlers
-  const handleMouseDown = useCallback(() => {
-    options.renderer.autoFitView = false;
-  }, [options.renderer]);
+  const handleMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.target && panelRef.current?.contains(event.target as HTMLElement)) return;
+      options.renderer.autoFitView = false;
+    },
+    [options.renderer]
+  );
   const handleMove = useCallback(
     (event: MouseEvent | TouchEvent) => {
       if (event instanceof WheelEvent) {
@@ -280,21 +285,23 @@ export const Renderer = ({ source }: RendererProps) => {
       onMove={handleMove}
       onNodesChange={onNodesChange}
     >
-      <Panel className="overflow-hidden bg-white rounded-md shadow-md text-stone-600" position="top-center">
-        {/* auto-fit */}
-        <button
-          className={classNames(
-            "py-0.5 px-2 text-sm border-r",
-            options.renderer.autoFitView ? "text-blue-600" : "hover:text-stone-500"
-          )}
-          onClick={handleAutoFitToggle}
-        >
-          🪄 Auto-fit
-        </button>
-        {/* direction: vertical | horizontal */}
-        <button className={classNames("py-0.5 px-2 text-sm ")} onClick={handleDirectionToggle}>
-          Orientation: {options.renderer.direction === "vertical" ? "↕" : "↔"}
-        </button>
+      <Panel position="top-center">
+        <div ref={panelRef} className="overflow-hidden bg-white rounded-md shadow-md text-stone-600">
+          {/* auto-fit */}
+          <button
+            className={classNames(
+              "py-0.5 px-2 text-sm border-r",
+              options.renderer.autoFitView ? "text-blue-600" : "hover:text-stone-500"
+            )}
+            onClick={handleAutoFitToggle}
+          >
+            🪄 Auto-fit
+          </button>
+          {/* direction: vertical | horizontal */}
+          <button className={classNames("py-0.5 px-2 text-sm ")} onClick={handleDirectionToggle}>
+            Orientation: {options.renderer.direction === "vertical" ? "↕" : "↔"}
+          </button>
+        </div>
       </Panel>
       <Controls />
       <MiniMap
