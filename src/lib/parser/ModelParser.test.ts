@@ -11,6 +11,15 @@ it("parses top level type aliases and interfaces into models", () => {
   expect(models[1]).toEqual({ id: "67", name: "B", schema: [{ name: "b", type: "string" }] });
 });
 
+it("parses exported top level type aliases and interfaces into models", () => {
+  const parser = new ModelParser("export interface A { a: string; }; export type B = { b: string };");
+  const models = parser.getModels();
+
+  expect(models.length).toBe(2);
+  expect(models[0]).toEqual({ id: "66", name: "A", schema: [{ name: "a", type: "string" }] });
+  expect(models[1]).toEqual({ id: "67", name: "B", schema: [{ name: "b", type: "string" }] });
+});
+
 it("skips type aliases that are not direct aliases", () => {
   const parser = new ModelParser("type A = { a: string }; type B = A;");
   const models = parser.getModels();

@@ -20,10 +20,10 @@ test("updates AST when code changes", () => {
 });
 
 test("retrieves the top-level nodes", () => {
-  const parser = new Parser("const a = 1; const b = 2;");
+  const parser = new Parser("const a = 1; export const b = 2;");
   const topLevelNodes = parser.getTopLevelNodes();
 
   expect(topLevelNodes.length).toBe(2);
   expect(topLevelNodes[0].getText()).toBe("const a = 1;");
-  expect(topLevelNodes[1].getText()).toBe("const b = 2;");
+  expect(topLevelNodes[1].getText()).toBe("export const b = 2;");
 });

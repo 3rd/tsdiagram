@@ -14,6 +14,7 @@ import ReactFlow, {
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
 import Elk, { LayoutOptions } from "elkjs";
 import isEqual from "lodash/isEqual";
+import omit from "lodash/omit";
 import "reactflow/dist/style.css";
 
 import { Model, ModelParser } from "../../lib/parser/ModelParser";
@@ -70,13 +71,19 @@ const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: Record
       };
     }),
   };
+
   const layoutedGraph = await elk.layout(graph);
-  // console.log("getLayoutedElements", { edges, layoutedGraph });
+  // console.log("getLayoutedElements", { nodes, edges, layoutedGraph });
+
   return {
     nodes: nodes.map((node) => {
       const layoutedNode = layoutedGraph.children?.find((n) => n.id === node.id);
-      const clone = { ...node };
+      if (!layoutedNode) return node;
+      const clone = omit(node, ["width", "height"]);
       clone.position = { x: layoutedNode?.x ?? clone.position.x, y: layoutedNode?.y ?? clone.position.y };
+      if (layoutedNode.width && layoutedNode.height) {
+        return { ...clone, width: layoutedNode.width, height: layoutedNode.height };
+      }
       return clone;
     }),
     edges,
@@ -191,7 +198,12 @@ export const Renderer = ({ source }: RendererProps) => {
     const updatedNodes = parsedNodes.map((node) => {
       const cachedNode = cachedNodesMap.current.get(node.id);
       if (cachedNode) {
-        if (cachedNode.type === node.type && isEqual(cachedNode.data?.model, node.data.model)) {
+        if (
+          cachedNode.type === node.type &&
+          isEqual(cachedNode.data?.model, node.data.model) &&
+          cachedNode.width &&
+          cachedNode.height
+        ) {
           return cachedNode;
         }
         return { ...node, position: cachedNode.position };
