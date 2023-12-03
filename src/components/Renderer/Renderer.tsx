@@ -183,7 +183,7 @@ export const Renderer = ({ source }: RendererProps) => {
   const parsedNodes = useMemo(() => extractModelNodes(models), [models]);
   const parsedEdges = useMemo(() => extractModelEdges(models), [models]);
 
-  console.log({ parsedNodes, parsedEdges });
+  // console.log({ parsedNodes, parsedEdges });
 
   // auto layout
   const handleAutoLayout = useCallback(() => {

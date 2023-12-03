@@ -17,6 +17,9 @@ dependencies:
   elkjs:
     specifier: ^0.8.2
     version: 0.8.2
+  html-to-image:
+    specifier: ^1.11.11
+    version: 1.11.11
   lodash:
     specifier: ^4.17.21
     version: 4.17.21
@@ -1340,6 +1343,10 @@ packages:
 
   /heap@0.2.5:
     resolution: {integrity: sha512-G7HLD+WKcrOyJP5VQwYZNC3Z6FcQ7YYjEFiFoIj8PfEr73mu421o8B1N5DKUcc8K37EsJ2XXWA8DtrDz/2dReg==}
+    dev: false
+
+  /html-to-image@1.11.11:
+    resolution: {integrity: sha512-9gux8QhvjRO/erSnDPv28noDZcPZmYE7e1vFsBLKLlRlKDSqNJYebj6Qz1TGd5lsRV+X+xYyjCKjuZdABinWjA==}
     dev: false
 
   /js-tokens@4.0.0:
