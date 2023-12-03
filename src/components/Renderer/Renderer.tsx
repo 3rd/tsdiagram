@@ -10,7 +10,9 @@ import ReactFlow, {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  Panel,
 } from "reactflow";
+import classNames from "classnames";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
 import Elk, { LayoutOptions } from "elkjs";
 import isEqual from "lodash/isEqual";
@@ -222,6 +224,17 @@ export const Renderer = ({ source }: RendererProps) => {
     cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
   }, [nodes]);
 
+  // option handlers
+  const handleAutoFitToggle = useCallback(() => {
+    options.renderer.autoFitView = !options.renderer.autoFitView;
+    handleAutoLayout();
+  }, [handleAutoLayout, options.renderer]);
+
+  const handleDirectionToggle = useCallback(() => {
+    options.renderer.direction = options.renderer.direction === "horizontal" ? "vertical" : "horizontal";
+    handleAutoLayout();
+  }, [handleAutoLayout, options.renderer]);
+
   return (
     <ReactFlow
       attributionPosition="top-right"
@@ -235,6 +248,22 @@ export const Renderer = ({ source }: RendererProps) => {
       onInit={handleInit}
       onNodesChange={onNodesChange}
     >
+      <Panel className="overflow-hidden bg-white rounded-md shadow-md text-stone-600" position="top-center">
+        {/* auto-fit */}
+        <button
+          className={classNames(
+            "py-0.5 px-2 text-sm border-r",
+            options.renderer.autoFitView ? "text-blue-600" : "hover:text-stone-500"
+          )}
+          onClick={handleAutoFitToggle}
+        >
+          🪄 Auto-fit
+        </button>
+        {/* direction: vertical | horizontal */}
+        <button className={classNames("py-0.5 px-2 text-sm ")} onClick={handleDirectionToggle}>
+          Orientation: {options.renderer.direction === "vertical" ? "↕" : "↔"}
+        </button>
+      </Panel>
       <Controls />
       <MiniMap
         style={{
