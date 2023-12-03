@@ -251,6 +251,19 @@ export const Renderer = ({ source }: RendererProps) => {
     handleAutoLayout();
   }, [handleAutoLayout, options.renderer]);
 
+  // interaction handlers
+  const handleMouseDown = useCallback(() => {
+    options.renderer.autoFitView = false;
+  }, [options.renderer]);
+  const handleMove = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      if (event instanceof WheelEvent) {
+        options.renderer.autoFitView = false;
+      }
+    },
+    [options.renderer]
+  );
+
   return (
     <ReactFlow
       edgeTypes={edgeTypes}
@@ -262,6 +275,8 @@ export const Renderer = ({ source }: RendererProps) => {
       fitView
       onEdgesChange={onEdgesChange}
       onInit={handleInit}
+      onMouseDownCapture={handleMouseDown}
+      onMove={handleMove}
       onNodesChange={onNodesChange}
     >
       <Panel className="overflow-hidden bg-white rounded-md shadow-md text-stone-600" position="top-center">
