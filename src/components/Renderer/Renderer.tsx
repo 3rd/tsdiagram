@@ -12,7 +12,7 @@ import ReactFlow, {
   useReactFlow,
 } from "reactflow";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
-import Elk from "elkjs";
+import Elk, { LayoutOptions } from "elkjs";
 import isEqual from "lodash/isEqual";
 import "reactflow/dist/style.css";
 
@@ -27,20 +27,15 @@ const edgeTypes = {
   smart: SmartStepEdge,
 };
 
-const elkOptions = {
+const elkOptions: LayoutOptions = {
   "elk.algorithm": "layered",
   "elk.direction": "RIGHT",
-  "elk.spacing.nodeNode": "80",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "100",
-  "elk.layered.spacing": "50",
+  "elk.spacing.nodeNode": "30",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "80",
   "elk.layered.mergeEdges": "false",
-  "elk.spacing": "50",
-  "elk.spacing.individual": "50",
-  // "elk.edgeRouting": "POLYLINE",
   "elk.edgeRouting": "ORTHOGONAL",
   // experiments
   "elk.insideSelfLoops.activate": "false",
-  "elk.spacing.edgeEdge": "50",
 };
 
 const elk = new Elk({
@@ -59,17 +54,24 @@ const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: Record
         sourcePosition: isHorizontal ? "right" : "bottom",
         width: node.width ?? 0,
         height: node.height ?? 0,
+        ports: node.data?.model?.schema.map((field: Model["schema"][0], index: number) => {
+          return {
+            id: `${node.id}-${field.name}`,
+            order: index,
+          };
+        }),
       };
     }),
     edges: edges.map((edge) => {
       return {
         ...edge,
-        sources: [edge.source],
+        sources: [edge.sourceHandle ?? edge.source],
         targets: [edge.target],
       };
     }),
   };
   const layoutedGraph = await elk.layout(graph);
+  // console.log("getLayoutedElements", { edges, layoutedGraph });
   return {
     nodes: nodes.map((node) => {
       const layoutedNode = layoutedGraph.children?.find((n) => n.id === node.id);
@@ -101,6 +103,7 @@ const extractModelEdges = (models: Model[]) => {
     type: "smoothstep",
     // type: "smart",
     markerEnd: { type: MarkerType.ArrowClosed },
+    // animated: true,
   };
 
   for (const model of models) {
