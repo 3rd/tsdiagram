@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -13,9 +13,10 @@ import ReactFlow, {
 } from "reactflow";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
 import Elk from "elkjs";
+import isEqual from "lodash/isEqual";
 import "reactflow/dist/style.css";
 
-import { ModelParser } from "../../lib/parser/ModelParser";
+import { Model, ModelParser } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 
 const nodeTypes = {
@@ -35,11 +36,11 @@ const elkOptions = {
   "elk.layered.mergeEdges": "false",
   "elk.spacing": "50",
   "elk.spacing.individual": "50",
-  "elk.edgeRouting": "POLYLINE",
-  // "elk.edgeRouting": "ORTHOGONAL",
+  // "elk.edgeRouting": "POLYLINE",
+  "elk.edgeRouting": "ORTHOGONAL",
   // experiments
   "elk.insideSelfLoops.activate": "false",
-  // "elk.spacing.edgeEdge": "20",
+  "elk.spacing.edgeEdge": "50",
 };
 
 const elk = new Elk({
@@ -52,14 +53,12 @@ const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: Record
     id: "root",
     layoutOptions: options,
     children: nodes.map((node) => {
-      // console.log({ node });
       return {
         ...node,
         targetPosition: isHorizontal ? "left" : "top",
         sourcePosition: isHorizontal ? "right" : "bottom",
-        // FIXME: hardcoded cell size
-        width: node.width ?? 200,
-        height: node.height ?? 250,
+        width: node.width ?? 0,
+        height: node.height ?? 0,
       };
     }),
     edges: edges.map((edge) => {
@@ -70,7 +69,6 @@ const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: Record
       };
     }),
   };
-
   const layoutedGraph = await elk.layout(graph);
   return {
     nodes: nodes.map((node) => {
@@ -83,95 +81,98 @@ const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: Record
   };
 };
 
+const extractModelNodes = (models: Model[]) => {
+  let x = 0;
+  let y = 0;
+  return models.map((model) => {
+    return {
+      id: model.id,
+      type: "model",
+      position: { x: (x += 100), y: (y += 100) },
+      data: { model },
+    };
+  });
+};
+
+const extractModelEdges = (models: Model[]) => {
+  const result: Edge[] = [];
+
+  const sharedEdgeProps = {
+    type: "smoothstep",
+    // type: "smart",
+    markerEnd: { type: MarkerType.ArrowClosed },
+  };
+
+  for (const model of models) {
+    for (const field of model.schema) {
+      // direct model reference
+      if (field.type instanceof Object) {
+        result.push({
+          ...sharedEdgeProps,
+          id: `${model.id}-${field.name}`,
+          source: model.id,
+          target: field.type.id,
+          sourceHandle: `${model.id}-${field.name}`,
+        });
+      }
+      // array of model references
+      if (field.type === "array" && "elementType" in field && field.elementType instanceof Object) {
+        result.push({
+          ...sharedEdgeProps,
+          id: `${model.id}-${field.name}`,
+          source: model.id,
+          target: field.elementType.id,
+          sourceHandle: `${model.id}-${field.name}`,
+        });
+      }
+      // map of model references
+      if (field.type === "map" && "keyType" in field && "valueType" in field) {
+        if (field.valueType instanceof Object) {
+          result.push({
+            ...sharedEdgeProps,
+            id: `${model.id}-${field.name}`,
+            source: model.id,
+            target: field.valueType.id,
+            sourceHandle: `${model.id}-${field.name}`,
+          });
+        }
+        if (field.keyType instanceof Object) {
+          result.push({
+            ...sharedEdgeProps,
+            id: `${model.id}-${field.name}`,
+            source: model.id,
+            target: field.keyType.id,
+            sourceHandle: `${model.id}-${field.name}`,
+          });
+        }
+      }
+    }
+  }
+  return result;
+};
+
 export type RendererProps = {
   source: string;
 };
 
 export const Renderer = ({ source }: RendererProps) => {
-  const parser = useRef<ModelParser>(new ModelParser(source));
+  const { fitView, getNodes, getEdges } = useReactFlow();
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const cachedNodesMap = useRef<Map<string, Node>>(new Map());
 
+  const parser = useRef<ModelParser>(new ModelParser(source));
   const models = useMemo(() => {
     parser.current.setSource(source);
     return parser.current.getModels();
   }, [source]);
+  const parsedNodes = useMemo(() => extractModelNodes(models), [models]);
+  const parsedEdges = useMemo(() => extractModelEdges(models), [models]);
 
-  const parsedNodes = useMemo(() => {
-    let x = 0;
-    let y = 0;
-    return models.map((model) => {
-      return {
-        id: model.id,
-        type: "model",
-        position: { x: (x += 100), y: (y += 100) },
-        data: { model },
-      };
-    });
-  }, [models]);
+  // console.log({ parsedNodes, parsedEdges });
 
-  const parsedEdges = useMemo(() => {
-    const result: Edge[] = [];
-
-    const sharedEdgeProps = {
-      type: "smoothstep",
-      // type: "smart",
-      markerEnd: { type: MarkerType.ArrowClosed },
-    };
-
-    for (const model of models) {
-      for (const field of model.schema) {
-        // direct model reference
-        if (field.type instanceof Object) {
-          result.push({
-            ...sharedEdgeProps,
-            id: `${model.id}-${field.name}`,
-            source: model.id,
-            target: field.type.id,
-            sourceHandle: `${model.id}-${field.name}`,
-          });
-        }
-        // array of model references
-        if (field.type === "array" && "elementType" in field && field.elementType instanceof Object) {
-          result.push({
-            ...sharedEdgeProps,
-            id: `${model.id}-${field.name}`,
-            source: model.id,
-            target: field.elementType.id,
-            sourceHandle: `${model.id}-${field.name}`,
-          });
-        }
-        // map of model references
-        if (field.type === "map" && "keyType" in field && "valueType" in field) {
-          if (field.valueType instanceof Object) {
-            result.push({
-              ...sharedEdgeProps,
-              id: `${model.id}-${field.name}`,
-              source: model.id,
-              target: field.valueType.id,
-              sourceHandle: `${model.id}-${field.name}`,
-            });
-          }
-          if (field.keyType instanceof Object) {
-            result.push({
-              ...sharedEdgeProps,
-              id: `${model.id}-${field.name}`,
-              source: model.id,
-              target: field.keyType.id,
-              sourceHandle: `${model.id}-${field.name}`,
-            });
-          }
-        }
-      }
-    }
-    return result;
-  }, [models]);
-
-  console.log({ parsedNodes, parsedEdges });
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(parsedNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(parsedEdges);
-  const { fitView, getNodes, getEdges } = useReactFlow();
-
-  const autoLayout = useCallback(() => {
+  // auto layout
+  const handleAutoLayout = useCallback(() => {
     getLayoutedElements(getNodes(), getEdges(), elkOptions).then(
       ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
         setNodes(layoutedNodes);
@@ -180,16 +181,30 @@ export const Renderer = ({ source }: RendererProps) => {
       }
     );
   }, [fitView, getEdges, getNodes, setEdges, setNodes]);
+  const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
 
-  const handleInit = useCallback(() => {
-    autoLayout();
-  }, [autoLayout]);
-
+  // update nodes and edges
   useLayoutEffect(() => {
-    setNodes(parsedNodes);
+    const updatedNodes = parsedNodes.map((node) => {
+      const cachedNode = cachedNodesMap.current.get(node.id);
+      if (cachedNode) {
+        if (cachedNode.type === node.type && isEqual(cachedNode.data?.model, node.data.model)) {
+          console.log("cached node", node.id, cachedNode);
+          return cachedNode;
+        }
+        return { ...node, position: cachedNode.position };
+      }
+      return node;
+    });
+    setNodes(updatedNodes);
     setEdges(parsedEdges);
-    requestAnimationFrame(autoLayout);
-  }, [autoLayout, parsedEdges, parsedNodes, setEdges, setNodes]);
+    requestAnimationFrame(handleAutoLayout);
+  }, [handleAutoLayout, parsedEdges, parsedNodes, setEdges, setNodes]);
+
+  // cache nodes
+  useLayoutEffect(() => {
+    cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
+  }, [nodes]);
 
   return (
     <ReactFlow
