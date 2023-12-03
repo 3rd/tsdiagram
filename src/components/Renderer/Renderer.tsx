@@ -19,6 +19,7 @@ import "reactflow/dist/style.css";
 
 import { Model, ModelParser } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
+import { useOptions, UserOptions } from "../../store";
 
 const nodeTypes = {
   model: ModelNode,
@@ -28,26 +29,26 @@ const edgeTypes = {
   smart: SmartStepEdge,
 };
 
-const elkOptions: LayoutOptions = {
-  "elk.algorithm": "layered",
-  "elk.direction": "RIGHT",
-  "elk.spacing.nodeNode": "30",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "80",
-  "elk.layered.mergeEdges": "false",
-  "elk.edgeRouting": "ORTHOGONAL",
-  // experiments
-  "elk.insideSelfLoops.activate": "false",
-};
+const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: UserOptions) => {
+  const elkOptions: LayoutOptions = {
+    "elk.algorithm": "layered",
+    "elk.direction": options.renderer.direction === "horizontal" ? "RIGHT" : "DOWN",
+    "elk.spacing.nodeNode": "30",
+    "elk.layered.spacing.nodeNodeBetweenLayers": "80",
+    "elk.layered.mergeEdges": "false",
+    "elk.edgeRouting": "ORTHOGONAL",
+    // experiments
+    "elk.insideSelfLoops.activate": "false",
+  };
+  const isHorizontal = options.renderer.direction === "horizontal";
 
-const elk = new Elk({
-  defaultLayoutOptions: elkOptions,
-});
+  const elk = new Elk({
+    defaultLayoutOptions: elkOptions,
+  });
 
-const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: Record<string, string> = {}) => {
-  const isHorizontal = options?.["elk.direction"] === "RIGHT";
   const graph = {
     id: "root",
-    layoutOptions: options,
+    layoutOptions: elkOptions,
     children: nodes.map((node) => {
       return {
         ...node,
@@ -170,6 +171,7 @@ export const Renderer = ({ source }: RendererProps) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const cachedNodesMap = useRef<Map<string, Node>>(new Map());
+  const options = useOptions();
 
   const parser = useRef<ModelParser>(new ModelParser(source));
   const models = useMemo(() => {
@@ -179,18 +181,18 @@ export const Renderer = ({ source }: RendererProps) => {
   const parsedNodes = useMemo(() => extractModelNodes(models), [models]);
   const parsedEdges = useMemo(() => extractModelEdges(models), [models]);
 
-  // console.log({ parsedNodes, parsedEdges });
+  console.log({ parsedNodes, parsedEdges });
 
   // auto layout
   const handleAutoLayout = useCallback(() => {
-    getLayoutedElements(getNodes(), getEdges(), elkOptions).then(
+    getLayoutedElements(getNodes(), getEdges(), options).then(
       ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
-        requestAnimationFrame(() => fitView());
+        if (options.renderer.autoFitView) requestAnimationFrame(() => fitView());
       }
     );
-  }, [fitView, getEdges, getNodes, setEdges, setNodes]);
+  }, [fitView, getEdges, getNodes, options, setEdges, setNodes]);
   const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
 
   // update nodes and edges
