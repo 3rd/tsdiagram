@@ -11,6 +11,9 @@ dependencies:
   '@tisoap/react-flow-smart-edge':
     specifier: ^3.0.0
     version: 3.0.0(react-dom@18.2.0)(react@18.2.0)(reactflow@11.10.1)(typescript@5.3.2)
+  elkjs:
+    specifier: ^0.8.2
+    version: 0.8.2
   react:
     specifier: ^18.2.0
     version: 18.2.0
@@ -43,6 +46,9 @@ devDependencies:
   vitest:
     specifier: ^0.34.6
     version: 0.34.6
+  web-worker:
+    specifier: ^1.2.0
+    version: 1.2.0
 
 packages:
 
@@ -1241,6 +1247,10 @@ packages:
     resolution: {integrity: sha512-0JnipX0scPUlwsptQVCZggoCpREv+IrVD3h0ZG+sldmK9L27tSV3QjV8+QdaA4qQTzDf3PluNS45YYJky1oASw==}
     dev: true
 
+  /elkjs@0.8.2:
+    resolution: {integrity: sha512-L6uRgvZTH+4OF5NE/MBbzQx/WYpru1xCBE9respNj6qznEewGUIfhzmm7horWWxbNO2M0WckQypGctR8lH79xQ==}
+    dev: false
+
   /esbuild@0.19.8:
     resolution: {integrity: sha512-l7iffQpT2OrZfH2rXIp7/FkmaeZM0vxbxN9KfiCwGYuZqzMg/JdvX26R31Zxn/Pxvsrg3Y9N6XTcnknqDyyv4w==}
     engines: {node: '>=12'}
@@ -1727,6 +1737,10 @@ packages:
       - sugarss
       - supports-color
       - terser
+    dev: true
+
+  /web-worker@1.2.0:
+    resolution: {integrity: sha512-PgF341avzqyx60neE9DD+XS26MMNMoUQRz9NOZwW32nPQrF6p77f1htcnjBSEV8BGMKZ16choqUG4hyI0Hx7mA==}
     dev: true
 
   /why-is-node-running@2.2.2:

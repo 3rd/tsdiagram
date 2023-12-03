@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
   Edge,
+  Node,
   MarkerType,
   MiniMap,
   useEdgesState,
   useNodesState,
+  useReactFlow,
 } from "reactflow";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
+import Elk from "elkjs";
 import "reactflow/dist/style.css";
 
 import { ModelParser } from "../../lib/parser/ModelParser";
@@ -21,6 +24,63 @@ const nodeTypes = {
 
 const edgeTypes = {
   smart: SmartStepEdge,
+};
+
+const elkOptions = {
+  "elk.algorithm": "layered",
+  "elk.direction": "RIGHT",
+  "elk.spacing.nodeNode": "80",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "100",
+  "elk.layered.spacing": "50",
+  "elk.layered.mergeEdges": "false",
+  "elk.spacing": "50",
+  "elk.spacing.individual": "50",
+  "elk.edgeRouting": "POLYLINE",
+  // "elk.edgeRouting": "ORTHOGONAL",
+  // experiments
+  "elk.insideSelfLoops.activate": "false",
+  // "elk.spacing.edgeEdge": "20",
+};
+
+const elk = new Elk({
+  defaultLayoutOptions: elkOptions,
+});
+
+const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: Record<string, string> = {}) => {
+  const isHorizontal = options?.["elk.direction"] === "RIGHT";
+  const graph = {
+    id: "root",
+    layoutOptions: options,
+    children: nodes.map((node) => {
+      // console.log({ node });
+      return {
+        ...node,
+        targetPosition: isHorizontal ? "left" : "top",
+        sourcePosition: isHorizontal ? "right" : "bottom",
+        // FIXME: hardcoded cell size
+        width: node.width ?? 200,
+        height: node.height ?? 250,
+      };
+    }),
+    edges: edges.map((edge) => {
+      return {
+        ...edge,
+        sources: [edge.source],
+        targets: [edge.target],
+      };
+    }),
+  };
+
+  const layoutedGraph = await elk.layout(graph);
+  return {
+    nodes: nodes.map((node) => {
+      const layoutedNode = layoutedGraph.children?.find((n) => n.id === node.id);
+      const clone = { ...node };
+      clone.position = { x: layoutedNode?.x ?? clone.position.x, y: layoutedNode?.y ?? clone.position.y };
+      return clone;
+    }),
+    edges,
+  };
 };
 
 export type RendererProps = {
@@ -52,7 +112,8 @@ export const Renderer = ({ source }: RendererProps) => {
     const result: Edge[] = [];
 
     const sharedEdgeProps = {
-      type: "smart",
+      type: "smoothstep",
+      // type: "smart",
       markerEnd: { type: MarkerType.ArrowClosed },
     };
 
@@ -108,11 +169,27 @@ export const Renderer = ({ source }: RendererProps) => {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(parsedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(parsedEdges);
+  const { fitView, getNodes, getEdges } = useReactFlow();
 
-  useEffect(() => {
+  const autoLayout = useCallback(() => {
+    getLayoutedElements(getNodes(), getEdges(), elkOptions).then(
+      ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+        setNodes(layoutedNodes);
+        setEdges(layoutedEdges);
+        requestAnimationFrame(() => fitView());
+      }
+    );
+  }, [fitView, getEdges, getNodes, setEdges, setNodes]);
+
+  const handleInit = useCallback(() => {
+    autoLayout();
+  }, [autoLayout]);
+
+  useLayoutEffect(() => {
     setNodes(parsedNodes);
     setEdges(parsedEdges);
-  }, [parsedEdges, parsedNodes, setEdges, setNodes]);
+    requestAnimationFrame(autoLayout);
+  }, [autoLayout, parsedEdges, parsedNodes, setEdges, setNodes]);
 
   return (
     <ReactFlow
@@ -124,6 +201,7 @@ export const Renderer = ({ source }: RendererProps) => {
       proOptions={{ hideAttribution: true }}
       fitView
       onEdgesChange={onEdgesChange}
+      onInit={handleInit}
       onNodesChange={onNodesChange}
     >
       <Controls />

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import { BasicRenderer } from "./components/BasicRenderer";
 import { Renderer } from "./components/Renderer";
+import { ReactFlowProvider } from "reactflow";
 
 // https://www.npmjs.com/package/monaco-themes
 
@@ -93,7 +94,9 @@ function App() {
       </div>
       <div className="flex flex-1 p-2 border-l">
         {/* <BasicRenderer source={source} /> */}
-        <Renderer source={source} />
+        <ReactFlowProvider>
+          <Renderer source={source} />
+        </ReactFlowProvider>
       </div>
     </div>
   );
