@@ -248,6 +248,7 @@ export const Renderer = ({ source }: RendererProps) => {
 
   const handleDirectionToggle = useCallback(() => {
     options.renderer.direction = options.renderer.direction === "horizontal" ? "vertical" : "horizontal";
+    options.renderer.autoFitView = true;
     handleAutoLayout();
   }, [handleAutoLayout, options.renderer]);
 
