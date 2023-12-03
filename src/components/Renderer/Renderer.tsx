@@ -192,7 +192,6 @@ export const Renderer = ({ source }: RendererProps) => {
       const cachedNode = cachedNodesMap.current.get(node.id);
       if (cachedNode) {
         if (cachedNode.type === node.type && isEqual(cachedNode.data?.model, node.data.model)) {
-          console.log("cached node", node.id, cachedNode);
           return cachedNode;
         }
         return { ...node, position: cachedNode.position };
@@ -223,7 +222,14 @@ export const Renderer = ({ source }: RendererProps) => {
       onNodesChange={onNodesChange}
     >
       <Controls />
-      <MiniMap />
+      <MiniMap
+        style={{
+          opacity: 0.9,
+        }}
+        zoomStep={1}
+        pannable
+        zoomable
+      />
       <Background gap={12} size={1} variant={BackgroundVariant.Dots} />
     </ReactFlow>
   );
