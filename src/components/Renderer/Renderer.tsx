@@ -11,6 +11,7 @@ import ReactFlow, {
   useNodesState,
   useReactFlow,
   Panel,
+  FitViewOptions,
 } from "reactflow";
 import classNames from "classnames";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
@@ -222,9 +223,10 @@ export const Renderer = ({ source }: RendererProps) => {
   const panelRef = useRef<HTMLDivElement>(null);
 
   // computed reactflow props
-  const fitViewOptions = useMemo(
+  const fitViewOptions = useMemo<FitViewOptions>(
     () => ({
       padding: options.renderer.direction === "horizontal" ? 0.15 : 0.5,
+      duration: 500,
     }),
     [options.renderer]
   );
@@ -323,12 +325,18 @@ export const Renderer = ({ source }: RendererProps) => {
 
   return (
     <ReactFlow
+      autoPanOnNodeDrag={false}
+      deleteKeyCode={null}
       edgeTypes={edgeTypes}
       edges={edges}
       fitViewOptions={fitViewOptions}
+      maxZoom={1.5}
       nodeTypes={nodeTypes}
       nodes={nodes}
+      nodesConnectable={false}
       proOptions={proOptions}
+      elevateEdgesOnSelect
+      elevateNodesOnSelect
       fitView
       onEdgesChange={onEdgesChange}
       onInit={handleInit}
