@@ -14,7 +14,7 @@ import ReactFlow, {
 } from "reactflow";
 import classNames from "classnames";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
-import Elk, { LayoutOptions } from "elkjs";
+import Elk, { ElkNode, LayoutOptions } from "elkjs";
 import isEqual from "lodash/isEqual";
 import omit from "lodash/omit";
 import "reactflow/dist/style.css";
@@ -35,38 +35,59 @@ const proOptions = {
   hideAttribution: true,
 };
 
-const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: UserOptions) => {
+type GetLayoutedElementsArgs = {
+  nodes: Node[];
+  edges: Edge[];
+  options: UserOptions;
+  manuallyMovedNodesSet: Set<string>;
+};
+const getLayoutedElements = async ({
+  nodes,
+  edges,
+  options,
+  manuallyMovedNodesSet,
+}: GetLayoutedElementsArgs) => {
   const elkOptions: LayoutOptions = {
     "elk.algorithm": "layered",
     "elk.direction": options.renderer.direction === "horizontal" ? "RIGHT" : "DOWN",
-    "elk.spacing.nodeNode": "30",
-    "elk.layered.spacing.nodeNodeBetweenLayers": "80",
-    "elk.layered.mergeEdges": "false",
     "elk.edgeRouting": "ORTHOGONAL",
-    // experiments
+    "elk.hierarchyHandling": "INCLUDE_CHILDREN",
     "elk.insideSelfLoops.activate": "false",
+    "elk.interactiveLayout": "true",
+    "elk.layered.considerModelOrder.strategy": "NONE",
+    "elk.layered.crossingMinimization.semiInteractive": "true",
+    "elk.layered.layering.strategy": "INTERACTIVE",
+    "elk.layered.nodePlacement.strategy": "INTERACTIVE",
+    "elk.layered.spacing.nodeNodeBetweenLayers": "50",
+    "elk.spacing.nodeNode": "50",
   };
-  const isHorizontal = options.renderer.direction === "horizontal";
 
   const elk = new Elk({
     defaultLayoutOptions: elkOptions,
   });
 
-  const graph = {
+  const graph: ElkNode = {
     id: "root",
     layoutOptions: elkOptions,
     children: nodes.map((node) => {
+      const wasManuallyMoved = manuallyMovedNodesSet.has(node.id);
+
       return {
         ...node,
-        targetPosition: isHorizontal ? "left" : "top",
-        sourcePosition: isHorizontal ? "right" : "bottom",
         width: node.width ?? 0,
         height: node.height ?? 0,
         ports: node.data?.model?.schema.map((field: Model["schema"][0], index: number) => {
           return {
             id: `${node.id}-${field.name}`,
             order: index,
+            properties: {
+              "port.side": "EAST",
+            },
           };
+        }),
+        ...(wasManuallyMoved && {
+          x: node.position.x,
+          y: node.position.y,
         }),
       };
     }),
@@ -78,33 +99,52 @@ const getLayoutedElements = async (nodes: Node[], edges: Edge[], options: UserOp
       };
     }),
   };
+  // console.log(
+  //   "getLayoutedElements",
+  //   graph.children!.map((child) => {
+  //     return {
+  //       id: child.id,
+  //       width: child.width,
+  //       height: child.height,
+  //       layoutOptions: child.layoutOptions,
+  //       x: child.x,
+  //       y: child.y,
+  //     };
+  //   })
+  // );
 
   const layoutedGraph = await elk.layout(graph);
-  // console.log("getLayoutedElements", { nodes, edges, layoutedGraph });
+  // console.log("layoutedGraph", layoutedGraph);
 
   return {
     nodes: nodes.map((node) => {
       const layoutedNode = layoutedGraph.children?.find((n) => n.id === node.id);
       if (!layoutedNode) return node;
       const clone = omit(node, ["width", "height"]);
-      clone.position = { x: layoutedNode?.x ?? clone.position.x, y: layoutedNode?.y ?? clone.position.y };
-      if (layoutedNode.width && layoutedNode.height) {
-        return { ...clone, width: layoutedNode.width, height: layoutedNode.height };
-      }
-      return clone;
+      const hasManuallyMoved = manuallyMovedNodesSet.has(node.id);
+      return {
+        ...clone,
+        position: {
+          x: hasManuallyMoved ? node.position.x : layoutedNode.x ?? clone.position.x,
+          y: hasManuallyMoved ? node.position.y : layoutedNode.y ?? clone.position.y,
+        },
+        ...(layoutedNode.width &&
+          layoutedNode.height && {
+            width: layoutedNode.width,
+            height: layoutedNode.height,
+          }),
+      };
     }),
     edges,
   };
 };
 
 const extractModelNodes = (models: Model[]) => {
-  let x = 0;
-  let y = 0;
   return models.map((model) => {
     return {
       id: model.id,
       type: "model",
-      position: { x: (x += 100), y: (y += 100) },
+      position: { x: -1, y: -1 },
       data: { model },
     };
   });
@@ -114,8 +154,8 @@ const extractModelEdges = (models: Model[]) => {
   const result: Edge[] = [];
 
   const sharedEdgeProps = {
-    type: "smoothstep",
-    // type: "smart",
+    // type: "smoothstep",
+    type: "smart",
     markerEnd: { type: MarkerType.ArrowClosed },
     // animated: true,
   };
@@ -177,6 +217,7 @@ export const Renderer = ({ source }: RendererProps) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const cachedNodesMap = useRef<Map<string, Node>>(new Map());
+  const manuallyMovedNodesSet = useRef<Set<string>>(new Set());
   const options = useOptions();
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -190,16 +231,19 @@ export const Renderer = ({ source }: RendererProps) => {
 
   // auto layout
   const handleAutoLayout = useCallback(() => {
-    getLayoutedElements(getNodes(), getEdges(), options).then(
-      ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
-        setNodes(layoutedNodes);
-        setEdges(layoutedEdges);
-        if (options.renderer.autoFitView) {
-          // FIXME: flicker when changing orientation
-          requestIdleCallback(() => fitView(fitViewOptions));
-        }
+    getLayoutedElements({
+      nodes: getNodes(),
+      edges: getEdges(),
+      options,
+      manuallyMovedNodesSet: manuallyMovedNodesSet.current,
+    }).then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+      setNodes(layoutedNodes);
+      setEdges(layoutedEdges);
+      if (options.renderer.autoFitView) {
+        // FIXME: flicker when changing orientation
+        requestIdleCallback(() => fitView(fitViewOptions));
       }
-    );
+    });
   }, [fitView, fitViewOptions, getEdges, getNodes, options, setEdges, setNodes]);
   const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
 
@@ -227,7 +271,11 @@ export const Renderer = ({ source }: RendererProps) => {
         ) {
           return cachedNode;
         }
-        return { ...node, position: cachedNode.position };
+        return {
+          ...node,
+          data: { ...node.data },
+          position: cachedNode.position,
+        };
       }
       return node;
     });
@@ -269,6 +317,9 @@ export const Renderer = ({ source }: RendererProps) => {
     },
     [options.renderer]
   );
+  const handleNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
+    manuallyMovedNodesSet.current.add(node.id);
+  }, []);
 
   return (
     <ReactFlow
@@ -283,6 +334,7 @@ export const Renderer = ({ source }: RendererProps) => {
       onInit={handleInit}
       onMouseDownCapture={handleMouseDown}
       onMove={handleMove}
+      onNodeDragStop={handleNodeDragStop}
       onNodesChange={onNodesChange}
     >
       <Panel position="top-center">
