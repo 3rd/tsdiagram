@@ -11,6 +11,7 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@headlessui/react": "^1.7.17",
     "@monaco-editor/react": "^4.6.0",
     "@tisoap/react-flow-smart-edge": "^3.0.0",
     "classnames": "^2.3.2",
@@ -19,6 +20,7 @@
     "lodash": "^4.17.21",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-resizable-panels": "^0.0.63",
     "reactflow": "^11.10.1",
     "statelift": "^1.0.12"
   },

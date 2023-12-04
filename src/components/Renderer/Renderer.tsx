@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -55,7 +55,7 @@ const getLayoutedElements = async ({
     "elk.insideSelfLoops.activate": "false",
     "elk.interactiveLayout": "true",
     "elk.layered.crossingMinimization.semiInteractive": "true",
-    "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
+    // "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
     "elk.layered.layering.strategy": "INTERACTIVE",
     "elk.layered.nodePlacement.strategy": "INTERACTIVE",
     "elk.layered.spacing.edgeNodeBetweenLayers": "30",
@@ -213,7 +213,7 @@ export type RendererProps = {
   source: string;
 };
 
-export const Renderer = ({ source }: RendererProps) => {
+export const Renderer = memo(({ source }: RendererProps) => {
   const { fitView, getNodes, getEdges } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -309,8 +309,9 @@ export const Renderer = ({ source }: RendererProps) => {
   const handleDirectionToggle = useCallback(() => {
     options.renderer.direction = options.renderer.direction === "horizontal" ? "vertical" : "horizontal";
     options.renderer.autoFitView = true;
+    options.save();
     handleAutoLayout();
-  }, [handleAutoLayout, options.renderer]);
+  }, [handleAutoLayout, options]);
 
   // interaction handlers
   const handleMouseDown = useCallback(
@@ -338,55 +339,68 @@ export const Renderer = ({ source }: RendererProps) => {
   }, []);
 
   return (
-    <ReactFlow
-      autoPanOnNodeDrag={false}
-      deleteKeyCode={null}
-      edgeTypes={edgeTypes}
-      edges={edges}
-      fitViewOptions={fitViewOptions}
-      maxZoom={1.5}
-      nodeTypes={nodeTypes}
-      nodes={nodes}
-      nodesConnectable={false}
-      proOptions={proOptions}
-      elevateEdgesOnSelect
-      elevateNodesOnSelect
-      fitView
-      onEdgesChange={onEdgesChange}
-      onInit={handleInit}
-      onMouseDownCapture={handleMouseDown}
-      onMove={handleMove}
-      onNodeDragStop={handleNodeDragStop}
-      onNodesChange={onNodesChange}
+    <div
+      className={classNames("flex flex-1 w-full h-full bg-stone-50 text-stone-900", {
+        "bg-stone-100": options.renderer.theme === "light",
+        "bg-stone-800": options.renderer.theme === "dark",
+      })}
     >
-      <Panel position="top-center">
-        <div ref={panelRef} className="overflow-hidden bg-white rounded-md shadow-md text-stone-600">
-          {/* auto-fit */}
-          <button
-            className={classNames(
-              "py-0.5 px-2 text-sm border-r",
-              options.renderer.autoFitView ? "text-blue-600" : "hover:text-stone-500"
-            )}
-            onClick={handleAutoFitToggle}
+      <ReactFlow
+        autoPanOnNodeDrag={false}
+        deleteKeyCode={null}
+        edgeTypes={edgeTypes}
+        edges={edges}
+        fitViewOptions={fitViewOptions}
+        maxZoom={1.5}
+        nodeTypes={nodeTypes}
+        nodes={nodes}
+        nodesConnectable={false}
+        proOptions={proOptions}
+        elevateEdgesOnSelect
+        elevateNodesOnSelect
+        fitView
+        onEdgesChange={onEdgesChange}
+        onInit={handleInit}
+        onMouseDownCapture={handleMouseDown}
+        onMove={handleMove}
+        onNodeDragStop={handleNodeDragStop}
+        onNodesChange={onNodesChange}
+      >
+        <Panel position="top-center">
+          <div
+            ref={panelRef}
+            className={classNames("overflow-hidden rounded-md shadow-md text-stone-700", {
+              "bg-stone-100": options.renderer.theme === "light",
+              "bg-stone-100 ": options.renderer.theme === "dark",
+            })}
           >
-            🪄 Auto-fit
-          </button>
-          {/* direction: vertical | horizontal */}
-          <button className={classNames("py-0.5 px-2 text-sm ")} onClick={handleDirectionToggle}>
-            Orientation: {options.renderer.direction === "vertical" ? "↕" : "↔"}
-          </button>
-        </div>
-      </Panel>
-      <Controls />
-      <MiniMap
-        style={{
-          opacity: 0.9,
-        }}
-        zoomStep={1}
-        pannable
-        zoomable
-      />
-      <Background gap={12} size={1} variant={BackgroundVariant.Dots} />
-    </ReactFlow>
+            {/* auto-fit */}
+            <button
+              className={classNames(
+                "py-1 px-2 text-sm border-r border-stone-300",
+                options.renderer.autoFitView ? "text-blue-600" : "hover:text-stone-500"
+              )}
+              onClick={handleAutoFitToggle}
+            >
+              🪄 Auto-fit
+            </button>
+            {/* direction: vertical | horizontal */}
+            <button className={classNames("py-0.5 px-2 text-sm ")} onClick={handleDirectionToggle}>
+              Orientation: {options.renderer.direction === "vertical" ? "↕" : "↔"}
+            </button>
+          </div>
+        </Panel>
+        <Controls />
+        <MiniMap
+          style={{
+            opacity: 0.9,
+          }}
+          zoomStep={1}
+          pannable
+          zoomable
+        />
+        <Background gap={12} size={1} variant={BackgroundVariant.Dots} />
+      </ReactFlow>
+    </div>
   );
-};
+});

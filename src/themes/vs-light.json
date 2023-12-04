@@ -1,0 +1,7 @@
+{
+  "name": "VS Light",
+  "base": "vs",
+  "inherit": true,
+  "rules": [],
+  "colors": {}
+}

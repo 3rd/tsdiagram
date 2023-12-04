@@ -1,87 +1,56 @@
-import { useEffect, useState } from "react";
-import Editor, { useMonaco } from "@monaco-editor/react";
-import tomorrowTheme from "./theme.json";
-import { Renderer } from "./components/Renderer";
+import { useState } from "react";
 import { ReactFlowProvider } from "reactflow";
-import "./App.css";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import classNames from "classnames";
 import { Header } from "./components/Header";
-
-const defaultValue = `
-interface Node {
-  id: string;
-  path: string;
-  source: string;
-  get meta(): Record<string, unknown>;
-  get title(): string;
-  get links(): Node[];
-  get backlinks(): Node[];
-  get tasks(): Task[];
-};
-
-interface Task {
-  title: string;
-  children: Task[];
-  status: "default" | "active" | "done" | "cancelled";
-  schedule: TaskSchedule;
-  sessions: TaskSession[];
-  get isInProgress(): boolean;
-}
-
-interface TaskSchedule {
-  start: Date;
-  end: Date;
-  get duration(): number;
-  get isCurrent(): boolean;
-}
-
-interface TaskSession {
-  start: Date;
-  end?: Date;
-  get duration(): number;
-  get isCurrent(): boolean;
-}
-`.trim();
+import { Editor } from "./components/Editor";
+import { Renderer } from "./components/Renderer";
+import { Preferences } from "./components/Preferences";
+import { useDocuments, useOptions } from "./store";
+import type { themes } from "./themes";
+import "./App.css";
 
 function App() {
-  const monaco = useMonaco();
-  const [source, setSource] = useState(defaultValue);
+  const documents = useDocuments();
+  const options = useOptions();
+  const [showPreferences, setShowPreferences] = useState(false);
 
   const handleSourceChange = (value: string | undefined) => {
-    setSource(value ?? "");
+    documents.currentDocument.source = value ?? "";
+    documents.save();
   };
 
-  useEffect(() => {
-    if (!monaco) return;
-    monaco.editor.defineTheme("tomorrow", tomorrowTheme as Parameters<typeof monaco.editor.defineTheme>[1]);
-    monaco.editor.setTheme("tomorrow");
-  }, [monaco]);
+  const handlePreferencesClick = () => {
+    setShowPreferences((value) => !value);
+  };
 
   return (
     <ReactFlowProvider>
       <div className="flex overflow-hidden flex-col w-full h-full rounded bg-stone-700 text-stone-50">
-        <Header />
+        <Header onPreferencesClick={handlePreferencesClick} />
         <main className="flex flex-1">
-          <div className="w-1/2">
-            <Editor
-              defaultLanguage="typescript"
-              options={{
-                minimap: { enabled: false },
-                renderLineHighlight: "none",
-                fontSize: 15,
-                scrollbar: {
-                  vertical: "auto",
-                  horizontal: "auto",
-                },
-              }}
-              value={source}
-              onChange={handleSourceChange}
+          <PanelGroup autoSaveId="example" direction="horizontal">
+            <Panel defaultSizePercentage={50} id="editor">
+              <Editor
+                source={documents.currentDocument.source}
+                theme={options.editor.theme as keyof typeof themes}
+                onChange={handleSourceChange}
+              />
+            </Panel>
+            <PanelResizeHandle
+              className={classNames(
+                "w-1.5",
+                { "bg-stone-600": options.renderer.theme === "dark" },
+                { "bg-stone-200": options.renderer.theme === "light" }
+              )}
             />
-          </div>
-          <div className="flex flex-1 p-2 border-l bg-stone-50 text-stone-900">
-            {/* <BasicRenderer source={source} /> */}
-            <Renderer source={source} />
-          </div>
+            <Panel id="renderer">
+              <Renderer source={documents.currentDocument.source} />
+            </Panel>
+          </PanelGroup>
+          ;
         </main>
+        <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />
       </div>
     </ReactFlowProvider>
   );

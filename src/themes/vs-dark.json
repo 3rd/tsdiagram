@@ -1,0 +1,7 @@
+{
+  "name": "VS Dark",
+  "base": "vs-dark",
+  "inherit": true,
+  "rules": [],
+  "colors": {}
+}
