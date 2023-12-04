@@ -243,7 +243,6 @@ export const Renderer = ({ source }: RendererProps) => {
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
       if (options.renderer.autoFitView) {
-        // FIXME: flicker when changing orientation
         requestIdleCallback(() => fitView(fitViewOptions));
       }
     });
@@ -274,11 +273,7 @@ export const Renderer = ({ source }: RendererProps) => {
         ) {
           return cachedNode;
         }
-        return {
-          ...node,
-          data: { ...node.data },
-          position: cachedNode.position,
-        };
+        return { ...node, position: cachedNode.position };
       }
       return node;
     });
@@ -287,10 +282,23 @@ export const Renderer = ({ source }: RendererProps) => {
     requestAnimationFrame(handleAutoLayout);
   }, [handleAutoLayout, parsedEdges, parsedNodes, setEdges, setNodes]);
 
-  // cache computed nodes
+  // cache computed nodes and trigger auto layout if their width or height changed
   useLayoutEffect(() => {
+    let needsAutoLayout = false;
+    for (const node of nodes) {
+      const previousNode = cachedNodesMap.current.get(node.id);
+      if (
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        (previousNode?.width && node.width !== previousNode.width) ||
+        (previousNode?.height && node.height !== previousNode.height)
+      ) {
+        needsAutoLayout = true;
+        break;
+      }
+    }
     cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
-  }, [nodes]);
+    if (needsAutoLayout) requestAnimationFrame(handleAutoLayout);
+  }, [handleAutoLayout, nodes]);
 
   // option handlers
   const handleAutoFitToggle = useCallback(() => {
