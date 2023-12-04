@@ -10,6 +10,8 @@ export type ModelNodeProps = {
 export const ModelNode = ({ id, data }: ModelNodeProps) => {
   const { model } = data;
 
+  const hasTargetHandle = useMemo(() => model.dependants.length > 0, [model.dependants]);
+
   const fieldRows = useMemo(() => {
     return model.schema.map((field) => {
       const typeFragments: JSX.Element[] = [];
@@ -19,11 +21,11 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         model: "text-blue-700",
       };
 
-      let hasHandler = false;
+      let hasFieldSourceHandle = false;
 
       // model reference
       if (field.type instanceof Object) {
-        hasHandler = true;
+        hasFieldSourceHandle = true;
         typeFragments.push(
           <span key="reference" className={classNames.model}>
             {field.type.name}
@@ -34,7 +36,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       else if (field.type === "array" && "elementType" in field) {
         // of model references
         if (field.elementType instanceof Object) {
-          hasHandler = true;
+          hasFieldSourceHandle = true;
           typeFragments.push(
             <span key="array-reference" className={classNames.model}>
               {field.elementType.name}[]
@@ -50,7 +52,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       } else if (field.type === "map" && "keyType" in field && "valueType" in field) {
         // of model references
         if (field.valueType instanceof Object) {
-          hasHandler = true;
+          hasFieldSourceHandle = true;
           typeFragments.push(
             <span
               key="map-reference"
@@ -80,7 +82,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
           <td className="pr-2 pl-1 leading-none">{field.name}</td>
           <td align="right" className="relative pr-1 leading-none">
             {typeFragments}
-            {hasHandler && (
+            {hasFieldSourceHandle && (
               <Handle
                 className="w-2 h-2"
                 id={`${model.id}-${field.name}`}
@@ -100,7 +102,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       {/* header */}
       <div className="relative px-1 text-white bg-blue-700">
         {/* target handle */}
-        <Handle position={Position.Left} type="target" />
+        {hasTargetHandle && <Handle position={Position.Left} type="target" />}
         {/* title */}
         {model.name}
       </div>

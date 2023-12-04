@@ -7,8 +7,20 @@ it("parses top level type aliases and interfaces into models", () => {
   const models = parser.getModels();
 
   expect(models.length).toBe(2);
-  expect(models[0]).toEqual({ id: "66", name: "A", schema: [{ name: "a", type: "string" }] });
-  expect(models[1]).toEqual({ id: "67", name: "B", schema: [{ name: "b", type: "string" }] });
+  expect(models[0]).toEqual({
+    id: "66",
+    name: "A",
+    schema: [{ name: "a", type: "string" }],
+    dependencies: [],
+    dependants: [],
+  });
+  expect(models[1]).toEqual({
+    id: "67",
+    name: "B",
+    schema: [{ name: "b", type: "string" }],
+    dependencies: [],
+    dependants: [],
+  });
 });
 
 it("parses exported top level type aliases and interfaces into models", () => {
@@ -16,8 +28,20 @@ it("parses exported top level type aliases and interfaces into models", () => {
   const models = parser.getModels();
 
   expect(models.length).toBe(2);
-  expect(models[0]).toEqual({ id: "66", name: "A", schema: [{ name: "a", type: "string" }] });
-  expect(models[1]).toEqual({ id: "67", name: "B", schema: [{ name: "b", type: "string" }] });
+  expect(models[0]).toEqual({
+    id: "66",
+    name: "A",
+    schema: [{ name: "a", type: "string" }],
+    dependencies: [],
+    dependants: [],
+  });
+  expect(models[1]).toEqual({
+    id: "67",
+    name: "B",
+    schema: [{ name: "b", type: "string" }],
+    dependencies: [],
+    dependants: [],
+  });
 });
 
 it("skips type aliases that are not direct aliases", () => {
@@ -25,7 +49,13 @@ it("skips type aliases that are not direct aliases", () => {
   const models = parser.getModels();
 
   expect(models.length).toBe(1);
-  expect(models[0]).toEqual({ id: "66", name: "A", schema: [{ name: "a", type: "string" }] });
+  expect(models[0]).toEqual({
+    id: "66",
+    name: "A",
+    schema: [{ name: "a", type: "string" }],
+    dependencies: [],
+    dependants: [],
+  });
 });
 
 it("parses arrays of primitives", () => {
@@ -37,6 +67,8 @@ it("parses arrays of primitives", () => {
     id: "66",
     name: "A",
     schema: [{ name: "a", type: "array", elementType: "string" }],
+    dependencies: [],
+    dependants: [],
   });
 });
 
@@ -59,11 +91,15 @@ it("parses arrays of models", () => {
         }),
       },
     ],
+    dependencies: [expect.objectContaining({ name: "B" })],
+    dependants: [],
   });
   expect(models[1]).toEqual({
     id: "67",
     name: "B",
     schema: [{ name: "b", type: "string" }],
+    dependencies: [],
+    dependants: [expect.objectContaining({ name: "A" })],
   });
 });
 
@@ -80,27 +116,34 @@ it("parses maps of primitives", () => {
     id: "66",
     name: "A",
     schema: [{ name: "a", type: "map", keyType: "string", valueType: "string" }],
+    dependencies: [],
+    dependants: [],
   });
   expect(models[1]).toEqual({
     id: "67",
     name: "B",
     schema: [{ name: "b", type: "map", keyType: "string", valueType: "string" }],
+    dependencies: [],
+    dependants: [],
   });
   expect(models[2]).toEqual({
     id: "68",
     name: "C",
     schema: [{ name: "c", type: "map", keyType: "string", valueType: "string" }],
+    dependencies: [],
+    dependants: [],
   });
 });
 
 it("parses maps of models", () => {
   const parser = new ModelParser(`
-    type A = { a: Record<string, B> };
+    type A = { a: Record<B, C> };
     type B = { b: string };
+    type C = { c: number; };
   `);
   const models = parser.getModels();
 
-  expect(models.length).toBe(2);
+  expect(models.length).toBe(3);
   expect(models[0]).toEqual({
     id: "66",
     name: "A",
@@ -108,17 +151,25 @@ it("parses maps of models", () => {
       {
         name: "a",
         type: "map",
-        keyType: "string",
-        valueType: expect.objectContaining({
-          name: "B",
-          schema: [{ name: "b", type: "string" }],
-        }),
+        keyType: expect.objectContaining({ name: "B" }),
+        valueType: expect.objectContaining({ name: "C" }),
       },
     ],
+    dependencies: [expect.objectContaining({ name: "B" }), expect.objectContaining({ name: "C" })],
+    dependants: [],
   });
   expect(models[1]).toEqual({
     id: "67",
     name: "B",
     schema: [{ name: "b", type: "string" }],
+    dependencies: [],
+    dependants: [expect.objectContaining({ name: "A" })],
+  });
+  expect(models[2]).toEqual({
+    id: "68",
+    name: "C",
+    schema: [{ name: "c", type: "number" }],
+    dependencies: [],
+    dependants: [expect.objectContaining({ name: "A" })],
   });
 });

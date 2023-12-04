@@ -9,6 +9,8 @@ export type Model = {
     | { name: string; type: "map"; keyType: Model | (string & {}); valueType: Model | (string & {}) }
     | { name: string; type: Model | (string & {}) }
   )[];
+  dependencies: Model[];
+  dependants: Model[];
 };
 
 const typeNodeToString = (checker: ts.TypeChecker, node: ts.Node) => {
@@ -23,8 +25,10 @@ const typeNodeToString = (checker: ts.TypeChecker, node: ts.Node) => {
 };
 
 export class ModelParser extends Parser {
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   getModels() {
     const typeIdToModelMap = new Map<string, Model>();
+    const dependencyMap = new Map<string, Set<Model>>();
 
     const nodes = this.getTopLevelNodes().filter((node) => {
       if (ts.isInterfaceDeclaration(node)) return true;
@@ -39,7 +43,7 @@ export class ModelParser extends Parser {
       return false;
     }) as (ts.InterfaceDeclaration | ts.TypeAliasDeclaration)[];
 
-    // first pass
+    // first pass: init models
     for (const node of nodes) {
       const type = this.checker.getTypeAtLocation(node);
       const id = (type as unknown as { id: number }).id.toString();
@@ -47,16 +51,20 @@ export class ModelParser extends Parser {
         id,
         name: node.name.getText(),
         schema: [],
+        dependencies: [],
+        dependants: [],
       };
       typeIdToModelMap.set(id, model);
     }
 
-    // second pass
+    // second pass: parse schema
     for (const node of nodes) {
       const type = this.checker.getTypeAtLocation(node);
       const typeId = (type as unknown as { id: number }).id.toString();
       const model = typeIdToModelMap.get(typeId);
       if (!model) continue;
+
+      const dependencies = dependencyMap.get(typeId) ?? new Set<Model>();
 
       for (const prop of type.getProperties()) {
         const propDeclaration = prop.getDeclarations()?.[0] as ts.PropertyDeclaration | undefined;
@@ -69,6 +77,8 @@ export class ModelParser extends Parser {
 
           const elementTypeId = (elementTypeNode as unknown as { id: number }).id.toString();
           const elementModel = typeIdToModelMap.get(elementTypeId);
+
+          if (elementModel) dependencies.add(elementModel);
 
           model.schema.push({
             name: prop.name,
@@ -86,11 +96,14 @@ export class ModelParser extends Parser {
             const [keyType, valueType] = typeArguments;
             const keyTypeNode = this.checker.getTypeFromTypeNode(keyType);
             const keyTypeId = (keyTypeNode as unknown as { id: number }).id.toString();
+            const keyModel = typeIdToModelMap.get(keyTypeId);
+
             const valueTypeNode = this.checker.getTypeFromTypeNode(valueType);
             const valueTypeId = (valueTypeNode as unknown as { id: number }).id.toString();
-
-            const keyModel = typeIdToModelMap.get(keyTypeId);
             const valueModel = typeIdToModelMap.get(valueTypeId);
+
+            if (keyModel) dependencies.add(keyModel);
+            if (valueModel) dependencies.add(valueModel);
 
             const typeName = this.checker.typeToString(
               this.checker.getTypeFromTypeNode(propDeclaration.type)
@@ -111,10 +124,27 @@ export class ModelParser extends Parser {
         const propTypeName = typeNodeToString(this.checker, propDeclaration);
         const propType = this.checker.getTypeOfSymbolAtLocation(prop, propDeclaration);
         const propTypeId = (propType as unknown as { id: number }).id.toString();
+        const propTypeModel = typeIdToModelMap.get(propTypeId);
+
+        if (propTypeModel) dependencies.add(propTypeModel);
+
         model.schema.push({
           name: prop.name,
-          type: typeIdToModelMap.get(propTypeId) ?? propTypeName,
+          type: propTypeModel ?? propTypeName,
         });
+      }
+
+      dependencyMap.set(typeId, dependencies);
+    }
+
+    // third pass: link dependencies
+    for (const [typeId, dependencies] of dependencyMap.entries()) {
+      const model = typeIdToModelMap.get(typeId);
+      if (!model) continue;
+
+      for (const dependency of dependencies) {
+        model.dependencies.push(dependency);
+        dependency.dependants.push(model);
       }
     }
 
