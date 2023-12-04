@@ -22,6 +22,7 @@ import "reactflow/dist/style.css";
 
 import { Model, ModelParser } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
+import { CustomEdge } from "./CustomEdge";
 import { useOptions, UserOptions } from "../../store";
 
 const nodeTypes = {
@@ -30,6 +31,7 @@ const nodeTypes = {
 
 const edgeTypes = {
   smart: SmartStepEdge,
+  custom: CustomEdge,
 };
 
 const proOptions = {
@@ -156,7 +158,8 @@ const extractModelEdges = (models: Model[]) => {
 
   const sharedEdgeProps = {
     // type: "smoothstep",
-    type: "smart",
+    // type: "smart",
+    type: "custom",
     markerEnd: { type: MarkerType.ArrowClosed },
     // animated: true,
   };
