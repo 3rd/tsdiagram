@@ -221,14 +221,15 @@ export const Renderer = ({ source }: RendererProps) => {
   const manuallyMovedNodesSet = useRef<Set<string>>(new Set());
   const options = useOptions();
   const panelRef = useRef<HTMLDivElement>(null);
+  const [shouldAnimate, setShouldAnimate] = useState(false);
 
   // computed reactflow props
-  const fitViewOptions = useMemo<FitViewOptions>(
+  const fitViewOptions: FitViewOptions = useMemo(
     () => ({
       padding: options.renderer.direction === "horizontal" ? 0.15 : 0.5,
-      duration: 500,
+      duration: shouldAnimate ? 500 : 0,
     }),
-    [options.renderer]
+    [options.renderer.direction, shouldAnimate]
   );
 
   // auto layout
@@ -321,6 +322,11 @@ export const Renderer = ({ source }: RendererProps) => {
   );
   const handleNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
     manuallyMovedNodesSet.current.add(node.id);
+  }, []);
+
+  // enable animation after the initial render
+  useEffect(() => {
+    setShouldAnimate(true);
   }, []);
 
   return (
