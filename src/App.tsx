@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { ReactFlowProvider } from "reactflow";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import classNames from "classnames";
 import { Header } from "./components/Header";
 import { Editor } from "./components/Editor";
 import { Renderer } from "./components/Renderer";
@@ -9,11 +7,12 @@ import { Preferences } from "./components/Preferences";
 import { useDocuments, useOptions } from "./store";
 import type { themes } from "./themes";
 import "./App.css";
+import { Panels } from "./components/Panels";
 
 function App() {
+  const [showPreferences, setShowPreferences] = useState(false);
   const documents = useDocuments();
   const options = useOptions();
-  const [showPreferences, setShowPreferences] = useState(false);
 
   const handleSourceChange = (value: string | undefined) => {
     documents.currentDocument.source = value ?? "";
@@ -29,26 +28,17 @@ function App() {
       <div className="flex overflow-hidden flex-col w-full h-full rounded bg-stone-700 text-stone-50">
         <Header onPreferencesClick={handlePreferencesClick} />
         <main className="flex flex-1">
-          <PanelGroup autoSaveId="example" direction="horizontal">
-            <Panel defaultSizePercentage={50} id="editor">
+          <Panels
+            editorChildren={
               <Editor
                 source={documents.currentDocument.source}
                 theme={options.editor.theme as keyof typeof themes}
                 onChange={handleSourceChange}
               />
-            </Panel>
-            <PanelResizeHandle
-              className={classNames(
-                "w-1.5",
-                { "bg-stone-600": options.renderer.theme === "dark" },
-                { "bg-stone-200": options.renderer.theme === "light" }
-              )}
-            />
-            <Panel id="renderer">
-              <Renderer source={documents.currentDocument.source} />
-            </Panel>
-          </PanelGroup>
-          ;
+            }
+            options={options}
+            rendererChildren={<Renderer source={documents.currentDocument.source} />}
+          />
         </main>
         <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />
       </div>

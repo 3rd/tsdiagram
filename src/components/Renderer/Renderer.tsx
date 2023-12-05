@@ -422,7 +422,7 @@ export const Renderer = memo(({ source }: RendererProps) => {
         <Panel position="top-center">
           <div
             ref={panelRef}
-            className={classNames("overflow-hidden rounded-md shadow-md text-stone-700", {
+            className={classNames("overflow-hidden rounded-md shadow-md text-stone-700 whitespace-nowrap", {
               "bg-stone-100": options.renderer.theme === "light",
               "bg-stone-100 ": options.renderer.theme === "dark",
             })}
