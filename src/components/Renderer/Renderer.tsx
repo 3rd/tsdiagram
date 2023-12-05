@@ -218,10 +218,11 @@ const extractModelEdges = (models: Model[]) => {
 
 export type RendererProps = {
   source: string;
+  disableMiniMap?: boolean;
 };
 
 // eslint-disable-next-line sonarjs/cognitive-complexity
-export const Renderer = memo(({ source }: RendererProps) => {
+export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   const { fitView, getNodes, getEdges } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const [nodes, setNodes, onNodesChange] = useNodesState<{ model: Model }>([]);
@@ -444,14 +445,16 @@ export const Renderer = memo(({ source }: RendererProps) => {
           </div>
         </Panel>
         <Controls />
-        <MiniMap
-          style={{
-            opacity: 0.9,
-          }}
-          zoomStep={1}
-          pannable
-          zoomable
-        />
+        {!disableMiniMap && (
+          <MiniMap
+            style={{
+              opacity: 0.9,
+            }}
+            zoomStep={1}
+            pannable
+            zoomable
+          />
+        )}
         <Background gap={12} size={1} variant={BackgroundVariant.Dots} />
       </ReactFlow>
     </div>

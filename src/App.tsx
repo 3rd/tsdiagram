@@ -8,11 +8,13 @@ import { useDocuments, useOptions } from "./store";
 import type { themes } from "./themes";
 import "./App.css";
 import { Panels } from "./components/Panels";
+import { useIsMobile } from "./hooks/useIsMobile";
 
 function App() {
   const [showPreferences, setShowPreferences] = useState(false);
   const documents = useDocuments();
   const options = useOptions();
+  const isMobile = useIsMobile();
 
   const handleSourceChange = (value: string | undefined) => {
     documents.currentDocument.source = value ?? "";
@@ -37,7 +39,9 @@ function App() {
               />
             }
             options={options}
-            rendererChildren={<Renderer source={documents.currentDocument.source} />}
+            rendererChildren={
+              <Renderer disableMiniMap={isMobile} source={documents.currentDocument.source} />
+            }
           />
         </main>
         <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />
