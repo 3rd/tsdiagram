@@ -28,6 +28,11 @@ export const Editor = ({ source, onChange, theme }: EditorProps) => {
       themes[theme ?? "vsLight"] as Parameters<typeof monaco.editor.defineTheme>[1]
     );
     monaco.editor.setTheme("theme");
+
+    monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+      target: monaco.languages.typescript.ScriptTarget.ES5,
+      lib: ["ES2023"],
+    });
   }, [monaco, theme]);
 
   return (
