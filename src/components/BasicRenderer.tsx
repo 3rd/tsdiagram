@@ -1,7 +1,7 @@
 /* eslint-disable react/jsx-key */
 /* eslint-disable no-nested-ternary */
 import { useMemo, useRef } from "react";
-import { Model, ModelParser } from "../lib/parser/ModelParser";
+import { Model, ModelParser, isArraySchemaField, isGenericSchemaField } from "../lib/parser/ModelParser";
 
 type ModelCardProps = {
   model: Model;
@@ -22,7 +22,7 @@ const ModelCard = ({ model }: ModelCardProps) => {
         typeFragments.push(<span className={classNames.model}>{field.type.name}</span>);
       }
       // array
-      else if (field.type === "array" && "elementType" in field) {
+      else if (isArraySchemaField(field)) {
         // of model references
         if (field.elementType instanceof Object) {
           typeFragments.push(<span className={classNames.model}>{field.elementType.name}[]</span>);
@@ -30,19 +30,19 @@ const ModelCard = ({ model }: ModelCardProps) => {
           // of primitives
           typeFragments.push(<span className={classNames.default}>{`${field.elementType}[]`}</span>);
         }
-        // map
-      } else if (field.type === "map" && "keyType" in field && "valueType" in field) {
-        // of model references
-        if (field.valueType instanceof Object) {
-          typeFragments.push(
-            <span className={classNames.model}>{`Map<${field.keyType}, ${field.valueType.name}>`}</span>
-          );
-        } else {
-          // of primitives
-          typeFragments.push(
-            <span className={classNames.default}>{`Map<${field.keyType}, ${field.valueType}>`}</span>
-          );
+      } else if (isGenericSchemaField(field)) {
+        // generics
+        typeFragments.push(<span className={classNames.default}>{`${field.genericName}<`}</span>);
+        for (const argument of field.arguments) {
+          // of model references
+          if (argument instanceof Object) {
+            typeFragments.push(<span className={classNames.model}>{argument.name}</span>);
+          } else {
+            // of primitives
+            typeFragments.push(<span className={classNames.default}>{argument}</span>);
+          }
         }
+        typeFragments.push(<span className={classNames.default}>{">"}</span>);
       } else {
         // default
         typeFragments.push(<span className={classNames.default}>{field.type}</span>);

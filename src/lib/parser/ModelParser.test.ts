@@ -103,11 +103,11 @@ it("parses arrays of models", () => {
   });
 });
 
-it("parses maps of primitives", () => {
+it("parses generics", () => {
   const parser = new ModelParser(`
-    type A = { a: Record<string, string> };
-    type B = { b: Map<string, string> };
-    type C = { c: WeakMap<string, string> };
+    type A = { a: Array<string> };
+    type B = { b: Record<string, A> };
+    type C = { c: Map<A, A> };
   `);
   const models = parser.getModels();
 
@@ -115,61 +115,36 @@ it("parses maps of primitives", () => {
   expect(models[0]).toEqual({
     id: "66",
     name: "A",
-    schema: [{ name: "a", type: "map", keyType: "string", valueType: "string" }],
+    schema: [{ name: "a", type: "generic", genericName: "Array", arguments: ["string"] }],
     dependencies: [],
-    dependants: [],
+    dependants: [expect.objectContaining({ name: "B" }), expect.objectContaining({ name: "C" })],
   });
   expect(models[1]).toEqual({
     id: "67",
     name: "B",
-    schema: [{ name: "b", type: "map", keyType: "string", valueType: "string" }],
-    dependencies: [],
-    dependants: [],
-  });
-  expect(models[2]).toEqual({
-    id: "68",
-    name: "C",
-    schema: [{ name: "c", type: "map", keyType: "string", valueType: "string" }],
-    dependencies: [],
-    dependants: [],
-  });
-});
-
-it("parses maps of models", () => {
-  const parser = new ModelParser(`
-    type A = { a: Record<B, C> };
-    type B = { b: string };
-    type C = { c: number; };
-  `);
-  const models = parser.getModels();
-
-  expect(models.length).toBe(3);
-  expect(models[0]).toEqual({
-    id: "66",
-    name: "A",
     schema: [
       {
-        name: "a",
-        type: "map",
-        keyType: expect.objectContaining({ name: "B" }),
-        valueType: expect.objectContaining({ name: "C" }),
+        name: "b",
+        type: "generic",
+        genericName: "Record",
+        arguments: ["string", expect.objectContaining({ name: "A" })],
       },
     ],
-    dependencies: [expect.objectContaining({ name: "B" }), expect.objectContaining({ name: "C" })],
+    dependencies: [expect.objectContaining({ name: "A" })],
     dependants: [],
-  });
-  expect(models[1]).toEqual({
-    id: "67",
-    name: "B",
-    schema: [{ name: "b", type: "string" }],
-    dependencies: [],
-    dependants: [expect.objectContaining({ name: "A" })],
   });
   expect(models[2]).toEqual({
     id: "68",
     name: "C",
-    schema: [{ name: "c", type: "number" }],
-    dependencies: [],
-    dependants: [expect.objectContaining({ name: "A" })],
+    schema: [
+      {
+        name: "c",
+        type: "generic",
+        genericName: "Map",
+        arguments: [expect.objectContaining({ name: "A" }), expect.objectContaining({ name: "A" })],
+      },
+    ],
+    dependencies: [expect.objectContaining({ name: "A" })],
+    dependants: [],
   });
 });

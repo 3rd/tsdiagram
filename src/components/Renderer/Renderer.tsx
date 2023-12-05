@@ -20,7 +20,7 @@ import Elk, { ElkNode, LayoutOptions } from "elkjs";
 import omit from "lodash/omit";
 import "reactflow/dist/style.css";
 
-import { Model, ModelParser } from "../../lib/parser/ModelParser";
+import { Model, ModelParser, isArraySchemaField, isGenericSchemaField } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useOptions, UserOptions } from "../../store";
@@ -180,8 +180,9 @@ const extractModelEdges = (models: Model[]) => {
           sourceHandle: `${model.id}-${field.name}`,
         });
       }
+
       // array of model references
-      if (field.type === "array" && "elementType" in field && field.elementType instanceof Object) {
+      if (isArraySchemaField(field) && field.elementType instanceof Object) {
         result.push({
           ...sharedEdgeProps,
           id: `${model.id}-${field.name}`,
@@ -190,25 +191,19 @@ const extractModelEdges = (models: Model[]) => {
           sourceHandle: `${model.id}-${field.name}`,
         });
       }
-      // map of model references
-      if (field.type === "map" && "keyType" in field && "valueType" in field) {
-        if (field.valueType instanceof Object) {
-          result.push({
-            ...sharedEdgeProps,
-            id: `${model.id}-${field.name}`,
-            source: model.id,
-            target: field.valueType.id,
-            sourceHandle: `${model.id}-${field.name}`,
-          });
-        }
-        if (field.keyType instanceof Object) {
-          result.push({
-            ...sharedEdgeProps,
-            id: `${model.id}-${field.name}`,
-            source: model.id,
-            target: field.keyType.id,
-            sourceHandle: `${model.id}-${field.name}`,
-          });
+
+      // generics
+      if (isGenericSchemaField(field)) {
+        for (const argument of field.arguments) {
+          if (argument instanceof Object) {
+            result.push({
+              ...sharedEdgeProps,
+              id: `${model.id}-${field.name}-${argument.id}`,
+              source: model.id,
+              target: argument.id,
+              sourceHandle: `${model.id}-${field.name}`,
+            });
+          }
         }
       }
     }

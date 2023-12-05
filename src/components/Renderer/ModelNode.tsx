@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Position } from "reactflow";
-import { Model } from "../../lib/parser/ModelParser";
+import { Model, isArraySchemaField, isGenericSchemaField } from "../../lib/parser/ModelParser";
 import { CustomHandle } from "./CustomHandle";
 
 export type ModelNodeProps = {
@@ -34,7 +34,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         );
       }
       // array
-      else if (field.type === "array" && "elementType" in field) {
+      else if (isArraySchemaField(field)) {
         // of model references
         if (field.elementType instanceof Object) {
           hasFieldSourceHandle = true;
@@ -49,26 +49,50 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
             <span key="array-primitive" className={classNames.default}>{`${field.elementType}[]`}</span>
           );
         }
-        // map
-      } else if (field.type === "map" && "keyType" in field && "valueType" in field) {
-        // of model references
-        if (field.valueType instanceof Object) {
-          hasFieldSourceHandle = true;
-          typeFragments.push(
-            <span
-              key="map-reference"
-              className={classNames.model}
-            >{`Map<${field.keyType}, ${field.valueType.name}>`}</span>
-          );
-        } else {
-          // of primitives
-          typeFragments.push(
-            <span
-              key="map-primitive"
-              className={classNames.default}
-            >{`Map<${field.keyType}, ${field.valueType}>`}</span>
-          );
+      } else if (isGenericSchemaField(field)) {
+        // generics
+        const argumentFragments: JSX.Element[] = [];
+
+        for (let i = 0; i < field.arguments.length; i++) {
+          const argument = field.arguments[i];
+
+          const argumentKey = `${model.id}-${field.name}-${
+            argument instanceof Object ? argument.name : argument
+          }-${i}`;
+
+          // of model references
+          if (argument instanceof Object) {
+            hasFieldSourceHandle = true;
+            argumentFragments.push(
+              <span key={argumentKey} className={classNames.model}>
+                {argument.name}
+              </span>
+            );
+          } else {
+            // of primitives
+            argumentFragments.push(
+              <span key={argumentKey} className={classNames.default}>
+                {argument}
+              </span>
+            );
+          }
         }
+
+        // add separated by ", "
+        typeFragments.push(
+          <span key="prefix" className={classNames.default}>{`${field.genericName}<`}</span>,
+          <span key="generic" className={classNames.default}>
+            {argumentFragments.map((fragment, index) => (
+              <span key={fragment.key}>
+                {fragment}
+                {index < argumentFragments.length - 1 && ", "}
+              </span>
+            ))}
+          </span>,
+          <span key="suffix" className={classNames.default}>
+            {">"}
+          </span>
+        );
       } else {
         // default
         typeFragments.push(

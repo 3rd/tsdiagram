@@ -1,14 +1,30 @@
 import ts from "typescript";
 import { Parser } from "./Parser";
 
+type DefaultSchemaField = { name: string; type: Model | string };
+type ArraySchemaField = { name: string; type: "array"; elementType: Model | (string & {}) };
+type GenericSchemaField = {
+  name: string;
+  type: "generic";
+  genericName: string;
+  arguments: (Model | (string & {}))[];
+};
+type SchemaField = ArraySchemaField | DefaultSchemaField | GenericSchemaField;
+
+export const isArraySchemaField = (field: SchemaField): field is ArraySchemaField => {
+  return field.type === "array";
+};
+export const isGenericSchemaField = (field: SchemaField): field is GenericSchemaField => {
+  return field.type === "generic";
+};
+export const isDefaultSchemaField = (field: SchemaField): field is DefaultSchemaField => {
+  return !isArraySchemaField(field) && !isGenericSchemaField(field);
+};
+
 export type Model = {
   id: string;
   name: string;
-  schema: (
-    | { name: string; type: "array"; elementType: Model | (string & {}) }
-    | { name: string; type: "map"; keyType: Model | (string & {}); valueType: Model | (string & {}) }
-    | { name: string; type: Model | (string & {}) }
-  )[];
+  schema: (ArraySchemaField | DefaultSchemaField | GenericSchemaField)[];
   dependencies: Model[];
   dependants: Model[];
 };
@@ -24,6 +40,7 @@ const typeNodeToString = (checker: ts.TypeChecker, node: ts.Node) => {
   return checker.typeToString(checker.getTypeAtLocation(node));
 };
 
+// FIXME: proper access
 const getTypeId = (type: ts.Type) => {
   return (type as unknown as { id: number }).id.toString();
 };
@@ -37,7 +54,6 @@ export class ModelParser extends Parser {
     const nodes = this.getTopLevelNodes().filter((node) => {
       if (ts.isInterfaceDeclaration(node)) return true;
       // if it's not a type literal, it's not a model
-      // FIXME: proper access
       if (
         ts.isTypeAliasDeclaration(node) &&
         (node as { type?: ts.Node }).type?.kind === ts.SyntaxKind.TypeLiteral
@@ -89,39 +105,47 @@ export class ModelParser extends Parser {
             type: "array",
             elementType: elementModel ?? this.checker.typeToString(elementTypeNode),
           });
-
           continue;
         }
 
-        // maps (Record, Map, WeakMap)
+        // generics
         if (propDeclaration.type && ts.isTypeReferenceNode(propDeclaration.type)) {
           const typeArguments = propDeclaration.type.typeArguments;
-          if (typeArguments?.length === 2) {
-            const [keyType, valueType] = typeArguments;
-            const keyTypeNode = this.checker.getTypeFromTypeNode(keyType);
-            const keyTypeId = getTypeId(keyTypeNode);
-            const keyModel = typeIdToModelMap.get(keyTypeId);
-
-            const valueTypeNode = this.checker.getTypeFromTypeNode(valueType);
-            const valueTypeId = getTypeId(valueTypeNode);
-            const valueModel = typeIdToModelMap.get(valueTypeId);
-
-            if (keyModel) dependencies.add(keyModel);
-            if (valueModel) dependencies.add(valueModel);
-
-            const typeName = this.checker.typeToString(
-              this.checker.getTypeFromTypeNode(propDeclaration.type)
+          if (!typeArguments || typeArguments.length === 0) {
+            const typeModel = typeIdToModelMap.get(
+              getTypeId(this.checker.getTypeFromTypeNode(propDeclaration.type))
             );
-            if (["Record", "Map", "WeakMap"].some((name) => typeName.startsWith(`${name}<`))) {
-              model.schema.push({
-                name: prop.name,
-                type: "map",
-                keyType: keyModel ?? this.checker.typeToString(keyTypeNode),
-                valueType: valueModel ?? this.checker.typeToString(valueTypeNode),
-              });
-              continue;
-            }
+            if (typeModel) dependencies.add(typeModel);
+            model.schema.push({
+              name: prop.name,
+              type:
+                typeModel ??
+                this.checker.typeToString(this.checker.getTypeFromTypeNode(propDeclaration.type)),
+            });
+            continue;
           }
+
+          const genericName = propDeclaration.type.typeName.getText();
+
+          const schemaField: GenericSchemaField = {
+            name: prop.name,
+            type: "generic",
+            genericName,
+            arguments: [],
+          };
+
+          for (const typeArgument of typeArguments) {
+            const typeArgumentNode = this.checker.getTypeFromTypeNode(typeArgument);
+            const typeArgumentId = getTypeId(typeArgumentNode);
+            const typeArgumentModel = typeIdToModelMap.get(typeArgumentId);
+
+            if (typeArgumentModel) dependencies.add(typeArgumentModel);
+
+            schemaField.arguments.push(typeArgumentModel ?? this.checker.typeToString(typeArgumentNode));
+          }
+
+          model.schema.push(schemaField);
+          continue;
         }
 
         // default
