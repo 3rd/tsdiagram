@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Handle, Position } from "reactflow";
+import { Position } from "reactflow";
 import { Model } from "../../lib/parser/ModelParser";
 import { CustomHandle } from "./CustomHandle";
 

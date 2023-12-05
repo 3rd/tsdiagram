@@ -22,7 +22,8 @@
     "react-dom": "^18.2.0",
     "react-resizable-panels": "^0.0.63",
     "reactflow": "^11.10.1",
-    "statelift": "^1.0.12"
+    "statelift": "^1.0.12",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/lodash": "^4.14.202",
