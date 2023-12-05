@@ -43,6 +43,14 @@ export const Header = ({ onPreferencesClick }: HeaderProps) => {
           TS
         </span>
         Diagram
+        <iframe
+          className="ml-4 opacity-20 hover:opacity-100"
+          height="20"
+          sandbox=""
+          src="https://ghbtns.com/github-btn.html?user=3rd&repo=tsdiagram&type=star&count=true"
+          title="GitHub"
+          width="100"
+        />
       </div>
       {/* actions */}
       <div className="flex gap-2 items-center">
@@ -58,7 +66,7 @@ export const Header = ({ onPreferencesClick }: HeaderProps) => {
           className="py-1 px-2 text-sm text-white rounded shadow-sm bg-white/10 hover:bg-white/20"
           onClick={handleExportClick}
         >
-          📦 Export
+          📦 Export as PNG
         </button>
       </div>
     </header>
