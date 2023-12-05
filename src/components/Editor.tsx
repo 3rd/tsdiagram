@@ -29,10 +29,10 @@ export const Editor = ({ source, onChange, theme }: EditorProps) => {
     );
     monaco.editor.setTheme("theme");
 
-    monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-      target: monaco.languages.typescript.ScriptTarget.ES5,
-      lib: ["ES2023"],
-    });
+    // monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+    //   target: monaco.languages.typescript.ScriptTarget.ES5,
+    //   lib: ["ES2023"],
+    // });
   }, [monaco, theme]);
 
   return (
