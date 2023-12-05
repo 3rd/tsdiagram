@@ -24,6 +24,10 @@ const typeNodeToString = (checker: ts.TypeChecker, node: ts.Node) => {
   return checker.typeToString(checker.getTypeAtLocation(node));
 };
 
+const getTypeId = (type: ts.Type) => {
+  return (type as unknown as { id: number }).id.toString();
+};
+
 export class ModelParser extends Parser {
   // eslint-disable-next-line sonarjs/cognitive-complexity
   getModels() {
@@ -46,7 +50,7 @@ export class ModelParser extends Parser {
     // first pass: init models
     for (const node of nodes) {
       const type = this.checker.getTypeAtLocation(node);
-      const id = (type as unknown as { id: number }).id.toString();
+      const id = getTypeId(type);
       const model: Model = {
         id,
         name: node.name.getText(),
@@ -60,7 +64,7 @@ export class ModelParser extends Parser {
     // second pass: parse schema
     for (const node of nodes) {
       const type = this.checker.getTypeAtLocation(node);
-      const typeId = (type as unknown as { id: number }).id.toString();
+      const typeId = getTypeId(type);
       const model = typeIdToModelMap.get(typeId);
       if (!model) continue;
 
@@ -75,7 +79,7 @@ export class ModelParser extends Parser {
           const elementType = propDeclaration.type.elementType;
           const elementTypeNode = this.checker.getTypeFromTypeNode(elementType);
 
-          const elementTypeId = (elementTypeNode as unknown as { id: number }).id.toString();
+          const elementTypeId = getTypeId(elementTypeNode);
           const elementModel = typeIdToModelMap.get(elementTypeId);
 
           if (elementModel) dependencies.add(elementModel);
@@ -95,11 +99,11 @@ export class ModelParser extends Parser {
           if (typeArguments?.length === 2) {
             const [keyType, valueType] = typeArguments;
             const keyTypeNode = this.checker.getTypeFromTypeNode(keyType);
-            const keyTypeId = (keyTypeNode as unknown as { id: number }).id.toString();
+            const keyTypeId = getTypeId(keyTypeNode);
             const keyModel = typeIdToModelMap.get(keyTypeId);
 
             const valueTypeNode = this.checker.getTypeFromTypeNode(valueType);
-            const valueTypeId = (valueTypeNode as unknown as { id: number }).id.toString();
+            const valueTypeId = getTypeId(valueTypeNode);
             const valueModel = typeIdToModelMap.get(valueTypeId);
 
             if (keyModel) dependencies.add(keyModel);
@@ -123,7 +127,7 @@ export class ModelParser extends Parser {
         // default
         const propTypeName = typeNodeToString(this.checker, propDeclaration);
         const propType = this.checker.getTypeOfSymbolAtLocation(prop, propDeclaration);
-        const propTypeId = (propType as unknown as { id: number }).id.toString();
+        const propTypeId = getTypeId(propType);
         const propTypeModel = typeIdToModelMap.get(propTypeId);
 
         if (propTypeModel) dependencies.add(propTypeModel);

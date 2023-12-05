@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Handle, Position } from "reactflow";
 import { Model } from "../../lib/parser/ModelParser";
+import { CustomHandle } from "./CustomHandle";
 
 export type ModelNodeProps = {
   id: string;
@@ -83,7 +84,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
           <td align="right" className="relative pr-1 leading-none">
             {typeFragments}
             {hasFieldSourceHandle && (
-              <Handle
+              <CustomHandle
                 className="w-2 h-2"
                 id={`${model.id}-${field.name}`}
                 position={Position.Right}
@@ -102,7 +103,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       {/* header */}
       <div className="relative px-1 text-white bg-blue-700">
         {/* target handle */}
-        {hasTargetHandle && <Handle position={Position.Left} type="target" />}
+        {hasTargetHandle && <CustomHandle id={`${model.id}-target`} position={Position.Left} type="target" />}
         {/* title */}
         {model.name}
       </div>

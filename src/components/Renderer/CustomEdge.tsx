@@ -68,7 +68,7 @@ export const CustomEdge = (props: EdgeProps) => {
     },
   });
 
-  console.log({ props, getSmartEdgeResponse });
+  // console.log({ props, getSmartEdgeResponse });
 
   if (getSmartEdgeResponse === null) {
     return <BezierEdge {...props} />;

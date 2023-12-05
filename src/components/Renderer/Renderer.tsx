@@ -12,11 +12,11 @@ import ReactFlow, {
   useReactFlow,
   Panel,
   FitViewOptions,
+  useUpdateNodeInternals,
 } from "reactflow";
 import classNames from "classnames";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
 import Elk, { ElkNode, LayoutOptions } from "elkjs";
-import isEqual from "lodash/isEqual";
 import omit from "lodash/omit";
 import "reactflow/dist/style.css";
 
@@ -102,9 +102,11 @@ const getLayoutedElements = async ({
       };
     }),
   };
-  // console.log(
-  //   "getLayoutedElements",
-  //   graph.children!.map((child) => {
+
+  const layoutedGraph = await elk.layout(graph);
+
+  // console.log("@elk", {
+  //   graphChildren: graph.children!.map((child) => {
   //     return {
   //       id: child.id,
   //       width: child.width,
@@ -113,11 +115,9 @@ const getLayoutedElements = async ({
   //       x: child.x,
   //       y: child.y,
   //     };
-  //   })
-  // );
-
-  const layoutedGraph = await elk.layout(graph);
-  // console.log("layoutedGraph", layoutedGraph);
+  //   }),
+  //   layoutedGraph,
+  // });
 
   return {
     nodes: nodes.map((node) => {
@@ -216,11 +216,13 @@ export type RendererProps = {
   source: string;
 };
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export const Renderer = memo(({ source }: RendererProps) => {
   const { fitView, getNodes, getEdges } = useReactFlow();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const updateNodeInternals = useUpdateNodeInternals();
+  const [nodes, setNodes, onNodesChange] = useNodesState<{ model: Model }>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const cachedNodesMap = useRef<Map<string, Node>>(new Map());
+  const cachedNodesMap = useRef<Map<string, Node<{ model: Model }>>>(new Map());
   const manuallyMovedNodesSet = useRef<Set<string>>(new Set());
   const options = useOptions();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -237,8 +239,20 @@ export const Renderer = memo(({ source }: RendererProps) => {
 
   // auto layout
   const handleAutoLayout = useCallback(() => {
+    const nodesToLayout = getNodes().map((node) => {
+      const cachedNode = cachedNodesMap.current.get(node.id);
+      if (cachedNode) {
+        return {
+          ...node,
+          width: node.width ?? cachedNode.width,
+          height: node.height ?? cachedNode.height,
+        };
+      }
+      return node;
+    });
+
     getLayoutedElements({
-      nodes: getNodes(),
+      nodes: nodesToLayout,
       edges: getEdges(),
       options,
       manuallyMovedNodesSet: manuallyMovedNodesSet.current,
@@ -258,23 +272,27 @@ export const Renderer = memo(({ source }: RendererProps) => {
     parser.current.setSource(source);
     return parser.current.getModels();
   }, [source]);
-  const parsedNodes = useMemo(() => extractModelNodes(models), [models]);
-  const parsedEdges = useMemo(() => extractModelEdges(models), [models]);
+  const { parsedNodes, parsedEdges } = useMemo(() => {
+    return {
+      parsedNodes: extractModelNodes(models),
+      parsedEdges: extractModelEdges(models),
+    };
+  }, [models]);
 
   // console.log({ parsedNodes, parsedEdges });
 
-  // update nodes and edges after parsing
+  // update nodes and edges after parsing (before auto layout)
   useLayoutEffect(() => {
     const updatedNodes = parsedNodes.map((node) => {
       const cachedNode = cachedNodesMap.current.get(node.id);
       if (cachedNode) {
-        if (
-          cachedNode.type === node.type &&
-          isEqual(cachedNode.data?.model, node.data.model) &&
-          cachedNode.width &&
-          cachedNode.height
-        ) {
-          return cachedNode;
+        if (cachedNode.type === node.type && cachedNode.width && cachedNode.height) {
+          return {
+            ...node,
+            width: cachedNode.width,
+            height: cachedNode.height,
+            position: cachedNode.position,
+          };
         }
         return { ...node, position: cachedNode.position };
       }
@@ -282,26 +300,49 @@ export const Renderer = memo(({ source }: RendererProps) => {
     });
     setNodes(updatedNodes);
     setEdges(parsedEdges);
-    requestAnimationFrame(handleAutoLayout);
-  }, [handleAutoLayout, parsedEdges, parsedNodes, setEdges, setNodes]);
+  }, [parsedEdges, parsedNodes, setEdges, setNodes]);
 
   // cache computed nodes and trigger auto layout if their width or height changed
+  const previousEdges = useRef<Edge[]>(edges);
   useLayoutEffect(() => {
     let needsAutoLayout = false;
-    for (const node of nodes) {
-      const previousNode = cachedNodesMap.current.get(node.id);
-      if (
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        (previousNode?.width && node.width !== previousNode.width) ||
-        (previousNode?.height && node.height !== previousNode.height)
-      ) {
-        needsAutoLayout = true;
-        break;
+    if (previousEdges.current.length !== edges.length) {
+      needsAutoLayout = true;
+      previousEdges.current = edges;
+    } else if (nodes.length === cachedNodesMap.current.size) {
+      for (const node of nodes) {
+        const previousNode = cachedNodesMap.current.get(node.id);
+        if (
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          (previousNode?.width && node.width !== previousNode.width) ||
+          (previousNode?.height && node.height !== previousNode.height)
+        ) {
+          needsAutoLayout = true;
+          break;
+        }
       }
+    } else {
+      needsAutoLayout = true;
     }
     cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
     if (needsAutoLayout) requestAnimationFrame(handleAutoLayout);
-  }, [handleAutoLayout, nodes]);
+  }, [handleAutoLayout, nodes, edges]);
+
+  // update node internals when node dependencies change
+  const previousModels = useRef<Map<string, Model>>(new Map());
+  useEffect(() => {
+    const modelsMap = new Map(models.map((model) => [model.id, model]));
+    for (const model of models) {
+      const previousModel = previousModels.current.get(model.id);
+      if (!previousModel) continue;
+      const previousDependantsHash = previousModel.dependants.map((curr) => curr.id).join(":");
+      const currentDependantsHash = model.dependants.map((curr) => curr.id).join(":");
+      if (previousDependantsHash !== currentDependantsHash) {
+        updateNodeInternals(model.id);
+      }
+    }
+    previousModels.current = modelsMap;
+  }, [models, updateNodeInternals]);
 
   // option handlers
   const handleAutoFitToggle = useCallback(() => {
