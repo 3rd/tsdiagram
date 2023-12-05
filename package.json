@@ -1,7 +1,8 @@
 {
   "name": "tsdiagram",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
+  "repository": "https://github.com/3rd/tsdiagram",
+  "description": "Create diagrams and plan your code with TypeScript.",
   "type": "module",
   "scripts": {
     "dev": "vite",

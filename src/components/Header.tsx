@@ -46,7 +46,7 @@ export const Header = ({ onPreferencesClick }: HeaderProps) => {
         <iframe
           className="ml-4 opacity-20 hover:opacity-100"
           height="20"
-          sandbox=""
+          sandbox="allow-scripts"
           src="https://ghbtns.com/github-btn.html?user=3rd&repo=tsdiagram&type=star&count=true"
           title="GitHub"
           width="100"
