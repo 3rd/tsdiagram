@@ -341,7 +341,12 @@ export const Renderer = memo(({ source }: RendererProps) => {
       if (!previousModel) continue;
       const previousDependantsHash = previousModel.dependants.map((curr) => curr.id).join(":");
       const currentDependantsHash = model.dependants.map((curr) => curr.id).join(":");
-      if (previousDependantsHash !== currentDependantsHash) {
+      const previousDependenciesHash = previousModel.dependencies.map((curr) => curr.id).join(":");
+      const currentDependenciesHash = model.dependencies.map((curr) => curr.id).join(":");
+      if (
+        previousDependantsHash !== currentDependantsHash ||
+        previousDependenciesHash !== currentDependenciesHash
+      ) {
         updateNodeInternals(model.id);
       }
     }
