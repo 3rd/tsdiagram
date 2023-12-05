@@ -57,12 +57,14 @@ const getLayoutedElements = async ({
     "elk.insideSelfLoops.activate": "false",
     "elk.interactiveLayout": "true",
     "elk.layered.crossingMinimization.semiInteractive": "true",
-    // "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
+    "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
     "elk.layered.layering.strategy": "INTERACTIVE",
     "elk.layered.nodePlacement.strategy": "INTERACTIVE",
     "elk.layered.spacing.edgeNodeBetweenLayers": "30",
-    "elk.layered.spacing.nodeNodeBetweenLayers": "50",
+    "elk.layered.spacing.nodeNodeBetweenLayers": "30",
     "elk.spacing.nodeNode": "50",
+    "elk.spacing.componentComponent": "50",
+    "elk.separateConnectedComponents": "false",
   };
 
   const elk = new Elk({
@@ -126,7 +128,9 @@ const getLayoutedElements = async ({
       const clone = omit(node, ["width", "height"]);
       const hasManuallyMoved = manuallyMovedNodesSet.has(node.id);
       return {
-        ...clone,
+        id: node.id,
+        type: node.type,
+        data: node.data,
         position: {
           x: hasManuallyMoved ? node.position.x : layoutedNode.x ?? clone.position.x,
           y: hasManuallyMoved ? node.position.y : layoutedNode.y ?? clone.position.y,
