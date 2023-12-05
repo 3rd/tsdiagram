@@ -39,8 +39,8 @@ dependencies:
     specifier: ^11.10.1
     version: 11.10.1(@types/react@18.2.39)(react-dom@18.2.0)(react@18.2.0)
   statelift:
-    specifier: ^1.0.12
-    version: 1.0.12(react-dom@18.2.0)(react@18.2.0)
+    specifier: ^1.0.13
+    version: 1.0.13(react-dom@18.2.0)(react@18.2.0)
   zod:
     specifier: ^3.22.4
     version: 3.22.4
@@ -1609,8 +1609,8 @@ packages:
     resolution: {integrity: sha512-HTEHMNieakEnoe33shBYcZ7NX83ACUjCu8c40iOGEZsngj9zRnkqS9j1pqQPXwobB0ZcVTk27REb7COQ0UR59w==}
     dev: false
 
-  /statelift@1.0.12(react-dom@18.2.0)(react@18.2.0):
-    resolution: {integrity: sha512-OC2HJmCgnw/4L1clwZmUVGE5W1oiozadjq8+Jo+/spXxSEn3IZcEVGwQjMP9d9nuzrziznPrwMA+DzLRzgmhDQ==}
+  /statelift@1.0.13(react-dom@18.2.0)(react@18.2.0):
+    resolution: {integrity: sha512-tDMErPdgM7VR2jtlvCUS7FDrP3Rb/zrc7aSkQNNTeyYeOu/wfufiEqiKNjLXtRp69L4bfxiR0gAYVzoTYCsuUQ==}
     peerDependencies:
       react: ^18.0.0
       react-dom: ^18.0.0
