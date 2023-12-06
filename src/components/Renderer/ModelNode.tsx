@@ -135,14 +135,14 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
           <td className={classes.field.keyCell}>{field.name}</td>
           <td align="right" className={classes.field.typeCell}>
             {typeFragments}
-            {hasFieldSourceHandle && (
-              <CustomHandle
-                className={classes.handles.source}
-                id={`${model.id}-${field.name}`}
-                position={Position.Right}
-                type="source"
-              />
-            )}
+            <CustomHandle
+              className={classNames(classes.handles.source, {
+                hidden: !hasFieldSourceHandle,
+              })}
+              id={`${model.id}-${field.name}`}
+              position={Position.Right}
+              type="source"
+            />
           </td>
         </tr>
       );
@@ -154,14 +154,14 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       {/* header */}
       <div className={classes.header}>
         {/* target handle */}
-        {hasTargetHandle && (
-          <CustomHandle
-            className={classes.handles.target}
-            id={`${model.id}-target`}
-            position={Position.Left}
-            type="target"
-          />
-        )}
+        <CustomHandle
+          className={classNames(classes.handles.target, {
+            hidden: !hasTargetHandle,
+          })}
+          id={`${model.id}-target`}
+          position={Position.Left}
+          type="target"
+        />
         {/* title */}
         {model.name}
       </div>
