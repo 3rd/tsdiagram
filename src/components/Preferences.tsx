@@ -107,20 +107,22 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
                         </div>
                       </div>
                       {/* enable / disable minimap */}
-                      <div className="flex">
-                        <input
-                          checked={options.renderer.enableMinimap}
-                          id="enable-minimap"
-                          type="checkbox"
-                          onChange={handleMinimapChange}
-                        />
-                        <label
-                          className="ml-2 font-medium leading-6 text-gray-900 select-none"
-                          htmlFor="enable-minimap"
-                        >
-                          Enable Minimap
-                        </label>
-                      </div>
+                      {!isMobile && (
+                        <div className="flex">
+                          <input
+                            checked={options.renderer.enableMinimap}
+                            id="enable-minimap"
+                            type="checkbox"
+                            onChange={handleMinimapChange}
+                          />
+                          <label
+                            className="ml-2 font-medium leading-6 text-gray-900 select-none"
+                            htmlFor="enable-minimap"
+                          >
+                            Enable Minimap
+                          </label>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

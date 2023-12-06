@@ -27,7 +27,6 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       }),
       fieldsWrapper: classNames("bg-gray-50 flex flex-col text-sm", {
         "border-x border-b border-blue-800": isLightTheme,
-        "border-blue-600": isDarkTheme,
       }),
       field: {
         root: classNames("even:bg-gray-100 leading-tight"),
