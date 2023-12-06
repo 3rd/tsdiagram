@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import classNames from "classnames";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { UserOptions } from "../store";
+import { UserOptions } from "../stores/user-options";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 const defaultCodePanelSizePercentage = 50;

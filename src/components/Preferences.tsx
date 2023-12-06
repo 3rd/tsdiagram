@@ -1,7 +1,8 @@
 import { Fragment, useRef } from "react";
 import { Dialog, Transition } from "@headlessui/react";
-import { useOptions } from "../store";
+import { useUserOptions } from "../stores/user-options";
 import { themes } from "../themes";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 export type PreferencesProps = {
   isOpen: boolean;
@@ -10,7 +11,8 @@ export type PreferencesProps = {
 
 export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
   const cancelButtonRef = useRef(null);
-  const options = useOptions();
+  const options = useUserOptions();
+  const isMobile = useIsMobile();
 
   const handleEditorThemeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     options.editor.theme = event.target.value as keyof typeof themes;

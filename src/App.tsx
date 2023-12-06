@@ -4,16 +4,17 @@ import { Header } from "./components/Header";
 import { Editor } from "./components/Editor";
 import { Renderer } from "./components/Renderer";
 import { Preferences } from "./components/Preferences";
-import { useDocuments, useOptions } from "./store";
+import { Panels } from "./components/Panels";
+import { useDocuments } from "./stores/documents";
+import { useUserOptions } from "./stores/user-options";
+import { useIsMobile } from "./hooks/useIsMobile";
 import type { themes } from "./themes";
 import "./App.css";
-import { Panels } from "./components/Panels";
-import { useIsMobile } from "./hooks/useIsMobile";
 
 function App() {
   const [showPreferences, setShowPreferences] = useState(false);
   const documents = useDocuments();
-  const options = useOptions();
+  const options = useUserOptions();
   const isMobile = useIsMobile();
 
   const handleSourceChange = (value: string | undefined) => {

@@ -9,7 +9,7 @@
 - Lets you define your data models through **top-level type aliases** and **interfaces**.
 - Automatically layouts the nodes in an efficient way.
 - ...but if you move one of the nodes manually, it will only auto-layout the other ones.
-- Saves everything in your local browser storage.
+- Persists the document state in the URL and localStorage.
 - Exports your diagrams as PNG.
 
 ### **Roadmap**

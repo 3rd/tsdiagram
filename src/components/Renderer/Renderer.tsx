@@ -23,7 +23,7 @@ import "reactflow/dist/style.css";
 import { Model, ModelParser, isArraySchemaField, isGenericSchemaField } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
-import { useOptions, UserOptions } from "../../store";
+import { useUserOptions, UserOptions } from "../../stores/user-options";
 
 const nodeTypes = {
   model: ModelNode,
@@ -216,7 +216,7 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const cachedNodesMap = useRef<Map<string, Node<{ model: Model }>>>(new Map());
   const manuallyMovedNodesSet = useRef<Set<string>>(new Set());
-  const options = useOptions();
+  const options = useUserOptions();
   const panelRef = useRef<HTMLDivElement>(null);
   const [shouldAnimate, setShouldAnimate] = useState(false);
 

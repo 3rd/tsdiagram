@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Position } from "reactflow";
 import classNames from "classnames";
 import { Model, isArraySchemaField, isGenericSchemaField } from "../../lib/parser/ModelParser";
-import { useOptions } from "../../store";
+import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
 
 export type ModelNodeProps = {
@@ -12,7 +12,7 @@ export type ModelNodeProps = {
 
 export const ModelNode = ({ id, data }: ModelNodeProps) => {
   const { model } = data;
-  const options = useOptions();
+  const options = useUserOptions();
 
   const hasTargetHandle = useMemo(() => model.dependants.length > 0, [model.dependants]);
 

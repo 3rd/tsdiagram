@@ -19,6 +19,7 @@
     "elkjs": "^0.8.2",
     "html-to-image": "^1.11.11",
     "lodash": "^4.17.21",
+    "lz-string": "^1.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-resizable-panels": "^0.0.63",
