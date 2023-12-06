@@ -27,7 +27,7 @@ function App() {
 
   return (
     <ReactFlowProvider>
-      <div className="flex overflow-hidden flex-col w-full h-full rounded bg-stone-700 text-stone-50">
+      <div className="flex overflow-hidden flex-col w-full h-full rounded">
         <Header onPreferencesClick={handlePreferencesClick} />
         <main className="flex flex-1">
           <Panels

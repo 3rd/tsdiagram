@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { Position } from "reactflow";
+import classNames from "classnames";
 import { Model, isArraySchemaField, isGenericSchemaField } from "../../lib/parser/ModelParser";
+import { useOptions } from "../../store";
 import { CustomHandle } from "./CustomHandle";
 
 export type ModelNodeProps = {
@@ -10,17 +12,40 @@ export type ModelNodeProps = {
 
 export const ModelNode = ({ id, data }: ModelNodeProps) => {
   const { model } = data;
+  const options = useOptions();
 
   const hasTargetHandle = useMemo(() => model.dependants.length > 0, [model.dependants]);
+
+  const classes = useMemo(() => {
+    const isDarkTheme = options.renderer.theme === "dark";
+    const isLightTheme = options.renderer.theme === "light";
+    return {
+      root: classNames("shadow-md"),
+      header: classNames("relative px-1 pl-1.5 py-0.5 text-white rounded-t", {
+        "bg-blue-700": isLightTheme,
+        "bg-blue-600": isDarkTheme,
+      }),
+      fieldsWrapper: classNames("bg-gray-50 flex flex-col text-sm", {
+        "border-x border-b border-blue-800": isLightTheme,
+        "border-blue-600": isDarkTheme,
+      }),
+      field: {
+        root: classNames("even:bg-gray-100 leading-tight"),
+        keyCell: classNames("pr-4 pl-2 text-gray-950"),
+        typeCell: classNames("relative pr-2"),
+        defaultTypeColor: classNames("text-gray-800"),
+        modelTypeColor: classNames("text-blue-700"),
+      },
+      handles: {
+        source: classNames("w-2 h-2 bg-stone-400 border-none z-[-10]"),
+        target: classNames("w-2 h-2 bg-blue-500"),
+      },
+    };
+  }, [options.renderer.theme]);
 
   const fieldRows = useMemo(() => {
     return model.schema.map((field) => {
       const typeFragments: JSX.Element[] = [];
-
-      const classNames = {
-        default: "text-gray-500",
-        model: "text-blue-700",
-      };
 
       let hasFieldSourceHandle = false;
 
@@ -28,7 +53,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       if (field.type instanceof Object) {
         hasFieldSourceHandle = true;
         typeFragments.push(
-          <span key="reference" className={classNames.model}>
+          <span key="reference" className={classes.field.modelTypeColor}>
             {field.type.name}
           </span>
         );
@@ -39,14 +64,17 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         if (field.elementType instanceof Object) {
           hasFieldSourceHandle = true;
           typeFragments.push(
-            <span key="array-reference" className={classNames.model}>
+            <span key="array-reference" className={classes.field.modelTypeColor}>
               {field.elementType.name}[]
             </span>
           );
         } else {
           // of primitives
           typeFragments.push(
-            <span key="array-primitive" className={classNames.default}>{`${field.elementType}[]`}</span>
+            <span
+              key="array-primitive"
+              className={classes.field.defaultTypeColor}
+            >{`${field.elementType}[]`}</span>
           );
         }
       } else if (isGenericSchemaField(field)) {
@@ -64,14 +92,14 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
           if (argument instanceof Object) {
             hasFieldSourceHandle = true;
             argumentFragments.push(
-              <span key={argumentKey} className={classNames.model}>
+              <span key={argumentKey} className={classes.field.modelTypeColor}>
                 {argument.name}
               </span>
             );
           } else {
             // of primitives
             argumentFragments.push(
-              <span key={argumentKey} className={classNames.default}>
+              <span key={argumentKey} className={classes.field.defaultTypeColor}>
                 {argument}
               </span>
             );
@@ -80,8 +108,8 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
         // add separated by ", "
         typeFragments.push(
-          <span key="prefix" className={classNames.default}>{`${field.genericName}<`}</span>,
-          <span key="generic" className={classNames.default}>
+          <span key="prefix" className={classes.field.defaultTypeColor}>{`${field.genericName}<`}</span>,
+          <span key="generic" className={classes.field.modelTypeColor}>
             {argumentFragments.map((fragment, index) => (
               <span key={fragment.key}>
                 {fragment}
@@ -89,30 +117,29 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
               </span>
             ))}
           </span>,
-          <span key="suffix" className={classNames.default}>
+          <span key="suffix" className={classes.field.defaultTypeColor}>
             {">"}
           </span>
         );
       } else {
         // default
         typeFragments.push(
-          <span key="default" className={classNames.default}>
+          <span key="default" className={classes.field.defaultTypeColor}>
             {field.type}
           </span>
         );
       }
 
       return (
-        <tr key={`${model.id}-${field.name}`} className="even:bg-gray-100">
-          <td className="pr-2 pl-1 leading-none">{field.name}</td>
-          <td align="right" className="relative pr-1 leading-none">
+        <tr key={`${model.id}-${field.name}`} className={classes.field.root}>
+          <td className={classes.field.keyCell}>{field.name}</td>
+          <td align="right" className={classes.field.typeCell}>
             {typeFragments}
             {hasFieldSourceHandle && (
               <CustomHandle
-                className="w-2 h-2"
+                className={classes.handles.source}
                 id={`${model.id}-${field.name}`}
                 position={Position.Right}
-                style={{ background: "#555" }}
                 type="source"
               />
             )}
@@ -120,19 +147,26 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         </tr>
       );
     });
-  }, [model]);
+  }, [classes, model.id, model.schema]);
 
   return (
-    <div key={id} className="border border-blue-700">
+    <div key={id} className={classes.root}>
       {/* header */}
-      <div className="relative px-1 text-white bg-blue-700">
+      <div className={classes.header}>
         {/* target handle */}
-        {hasTargetHandle && <CustomHandle id={`${model.id}-target`} position={Position.Left} type="target" />}
+        {hasTargetHandle && (
+          <CustomHandle
+            className={classes.handles.target}
+            id={`${model.id}-target`}
+            position={Position.Left}
+            type="target"
+          />
+        )}
         {/* title */}
         {model.name}
       </div>
       {/* fields */}
-      <div className="flex flex-col text-sm bg-white">
+      <div className={classes.fieldsWrapper}>
         <table cellPadding="3">
           <tbody>{fieldRows}</tbody>
         </table>

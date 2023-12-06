@@ -36,15 +36,15 @@ export const Header = ({ onPreferencesClick }: HeaderProps) => {
   };
 
   return (
-    <header className="flex justify-between items-center p-2 border-b border-stone-700 bg-stone-800">
+    <header className="flex justify-between items-center p-2 text-gray-50 bg-blue-900">
       {/* logo */}
-      <div className="flex items-center text-lg font-bold">
-        <span className="px-0.5 mr-1 rounded" style={{ background: "#3178c6" }}>
+      <div className="flex items-center text-lg font-bold leading-none">
+        <span className="py-1 px-0.5 mr-0.5 rounded" style={{ background: "#3178c6" }}>
           TS
         </span>
-        Diagram
+        <span>Diagram</span>
         <iframe
-          className="hidden ml-4 opacity-20 sm:visible hover:opacity-100"
+          className="hidden ml-4 opacity-20 sm:block hover:opacity-100"
           height="20"
           sandbox="allow-scripts allow-popups"
           src="https://ghbtns.com/github-btn.html?user=3rd&repo=tsdiagram&type=star&count=true"
@@ -56,14 +56,14 @@ export const Header = ({ onPreferencesClick }: HeaderProps) => {
       <div className="flex gap-2 items-center">
         {/* preferences */}
         <button
-          className="py-1 px-2 text-sm text-white rounded shadow-sm bg-white/10 hover:bg-white/20"
+          className="py-1 px-2 text-sm rounded shadow-sm bg-white/10 hover:bg-white/20"
           onClick={onPreferencesClick}
         >
           ⚙ Preferences
         </button>
         {/* export */}
         <button
-          className="py-1 px-2 text-sm text-white rounded shadow-sm bg-white/10 hover:bg-white/20"
+          className="py-1 px-2 text-sm rounded shadow-sm bg-white/10 hover:bg-white/20"
           onClick={handleExportClick}
         >
           📦 Export PNG

@@ -157,16 +157,8 @@ const extractModelNodes = (models: Model[]) => {
   });
 };
 
-const extractModelEdges = (models: Model[]) => {
+const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {}) => {
   const result: Edge[] = [];
-
-  const sharedEdgeProps = {
-    // type: "smoothstep",
-    // type: "smart",
-    type: "custom",
-    markerEnd: { type: MarkerType.ArrowClosed },
-    // animated: true,
-  };
 
   for (const model of models) {
     for (const field of model.schema) {
@@ -236,6 +228,26 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
     }),
     [options.renderer.direction, shouldAnimate]
   );
+  const sharedEdgeProps = useMemo(
+    () => ({
+      type: "custom",
+      markerEnd: { type: MarkerType.ArrowClosed },
+      style: {
+        stroke: options.renderer.theme === "light" ? "#a9b2bc" : "#7f8084",
+        strokeWidth: 1,
+        strokeDasharray: "none",
+        markerEndId: "arrow",
+      },
+      // type: "smoothstep",
+      // type: "smart",
+      // animated: true,
+    }),
+    [options.renderer.theme]
+  );
+  const backgroundForeground = useMemo(() => {
+    if (options.renderer.theme === "dark") return "#7f8084";
+    return "#a9b2bc";
+  }, [options.renderer.theme]);
 
   // auto layout
   const handleAutoLayout = useCallback(() => {
@@ -275,9 +287,9 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   const { parsedNodes, parsedEdges } = useMemo(() => {
     return {
       parsedNodes: extractModelNodes(models),
-      parsedEdges: extractModelEdges(models),
+      parsedEdges: extractModelEdges(models, sharedEdgeProps),
     };
-  }, [models]);
+  }, [models, sharedEdgeProps]);
 
   // console.log({ parsedNodes, parsedEdges });
 
@@ -389,8 +401,8 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
 
   return (
     <div
-      className={classNames("flex flex-1 w-full h-full bg-stone-50 text-stone-900", {
-        "bg-stone-100": options.renderer.theme === "light",
+      className={classNames("flex flex-1 w-full h-full", {
+        "bg-gray-50": options.renderer.theme === "light",
         "bg-stone-800": options.renderer.theme === "dark",
       })}
     >
@@ -418,10 +430,13 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
         <Panel position="top-center">
           <div
             ref={panelRef}
-            className={classNames("overflow-hidden rounded-md shadow-md text-stone-700 whitespace-nowrap", {
-              "bg-stone-100": options.renderer.theme === "light",
-              "bg-stone-100 ": options.renderer.theme === "dark",
-            })}
+            className={classNames(
+              "bg-opacity-90 overflow-hidden rounded-md shadow-md text-gray-800 whitespace-nowrap",
+              {
+                "bg-gray-100": options.renderer.theme === "light",
+                "bg-stone-100": options.renderer.theme === "dark",
+              }
+            )}
           >
             {/* auto-fit */}
             <button
@@ -439,7 +454,12 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
             </button>
           </div>
         </Panel>
-        <Controls />
+        <Controls
+          className={classNames("rounded overflow-hidden bg-opacity-90", {
+            "bg-gray-50": options.renderer.theme === "light",
+            "bg-stone-100": options.renderer.theme === "dark",
+          })}
+        />
         {!disableMiniMap && (
           <MiniMap
             style={{
@@ -450,7 +470,7 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
             zoomable
           />
         )}
-        <Background gap={12} size={1} variant={BackgroundVariant.Dots} />
+        <Background color={backgroundForeground} gap={12} size={1} variant={BackgroundVariant.Dots} />
       </ReactFlow>
     </div>
   );
