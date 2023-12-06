@@ -460,8 +460,10 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
             "bg-stone-100": options.renderer.theme === "dark",
           })}
         />
-        {!disableMiniMap && (
+        {/* TODO: refactor */}
+        {!disableMiniMap && options.renderer.enableMinimap && (
           <MiniMap
+            maskColor={backgroundForeground}
             style={{
               opacity: 0.9,
             }}

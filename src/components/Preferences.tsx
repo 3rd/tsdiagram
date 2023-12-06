@@ -22,6 +22,11 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
     options.save();
   };
 
+  const handleMinimapChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    options.renderer.enableMinimap = event.target.checked;
+    options.save();
+  };
+
   return (
     <Transition.Root as={Fragment} show={isOpen}>
       <Dialog as="div" className="relative z-50" initialFocus={cancelButtonRef} onClose={onClose}>
@@ -54,48 +59,65 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
                     <Dialog.Title as="h3" className="text-base font-semibold leading-6 text-gray-900">
                       Preferences
                     </Dialog.Title>
-                    {/* theme */}
-                    <div className="flex gap-4 mt-2">
-                      {/* editor theme */}
-                      <div>
-                        <label
-                          className="block text-sm font-medium leading-6 text-gray-900"
-                          htmlFor="location"
-                        >
-                          Editor theme
-                        </label>
-                        <select
-                          className="block py-1.5 pr-10 pl-3 mt-2 w-full text-gray-900 rounded-md border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-indigo-600"
-                          id="location"
-                          name="location"
-                          value={options.editor.theme}
-                          onChange={handleEditorThemeChange}
-                        >
-                          {Object.keys(themes).map((theme) => (
-                            <option key={theme} value={theme}>
-                              {themes[theme as keyof typeof themes].name}
-                            </option>
-                          ))}
-                        </select>
+                    <div className="flex flex-col gap-4 mt-2">
+                      {/* theme */}
+                      <div className="flex gap-4 mt-2">
+                        {/* editor theme */}
+                        <div>
+                          <label
+                            className="block text-sm font-medium leading-6 text-gray-900"
+                            htmlFor="location"
+                          >
+                            Editor theme
+                          </label>
+                          <select
+                            className="block py-1.5 pr-10 pl-3 mt-2 w-full text-gray-900 rounded-md border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-indigo-600"
+                            id="location"
+                            name="location"
+                            value={options.editor.theme}
+                            onChange={handleEditorThemeChange}
+                          >
+                            {Object.keys(themes).map((theme) => (
+                              <option key={theme} value={theme}>
+                                {themes[theme as keyof typeof themes].name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {/* renderer theme */}
+                        <div>
+                          <label
+                            className="block text-sm font-medium leading-6 text-gray-900"
+                            htmlFor="location"
+                          >
+                            Renderer theme
+                          </label>
+                          <select
+                            className="block py-1.5 pr-10 pl-3 mt-2 w-full text-gray-900 rounded-md border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-indigo-600"
+                            id="location"
+                            name="location"
+                            value={options.renderer.theme}
+                            onChange={handleRendererThemeChange}
+                          >
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                          </select>
+                        </div>
                       </div>
-                      {/* renderer theme */}
-                      <div>
+                      {/* enable / disable minimap */}
+                      <div className="flex">
+                        <input
+                          checked={options.renderer.enableMinimap}
+                          id="enable-minimap"
+                          type="checkbox"
+                          onChange={handleMinimapChange}
+                        />
                         <label
-                          className="block text-sm font-medium leading-6 text-gray-900"
-                          htmlFor="location"
+                          className="ml-2 font-medium leading-6 text-gray-900 select-none"
+                          htmlFor="enable-minimap"
                         >
-                          Renderer theme
+                          Enable Minimap
                         </label>
-                        <select
-                          className="block py-1.5 pr-10 pl-3 mt-2 w-full text-gray-900 rounded-md border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-indigo-600"
-                          id="location"
-                          name="location"
-                          value={options.renderer.theme}
-                          onChange={handleRendererThemeChange}
-                        >
-                          <option value="light">Light</option>
-                          <option value="dark">Dark</option>
-                        </select>
                       </div>
                     </div>
                   </div>

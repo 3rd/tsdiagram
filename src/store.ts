@@ -5,12 +5,13 @@ import { themes } from "./themes";
 
 const userOptionsSchema = z.object({
   editor: z.object({
-    theme: z.enum(Object.keys(themes) as [string, ...string[]]),
+    theme: z.enum(Object.keys(themes) as [string, ...string[]]).default("vsLight"),
   }),
   renderer: z.object({
-    direction: z.enum(["horizontal", "vertical"]),
-    autoFitView: z.boolean(),
-    theme: z.enum(["light", "dark"]),
+    direction: z.enum(["horizontal", "vertical"]).default("horizontal"),
+    autoFitView: z.boolean().default(true),
+    theme: z.enum(["light", "dark"]).default("light"),
+    enableMinimap: z.boolean().default(true),
   }),
 });
 
@@ -26,6 +27,7 @@ export const optionsStore = createStore<UserOptions>({
     direction: "horizontal",
     autoFitView: true,
     theme: "light",
+    enableMinimap: true,
   },
   load() {
     try {
