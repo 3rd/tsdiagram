@@ -13,6 +13,7 @@ import ReactFlow, {
   Panel,
   FitViewOptions,
   useUpdateNodeInternals,
+  useNodesInitialized,
 } from "reactflow";
 import classNames from "classnames";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
@@ -345,6 +346,13 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
     if (needsAutoLayout) requestAnimationFrame(handleAutoLayout);
   }, [handleAutoLayout, nodes, edges]);
   cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
+
+  // trigger auto layout after nodes are sized
+  const nodesAreInitialized = useNodesInitialized();
+  useEffect(() => {
+    if (!nodesAreInitialized) return;
+    requestAnimationFrame(handleAutoLayout);
+  }, [handleAutoLayout, nodesAreInitialized]);
 
   // update node internals when node dependencies change
   const previousModels = useRef<Map<string, Model>>(new Map());
