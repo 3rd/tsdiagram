@@ -1,5 +1,6 @@
 import { getRectOfNodes, getTransformForBounds, useReactFlow } from "reactflow";
 import { toPng } from "html-to-image";
+import { memo } from "react";
 
 const imageWidth = 1024;
 const imageHeight = 768;
@@ -15,7 +16,7 @@ type HeaderProps = {
   onPreferencesClick?: () => void;
 };
 
-export const Header = ({ onPreferencesClick }: HeaderProps) => {
+export const Header = memo(({ onPreferencesClick }: HeaderProps) => {
   const { getNodes } = useReactFlow();
 
   // https://reactflow.dev/examples/misc/download-image
@@ -71,4 +72,4 @@ export const Header = ({ onPreferencesClick }: HeaderProps) => {
       </div>
     </header>
   );
-};
+});

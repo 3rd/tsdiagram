@@ -20,7 +20,12 @@ import Elk, { ElkNode, LayoutOptions } from "elkjs";
 import omit from "lodash/omit";
 import "reactflow/dist/style.css";
 
-import { Model, ModelParser, isArraySchemaField, isReferenceSchemaField } from "../../lib/parser/ModelParser";
+import {
+  Model,
+  ModelParser,
+  isArraySchemaField,
+  isReferenceSchemaField,
+} from "../../lib/parser/TSMorphModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
@@ -257,11 +262,12 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
 
   // parse source
-  const parser = useRef(new ModelParser(source));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const parser = useMemo(() => new ModelParser(source), []);
   const models = useMemo(() => {
-    parser.current.setSource(source);
-    return parser.current.getModels();
-  }, [source]);
+    parser.setSource(source);
+    return parser.getModels();
+  }, [parser, source]);
   const { parsedNodes, parsedEdges } = useMemo(() => {
     return {
       parsedNodes: extractModelNodes(models),
@@ -271,10 +277,15 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
 
   // update nodes and edges after parsing (before auto layout)
   useLayoutEffect(() => {
+    const hitCachedNodeSet = new Set<Node>();
+    const nodesThatMissedCache: Node[] = [];
+
     const updatedNodes = parsedNodes.map((node) => {
       const cachedNode = cachedNodesMap.current.get(node.id);
       if (cachedNode) {
-        if (cachedNode.type === node.type && cachedNode.width && cachedNode.height) {
+        hitCachedNodeSet.add(cachedNode);
+        // console.log({ node, cachedNode });
+        if (cachedNode.width && cachedNode.height) {
           return {
             ...node,
             width: cachedNode.width,
@@ -284,8 +295,23 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
         }
         return { ...node, position: cachedNode.position };
       }
+      nodesThatMissedCache.push(node);
       return node;
     });
+
+    // if there's a single node that missed the cache and a single cache miss we're probably editing a node's name
+    if (nodesThatMissedCache.length === 1 && hitCachedNodeSet.size === cachedNodesMap.current.size - 1) {
+      const cachedNodesSet = new Set(cachedNodesMap.current.values());
+      const missedCachedNode = [...cachedNodesSet].find((cachedNode) => !hitCachedNodeSet.has(cachedNode));
+      const updatedNode = nodesThatMissedCache.values().next().value;
+
+      if (!missedCachedNode) throw new Error("missedCachedNode not found");
+
+      updatedNode.width = missedCachedNode.width;
+      updatedNode.height = missedCachedNode.height;
+      updatedNode.position = missedCachedNode.position;
+    }
+
     setNodes(updatedNodes);
     setEdges(parsedEdges);
   }, [parsedEdges, parsedNodes, setEdges, setNodes]);
@@ -295,26 +321,30 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   useLayoutEffect(() => {
     let needsAutoLayout = false;
     if (previousEdges.current.length !== edges.length) {
+      // console.log("needsAutoLayout 1", { previousEdges: previousEdges.current, edges });
       needsAutoLayout = true;
       previousEdges.current = edges;
     } else if (nodes.length === cachedNodesMap.current.size) {
       for (const node of nodes) {
         const previousNode = cachedNodesMap.current.get(node.id);
         if (
+          !previousNode ||
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
           (previousNode?.width && node.width !== previousNode.width) ||
           (previousNode?.height && node.height !== previousNode.height)
         ) {
+          // console.log("needsAutoLayout 2", { node, previousNode });
           needsAutoLayout = true;
           break;
         }
       }
     } else {
+      // console.log("needsAutoLayout 3", { nodes, cachedNodesMap: cachedNodesMap.current });
       needsAutoLayout = true;
     }
-    cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
     if (needsAutoLayout) requestAnimationFrame(handleAutoLayout);
   }, [handleAutoLayout, nodes, edges]);
+  cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
 
   // update node internals when node dependencies change
   const previousModels = useRef<Map<string, Model>>(new Map());
@@ -374,6 +404,8 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   useEffect(() => {
     setShouldAnimate(true);
   }, []);
+
+  // console.log("@render", { nodes, edges });
 
   return (
     <div

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ReactFlowProvider } from "reactflow";
 import { Header } from "./components/Header";
 import { Editor } from "./components/Editor";
@@ -17,14 +17,17 @@ function App() {
   const options = useUserOptions();
   const isMobile = useIsMobile();
 
-  const handleSourceChange = (value: string | undefined) => {
-    documents.currentDocument.source = value ?? "";
-    documents.save();
-  };
+  const handleSourceChange = useCallback(
+    (value: string | undefined) => {
+      documents.currentDocument.source = value ?? "";
+      documents.save();
+    },
+    [documents]
+  );
 
-  const handlePreferencesClick = () => {
+  const handlePreferencesClick = useCallback(() => {
     setShowPreferences((value) => !value);
-  };
+  }, []);
 
   return (
     <ReactFlowProvider>

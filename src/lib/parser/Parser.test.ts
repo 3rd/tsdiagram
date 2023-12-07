@@ -1,8 +1,8 @@
-import { expect, test } from "vitest";
+import { expect, it } from "vitest";
 import { SyntaxKind } from "typescript";
 import { Parser } from "./Parser";
 
-test("parses code into AST", () => {
+it("parses code into AST", () => {
   const parser = new Parser("const a = 1;");
   const identifierNodes = parser.getNodes(SyntaxKind.Identifier);
 
@@ -10,7 +10,7 @@ test("parses code into AST", () => {
   expect(identifierNodes[0].getText()).toBe("a");
 });
 
-test("updates AST when code changes", () => {
+it("updates AST when code changes", () => {
   const parser = new Parser("const a = 1;");
   parser.setSource("const b = 2;");
   const identifierNodes = parser.getNodes(SyntaxKind.Identifier);
@@ -19,7 +19,7 @@ test("updates AST when code changes", () => {
   expect(identifierNodes[0].getText()).toBe("b");
 });
 
-test("retrieves the top-level nodes", () => {
+it("retrieves the top-level nodes", () => {
   const parser = new Parser("const a = 1; export const b = 2;");
   const topLevelNodes = parser.getTopLevelNodes();
 

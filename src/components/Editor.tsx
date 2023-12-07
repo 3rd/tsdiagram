@@ -1,4 +1,4 @@
-import { ComponentProps, useEffect } from "react";
+import { ComponentProps, memo, useEffect } from "react";
 import MonacoEditor, { useMonaco } from "@monaco-editor/react";
 import { themes } from "../themes";
 
@@ -18,7 +18,7 @@ export type EditorProps = {
   theme?: keyof typeof themes;
 };
 
-export const Editor = ({ source, onChange, theme }: EditorProps) => {
+export const Editor = memo(({ source, onChange, theme }: EditorProps) => {
   const monaco = useMonaco();
 
   useEffect(() => {
@@ -29,13 +29,13 @@ export const Editor = ({ source, onChange, theme }: EditorProps) => {
     );
     monaco.editor.setTheme("theme");
 
-    // monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-    //   target: monaco.languages.typescript.ScriptTarget.ES5,
-    //   lib: ["ES2023"],
-    // });
+    const options = monaco.languages.typescript.typescriptDefaults.getCompilerOptions();
+    options.target = monaco.languages.typescript.ScriptTarget.Latest;
+    options.lib = ["esnext"];
+    monaco.languages.typescript.typescriptDefaults.setCompilerOptions(options);
   }, [monaco, theme]);
 
   return (
     <MonacoEditor defaultLanguage="typescript" options={editorOptions} value={source} onChange={onChange} />
   );
-};
+});
