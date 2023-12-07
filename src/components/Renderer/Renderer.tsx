@@ -20,23 +20,14 @@ import Elk, { ElkNode, LayoutOptions } from "elkjs";
 import omit from "lodash/omit";
 import "reactflow/dist/style.css";
 
-import { Model, ModelParser, isArraySchemaField, isGenericSchemaField } from "../../lib/parser/ModelParser";
+import { Model, ModelParser, isArraySchemaField, isReferenceSchemaField } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
 
-const nodeTypes = {
-  model: ModelNode,
-};
-
-const edgeTypes = {
-  smart: SmartStepEdge,
-  custom: CustomEdge,
-};
-
-const proOptions = {
-  hideAttribution: true,
-};
+const nodeTypes = { model: ModelNode };
+const edgeTypes = { smart: SmartStepEdge, custom: CustomEdge };
+const proOptions = { hideAttribution: true };
 
 type GetLayoutedElementsArgs = {
   nodes: Node[];
@@ -44,6 +35,7 @@ type GetLayoutedElementsArgs = {
   options: UserOptions;
   manuallyMovedNodesSet: Set<string>;
 };
+
 const getLayoutedElements = async ({
   nodes,
   edges,
@@ -107,20 +99,6 @@ const getLayoutedElements = async ({
 
   const layoutedGraph = await elk.layout(graph);
 
-  // console.log("@elk", {
-  //   graphChildren: graph.children!.map((child) => {
-  //     return {
-  //       id: child.id,
-  //       width: child.width,
-  //       height: child.height,
-  //       layoutOptions: child.layoutOptions,
-  //       x: child.x,
-  //       y: child.y,
-  //     };
-  //   }),
-  //   layoutedGraph,
-  // });
-
   return {
     nodes: nodes.map((node) => {
       const layoutedNode = layoutedGraph.children?.find((n) => n.id === node.id);
@@ -160,13 +138,14 @@ const extractModelNodes = (models: Model[]) => {
 const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {}) => {
   const result: Edge[] = [];
 
+  let count = 1;
   for (const model of models) {
     for (const field of model.schema) {
       // direct model reference
       if (field.type instanceof Object) {
         result.push({
           ...sharedEdgeProps,
-          id: `${model.id}-${field.name}`,
+          id: `${count++}-${model.id}-${field.name}`,
           source: model.id,
           target: field.type.id,
           sourceHandle: `${model.id}-${field.name}`,
@@ -177,7 +156,7 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
       if (isArraySchemaField(field) && field.elementType instanceof Object) {
         result.push({
           ...sharedEdgeProps,
-          id: `${model.id}-${field.name}`,
+          id: `${count++}-${model.id}-${field.name}`,
           source: model.id,
           target: field.elementType.id,
           sourceHandle: `${model.id}-${field.name}`,
@@ -185,12 +164,12 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
       }
 
       // generics
-      if (isGenericSchemaField(field)) {
+      if (isReferenceSchemaField(field)) {
         for (const argument of field.arguments) {
           if (argument instanceof Object) {
             result.push({
               ...sharedEdgeProps,
-              id: `${model.id}-${field.name}-${argument.id}`,
+              id: `${count++}-${model.id}-${field.name}-${argument.id}`,
               source: model.id,
               target: argument.id,
               sourceHandle: `${model.id}-${field.name}`,
@@ -235,7 +214,6 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
       style: {
         stroke: options.renderer.theme === "light" ? "#a9b2bc" : "#7f8084",
         strokeWidth: 1,
-        strokeDasharray: "none",
         markerEndId: "arrow",
       },
       // type: "smoothstep",
@@ -279,7 +257,7 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
 
   // parse source
-  const parser = useRef<ModelParser>(new ModelParser(source));
+  const parser = useRef(new ModelParser(source));
   const models = useMemo(() => {
     parser.current.setSource(source);
     return parser.current.getModels();
@@ -290,8 +268,6 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
       parsedEdges: extractModelEdges(models, sharedEdgeProps),
     };
   }, [models, sharedEdgeProps]);
-
-  // console.log({ parsedNodes, parsedEdges });
 
   // update nodes and edges after parsing (before auto layout)
   useLayoutEffect(() => {

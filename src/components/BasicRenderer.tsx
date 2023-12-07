@@ -1,7 +1,7 @@
 /* eslint-disable react/jsx-key */
 /* eslint-disable no-nested-ternary */
 import { useMemo, useRef } from "react";
-import { Model, ModelParser, isArraySchemaField, isGenericSchemaField } from "../lib/parser/ModelParser";
+import { Model, ModelParser, isArraySchemaField, isReferenceSchemaField } from "../lib/parser/ModelParser";
 
 type ModelCardProps = {
   model: Model;
@@ -30,9 +30,9 @@ const ModelCard = ({ model }: ModelCardProps) => {
           // of primitives
           typeFragments.push(<span className={classNames.default}>{`${field.elementType}[]`}</span>);
         }
-      } else if (isGenericSchemaField(field)) {
+      } else if (isReferenceSchemaField(field)) {
         // generics
-        typeFragments.push(<span className={classNames.default}>{`${field.genericName}<`}</span>);
+        typeFragments.push(<span className={classNames.default}>{`${field.referenceName}<`}</span>);
         for (const argument of field.arguments) {
           // of model references
           if (argument instanceof Object) {
@@ -84,8 +84,6 @@ export const BasicRenderer = ({ source }: BasicRendererProps) => {
     parser.current.setSource(source);
     return parser.current.getModels();
   }, [source]);
-
-  console.log("models:", models);
 
   return (
     <div className="flex overflow-auto flex-col gap-2 w-full h-full">

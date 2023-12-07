@@ -3,145 +3,146 @@ import { Parser } from "./Parser";
 
 type DefaultSchemaField = { name: string; type: Model | string };
 type ArraySchemaField = { name: string; type: "array"; elementType: Model | (string & {}) };
-type GenericSchemaField = {
+type ReferenceSchemaField = {
   name: string;
-  type: "generic";
-  genericName: string;
+  type: "reference";
+  referenceName: string;
   arguments: (Model | (string & {}))[];
 };
-type SchemaField = ArraySchemaField | DefaultSchemaField | GenericSchemaField;
+type SchemaField = ArraySchemaField | DefaultSchemaField | ReferenceSchemaField;
 
 export const isArraySchemaField = (field: SchemaField): field is ArraySchemaField => {
   return field.type === "array";
 };
-export const isGenericSchemaField = (field: SchemaField): field is GenericSchemaField => {
-  return field.type === "generic";
+export const isReferenceSchemaField = (field: SchemaField): field is ReferenceSchemaField => {
+  return field.type === "reference";
 };
 export const isDefaultSchemaField = (field: SchemaField): field is DefaultSchemaField => {
-  return !isArraySchemaField(field) && !isGenericSchemaField(field);
+  return !isArraySchemaField(field) && !isReferenceSchemaField(field);
 };
 
 export type Model = {
   id: string;
   name: string;
-  schema: (ArraySchemaField | DefaultSchemaField | GenericSchemaField)[];
+  schema: (ArraySchemaField | DefaultSchemaField | ReferenceSchemaField)[];
   dependencies: Model[];
   dependants: Model[];
 };
 
-const typeNodeToString = (checker: ts.TypeChecker, node: ts.Node) => {
-  if ((ts.isPropertySignature(node) || ts.isPropertyDeclaration(node)) && node.type) {
-    if (ts.isArrayTypeNode(node.type)) {
-      const elementType = node.type.elementType;
-      return `${checker.typeToString(checker.getTypeFromTypeNode(elementType))}[]`;
-    }
-    return checker.typeToString(checker.getTypeFromTypeNode(node.type));
-  }
-  return checker.typeToString(checker.getTypeAtLocation(node));
-};
-
-// FIXME: proper access
-const getTypeId = (type: ts.Type) => {
-  return (type as unknown as { id: number }).id.toString();
-};
+// const typeNodeToString = (checker: ts.TypeChecker, node: ts.Node) => {
+//   if ((ts.isPropertySignature(node) || ts.isPropertyDeclaration(node)) && node.type) {
+//     if (ts.isArrayTypeNode(node.type)) {
+//       const elementType = node.type.elementType;
+//       return `${checker.typeToString(checker.getTypeFromTypeNode(elementType))}[]`;
+//     }
+//     return checker.typeToString(checker.getTypeFromTypeNode(node.type));
+//   }
+//   return checker.typeToString(checker.getTypeAtLocation(node));
+// };
 
 export class ModelParser extends Parser {
   // eslint-disable-next-line sonarjs/cognitive-complexity
   getModels() {
-    const typeIdToModelMap = new Map<string, Model>();
+    const models: Model[] = [];
+    const modelNameToModelMap = new Map<string, Model>();
     const dependencyMap = new Map<string, Set<Model>>();
 
-    const nodes = this.getTopLevelNodes().filter((node) => {
-      if (ts.isInterfaceDeclaration(node)) return true;
-      // if it's not a type literal, it's not a model
-      if (
-        ts.isTypeAliasDeclaration(node) &&
-        (node as { type?: ts.Node }).type?.kind === ts.SyntaxKind.TypeLiteral
-      ) {
-        return true;
-      }
-      return false;
-    }) as (ts.InterfaceDeclaration | ts.TypeAliasDeclaration)[];
+    const nodes = (
+      this.getTopLevelNodes().filter((node) => {
+        if (ts.isInterfaceDeclaration(node)) return true;
+        if (ts.isTypeAliasDeclaration(node)) return true;
+        return false;
+      }) as (ts.InterfaceDeclaration | ts.TypeAliasDeclaration)[]
+    ).map((node) => {
+      const type = this.checker.getTypeAtLocation(node);
+      const typeSymbol = type.getSymbol();
+
+      const id = node.name;
+      const name = node.name.getText();
+
+      return { id, name, node, type, typeSymbol };
+    });
 
     // first pass: init models
     for (const node of nodes) {
-      const type = this.checker.getTypeAtLocation(node);
-      const id = getTypeId(type);
       const model: Model = {
-        id,
-        name: node.name.getText(),
+        id: node.name,
+        name: node.name,
         schema: [],
         dependencies: [],
         dependants: [],
       };
-      typeIdToModelMap.set(id, model);
+      models.push(model);
+
+      modelNameToModelMap.set(model.id, model);
     }
 
     // second pass: parse schema
     for (const node of nodes) {
-      const type = this.checker.getTypeAtLocation(node);
-      const typeId = getTypeId(type);
-      const model = typeIdToModelMap.get(typeId);
+      const model = modelNameToModelMap.get(node.name);
       if (!model) continue;
 
-      const dependencies = dependencyMap.get(typeId) ?? new Set<Model>();
+      const dependencies = dependencyMap.get(node.name) ?? new Set<Model>();
 
-      for (const prop of type.getProperties()) {
+      for (const prop of node.type.getProperties()) {
         const propDeclaration = prop.getDeclarations()?.[0] as ts.PropertyDeclaration | undefined;
-        if (!propDeclaration) continue;
+        if (!propDeclaration?.type) continue;
 
         // arrays
-        if (propDeclaration.type && ts.isArrayTypeNode(propDeclaration.type)) {
+        if (ts.isArrayTypeNode(propDeclaration.type)) {
           const elementType = propDeclaration.type.elementType;
-          const elementTypeNode = this.checker.getTypeFromTypeNode(elementType);
-
-          const elementTypeId = getTypeId(elementTypeNode);
-          const elementModel = typeIdToModelMap.get(elementTypeId);
-
-          if (elementModel) dependencies.add(elementModel);
+          const referencedTypeName = elementType.getText();
+          const typeModel = modelNameToModelMap.get(referencedTypeName);
 
           model.schema.push({
             name: prop.name,
             type: "array",
-            elementType: elementModel ?? this.checker.typeToString(elementTypeNode),
+            elementType:
+              typeModel ?? this.checker.typeToString(this.checker.getTypeFromTypeNode(elementType)),
           });
+          if (typeModel) dependencies.add(typeModel);
           continue;
         }
 
-        // generics
-        if (propDeclaration.type && ts.isTypeReferenceNode(propDeclaration.type)) {
+        // references
+        if (ts.isTypeReferenceNode(propDeclaration.type)) {
           const typeArguments = propDeclaration.type.typeArguments;
           if (!typeArguments || typeArguments.length === 0) {
-            const typeModel = typeIdToModelMap.get(
-              getTypeId(this.checker.getTypeFromTypeNode(propDeclaration.type))
-            );
-            if (typeModel) dependencies.add(typeModel);
+            const referencedTypeName = propDeclaration.type.typeName.getText();
+            const typeModel = modelNameToModelMap.get(referencedTypeName);
+
             model.schema.push({
               name: prop.name,
               type:
                 typeModel ??
                 this.checker.typeToString(this.checker.getTypeFromTypeNode(propDeclaration.type)),
             });
+            if (typeModel) dependencies.add(typeModel);
             continue;
           }
 
-          const genericName = propDeclaration.type.typeName.getText();
+          const referenceName = propDeclaration.type.typeName.getText();
 
-          const schemaField: GenericSchemaField = {
+          const schemaField: ReferenceSchemaField = {
             name: prop.name,
-            type: "generic",
-            genericName,
+            type: "reference",
+            referenceName,
             arguments: [],
           };
 
           for (const typeArgument of typeArguments) {
             const typeArgumentNode = this.checker.getTypeFromTypeNode(typeArgument);
-            const typeArgumentId = getTypeId(typeArgumentNode);
-            const typeArgumentModel = typeIdToModelMap.get(typeArgumentId);
 
-            if (typeArgumentModel) dependencies.add(typeArgumentModel);
+            if (ts.isTypeReferenceNode(typeArgument)) {
+              const typeArgumentName = typeArgument.typeName.getText();
+              const typeArgumentModel = modelNameToModelMap.get(typeArgumentName);
 
-            schemaField.arguments.push(typeArgumentModel ?? this.checker.typeToString(typeArgumentNode));
+              schemaField.arguments.push(typeArgumentModel ?? typeArgumentName);
+              if (typeArgumentModel) dependencies.add(typeArgumentModel);
+              continue;
+            }
+
+            schemaField.arguments.push(this.checker.typeToString(typeArgumentNode));
           }
 
           model.schema.push(schemaField);
@@ -149,25 +150,18 @@ export class ModelParser extends Parser {
         }
 
         // default
-        const propTypeName = typeNodeToString(this.checker, propDeclaration);
-        const propType = this.checker.getTypeOfSymbolAtLocation(prop, propDeclaration);
-        const propTypeId = getTypeId(propType);
-        const propTypeModel = typeIdToModelMap.get(propTypeId);
-
-        if (propTypeModel) dependencies.add(propTypeModel);
-
         model.schema.push({
           name: prop.name,
-          type: propTypeModel ?? propTypeName,
+          type: this.checker.typeToString(this.checker.getTypeFromTypeNode(propDeclaration.type)),
         });
       }
 
-      dependencyMap.set(typeId, dependencies);
+      dependencyMap.set(node.name, dependencies);
     }
 
     // third pass: link dependencies
-    for (const [typeId, dependencies] of dependencyMap.entries()) {
-      const model = typeIdToModelMap.get(typeId);
+    for (const [name, dependencies] of dependencyMap.entries()) {
+      const model = modelNameToModelMap.get(name);
       if (!model) continue;
 
       for (const dependency of dependencies) {
@@ -176,6 +170,6 @@ export class ModelParser extends Parser {
       }
     }
 
-    return Array.from(typeIdToModelMap.values());
+    return models;
   }
 }

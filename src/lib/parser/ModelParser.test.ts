@@ -8,14 +8,14 @@ it("parses top level type aliases and interfaces into models", () => {
 
   expect(models.length).toBe(2);
   expect(models[0]).toEqual({
-    id: "66",
+    id: "A",
     name: "A",
     schema: [{ name: "a", type: "string" }],
     dependencies: [],
     dependants: [],
   });
   expect(models[1]).toEqual({
-    id: "67",
+    id: "B",
     name: "B",
     schema: [{ name: "b", type: "string" }],
     dependencies: [],
@@ -29,14 +29,14 @@ it("parses exported top level type aliases and interfaces into models", () => {
 
   expect(models.length).toBe(2);
   expect(models[0]).toEqual({
-    id: "66",
+    id: "A",
     name: "A",
     schema: [{ name: "a", type: "string" }],
     dependencies: [],
     dependants: [],
   });
   expect(models[1]).toEqual({
-    id: "67",
+    id: "B",
     name: "B",
     schema: [{ name: "b", type: "string" }],
     dependencies: [],
@@ -44,16 +44,23 @@ it("parses exported top level type aliases and interfaces into models", () => {
   });
 });
 
-it("skips type aliases that are not direct aliases", () => {
-  const parser = new ModelParser("type A = { a: string }; type B = A;");
+it("supports type aliases with kind != TypeLiteral", () => {
+  const parser = new ModelParser("type A = string; type B = { field: A };");
   const models = parser.getModels();
 
-  expect(models.length).toBe(1);
+  expect(models.length).toBe(2);
   expect(models[0]).toEqual({
-    id: "66",
+    id: "A",
     name: "A",
-    schema: [{ name: "a", type: "string" }],
+    schema: [],
     dependencies: [],
+    dependants: [expect.objectContaining({ name: "B" })],
+  });
+  expect(models[1]).toEqual({
+    id: "B",
+    name: "B",
+    schema: [{ name: "field", type: expect.objectContaining({ name: "A" }) }],
+    dependencies: [expect.objectContaining({ name: "A" })],
     dependants: [],
   });
 });
@@ -64,7 +71,7 @@ it("parses arrays of primitives", () => {
 
   expect(models.length).toBe(1);
   expect(models[0]).toEqual({
-    id: "66",
+    id: "A",
     name: "A",
     schema: [{ name: "a", type: "array", elementType: "string" }],
     dependencies: [],
@@ -78,14 +85,14 @@ it("parses arrays of models", () => {
 
   expect(models.length).toBe(2);
   expect(models[0]).toEqual({
-    id: "66",
+    id: "A",
     name: "A",
     schema: [
       {
         name: "a",
         type: "array",
         elementType: expect.objectContaining({
-          id: "67",
+          id: "B",
           name: "B",
           schema: [{ name: "b", type: "string" }],
         }),
@@ -95,7 +102,7 @@ it("parses arrays of models", () => {
     dependants: [],
   });
   expect(models[1]).toEqual({
-    id: "67",
+    id: "B",
     name: "B",
     schema: [{ name: "b", type: "string" }],
     dependencies: [],
@@ -103,7 +110,7 @@ it("parses arrays of models", () => {
   });
 });
 
-it("parses generics", () => {
+it("parses references", () => {
   const parser = new ModelParser(`
     type A = { a: Array<string> };
     type B = { b: Record<string, A> };
@@ -113,20 +120,20 @@ it("parses generics", () => {
 
   expect(models.length).toBe(3);
   expect(models[0]).toEqual({
-    id: "66",
+    id: "A",
     name: "A",
-    schema: [{ name: "a", type: "generic", genericName: "Array", arguments: ["string"] }],
+    schema: [{ name: "a", type: "reference", referenceName: "Array", arguments: ["string"] }],
     dependencies: [],
     dependants: [expect.objectContaining({ name: "B" }), expect.objectContaining({ name: "C" })],
   });
   expect(models[1]).toEqual({
-    id: "67",
+    id: "B",
     name: "B",
     schema: [
       {
         name: "b",
-        type: "generic",
-        genericName: "Record",
+        type: "reference",
+        referenceName: "Record",
         arguments: ["string", expect.objectContaining({ name: "A" })],
       },
     ],
@@ -134,13 +141,13 @@ it("parses generics", () => {
     dependants: [],
   });
   expect(models[2]).toEqual({
-    id: "68",
+    id: "C",
     name: "C",
     schema: [
       {
         name: "c",
-        type: "generic",
-        genericName: "Map",
+        type: "reference",
+        referenceName: "Map",
         arguments: [expect.objectContaining({ name: "A" }), expect.objectContaining({ name: "A" })],
       },
     ],

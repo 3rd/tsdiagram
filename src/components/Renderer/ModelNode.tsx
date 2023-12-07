@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Position } from "reactflow";
 import classNames from "classnames";
-import { Model, isArraySchemaField, isGenericSchemaField } from "../../lib/parser/ModelParser";
+import { Model, isArraySchemaField, isReferenceSchemaField } from "../../lib/parser/ModelParser";
 import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
 
@@ -21,9 +21,10 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
     const isLightTheme = options.renderer.theme === "light";
     return {
       root: classNames("shadow-md"),
-      header: classNames("relative px-1 pl-1.5 py-0.5 text-white rounded-t", {
+      header: classNames("relative px-1.5 py-0.5 text-white rounded-t", {
         "bg-blue-700": isLightTheme,
         "bg-blue-600": isDarkTheme,
+        "rounded-b": model.schema.length === 0,
       }),
       fieldsWrapper: classNames("bg-gray-50 flex flex-col text-sm", {
         "border-x border-b border-blue-800": isLightTheme,
@@ -40,7 +41,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         target: classNames("w-2 h-2 bg-blue-500"),
       },
     };
-  }, [options.renderer.theme]);
+  }, [model.schema.length, options.renderer.theme]);
 
   const fieldRows = useMemo(() => {
     return model.schema.map((field) => {
@@ -76,7 +77,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
             >{`${field.elementType}[]`}</span>
           );
         }
-      } else if (isGenericSchemaField(field)) {
+      } else if (isReferenceSchemaField(field)) {
         // generics
         const argumentFragments: JSX.Element[] = [];
 
@@ -107,7 +108,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
         // add separated by ", "
         typeFragments.push(
-          <span key="prefix" className={classes.field.defaultTypeColor}>{`${field.genericName}<`}</span>,
+          <span key="prefix" className={classes.field.defaultTypeColor}>{`${field.referenceName}<`}</span>,
           <span key="generic" className={classes.field.modelTypeColor}>
             {argumentFragments.map((fragment, index) => (
               <span key={fragment.key}>
@@ -165,11 +166,13 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         {model.name}
       </div>
       {/* fields */}
-      <div className={classes.fieldsWrapper}>
-        <table cellPadding="3">
-          <tbody>{fieldRows}</tbody>
-        </table>
-      </div>
+      {model.schema.length > 0 && (
+        <div className={classes.fieldsWrapper}>
+          <table cellPadding="3">
+            <tbody>{fieldRows}</tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
