@@ -10,12 +10,11 @@
 - Automatically layouts the nodes in an efficient way.
 - ...but if you move one of the nodes manually, it will only auto-layout the other ones.
 - Persists the document state in the URL and localStorage.
-- Exports your diagrams as PNG.
+- Exports your diagrams as SVG.
 
 ### **Roadmap**
 
 - Function call representation
-- Export as SVG
 - Customizable TypeScript context (lib, etc.)
 - Bring your own storage (different vendors)
 
