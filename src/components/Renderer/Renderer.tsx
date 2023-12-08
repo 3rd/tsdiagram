@@ -212,10 +212,10 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   // computed reactflow props
   const fitViewOptions: FitViewOptions = useMemo(
     () => ({
-      padding: options.renderer.direction === "horizontal" ? 0.15 : 0.5,
+      padding: 0.3,
       duration: shouldAnimate ? 500 : 0,
     }),
-    [options.renderer.direction, shouldAnimate]
+    [shouldAnimate]
   );
   const sharedEdgeProps = useMemo(
     () => ({
