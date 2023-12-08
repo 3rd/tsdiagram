@@ -1,4 +1,4 @@
-import ts from "typescript";
+import { ts } from "ts-morph";
 import { ParsedInterface, ParsedTypeAlias, Parser } from "./TSMorphParser";
 
 type DefaultSchemaField = { name: string; type: Model | string };

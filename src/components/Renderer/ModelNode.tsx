@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Position } from "reactflow";
 import classNames from "classnames";
-import { Model, isArraySchemaField, isReferenceSchemaField } from "../../lib/parser/ModelParser";
+import { Model, isArraySchemaField, isReferenceSchemaField } from "../../lib/parser/TSMorphModelParser";
 import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
 

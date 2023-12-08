@@ -100,31 +100,3 @@ export class Parser {
     return result;
   }
 }
-
-// return this.source.getInterfaces().map((declaration) => {
-//   return {
-//     name: declaration.getName(),
-//     declaration,
-//     extends: declaration.getExtends(),
-//     properties: declaration.getProperties(),
-//     methods: declaration.getMethods(),
-//   };
-// });
-//
-// // can extend multiple interfaces and classes
-// for (const extend of extends_) {
-//   const extendName = extend.getText();
-//   const extendType = extend.getType();
-//   console.log("extendedName:", extendName);
-//   console.log("extendedType:", extendType.getText());
-//
-//   // if extending a interface
-//   if (extendType.isInterface()) {
-//     const extendDeclaration = extendType.getSymbol()?.getDeclarations()[0] as InterfaceDeclaration;
-//     console.log("extendedDeclaration:", extendDeclaration.getText());
-//     // const extendedDeclaration = extendedType.getSymbol()?.getDeclarations()[0] as InterfaceDeclaration;
-//     // console.log("extendedDeclaration:", extendedDeclaration.getText());
-//     // const extendedProperties = extendedDeclaration.getProperties();
-//     // const extendedMethods = extendedDeclaration.getMethods();
-//   }
-// }
