@@ -35,3 +35,4 @@
 - [React Flow](https://reactflow.dev)
 - [Monaco](https://github.com/microsoft/monaco-editor)
 - [elkjs](https://github.com/kieler/elkjs)
+- [dom-to-svg](https://github.com/felixfbecker/dom-to-svg)
