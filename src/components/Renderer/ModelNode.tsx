@@ -30,7 +30,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         "border-x border-b border-blue-800": isLightTheme,
       }),
       field: {
-        root: classNames("even:bg-gray-100 leading-tight"),
+        root: classNames("odd:bg-gray-50 even:bg-gray-100 leading-tight"),
         keyCell: classNames("pr-4 pl-2 text-gray-950"),
         typeCell: classNames("relative pr-2"),
         defaultTypeColor: classNames("text-gray-800"),
