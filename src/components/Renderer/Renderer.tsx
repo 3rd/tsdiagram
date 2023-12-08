@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
@@ -19,6 +20,7 @@ import classNames from "classnames";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
 import Elk, { ElkNode, LayoutOptions } from "elkjs";
 import omit from "lodash/omit";
+import throttle from "lodash/throttle";
 import "reactflow/dist/style.css";
 
 import {
@@ -30,6 +32,8 @@ import {
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
+
+const AUTO_LAYOUT_THROTTLE_MS = 120;
 
 const nodeTypes = { model: ModelNode };
 const edgeTypes = { smart: SmartStepEdge, custom: CustomEdge };
@@ -234,31 +238,29 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   }, [options.renderer.theme]);
 
   // auto layout
-  const handleAutoLayout = useCallback(() => {
-    const nodesToLayout = getNodes().map((node) => {
-      const cachedNode = cachedNodesMap.current.get(node.id);
-      if (cachedNode) {
-        return {
-          ...node,
-          width: node.width ?? cachedNode.width,
-          height: node.height ?? cachedNode.height,
-        };
-      }
-      return node;
-    });
+  const handleAutoLayout = useMemo(() => {
+    return throttle(
+      () => {
+        const currentNodes = getNodes();
+        const hasSizeForAllNodes = currentNodes.every((node) => node.width && node.height);
+        if (!hasSizeForAllNodes) return;
 
-    getLayoutedElements({
-      nodes: nodesToLayout,
-      edges: getEdges(),
-      options,
-      manuallyMovedNodesSet: manuallyMovedNodesSet.current,
-    }).then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
-      setNodes(layoutedNodes);
-      setEdges(layoutedEdges);
-      if (options.renderer.autoFitView) {
-        requestIdleCallback(() => fitView(fitViewOptions));
-      }
-    });
+        getLayoutedElements({
+          nodes: currentNodes,
+          edges: getEdges(),
+          options,
+          manuallyMovedNodesSet: manuallyMovedNodesSet.current,
+        }).then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+          setNodes(layoutedNodes);
+          setEdges(layoutedEdges);
+          if (options.renderer.autoFitView) {
+            requestIdleCallback(() => fitView(fitViewOptions));
+          }
+        });
+      },
+      AUTO_LAYOUT_THROTTLE_MS,
+      { leading: true, trailing: true }
+    );
   }, [fitView, fitViewOptions, getEdges, getNodes, options, setEdges, setNodes]);
   const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
 
@@ -308,8 +310,8 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
 
       if (!missedCachedNode) throw new Error("missedCachedNode not found");
 
-      updatedNode.width = missedCachedNode.width;
-      updatedNode.height = missedCachedNode.height;
+      // updatedNode.width = missedCachedNode.width;
+      // updatedNode.height = missedCachedNode.height;
       updatedNode.position = missedCachedNode.position;
     }
 
@@ -330,7 +332,6 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
         const previousNode = cachedNodesMap.current.get(node.id);
         if (
           !previousNode ||
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
           (previousNode?.width && node.width !== previousNode.width) ||
           (previousNode?.height && node.height !== previousNode.height)
         ) {
@@ -343,9 +344,9 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
       // console.log("needsAutoLayout 3", { nodes, cachedNodesMap: cachedNodesMap.current });
       needsAutoLayout = true;
     }
+    cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
     if (needsAutoLayout) requestAnimationFrame(handleAutoLayout);
   }, [handleAutoLayout, nodes, edges]);
-  cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
 
   // trigger auto layout after nodes are sized
   const nodesAreInitialized = useNodesInitialized();
