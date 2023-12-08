@@ -32,6 +32,7 @@ export const optionsStore = createStore<UserOptions>({
     try {
       const data = JSON.parse(localStorage.getItem("options") ?? "");
       const parsedData = userOptionsSchema.parse(data);
+      parsedData.renderer.autoFitView = true;
       this.editor = parsedData.editor;
       this.renderer = parsedData.renderer;
     } catch {}

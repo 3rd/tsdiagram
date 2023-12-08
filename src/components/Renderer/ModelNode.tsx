@@ -26,11 +26,11 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         "bg-blue-600": isDarkTheme,
         "rounded-b": model.schema.length === 0,
       }),
-      fieldsWrapper: classNames("bg-gray-50 flex flex-col text-sm", {
+      fieldsWrapper: classNames("bg-gray-50 flex flex-col", {
         "border-x border-b border-blue-800": isLightTheme,
       }),
       field: {
-        root: classNames("odd:bg-gray-50 even:bg-gray-100 leading-tight"),
+        root: classNames("odd:bg-gray-50 even:bg-gray-100 leading-tight text-sm"),
         keyCell: classNames("pr-4 pl-2 text-gray-950"),
         typeCell: classNames("relative pr-2"),
         defaultTypeColor: classNames("text-gray-800"),

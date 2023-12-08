@@ -21,7 +21,7 @@ import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
 import Elk, { ElkNode, LayoutOptions } from "elkjs";
 import omit from "lodash/omit";
 import throttle from "lodash/throttle";
-import "reactflow/dist/style.css";
+import "../../reactflow.css";
 
 import {
   Model,

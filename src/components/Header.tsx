@@ -1,16 +1,8 @@
-import { getRectOfNodes, getTransformForBounds, useReactFlow } from "reactflow";
-import { toPng } from "html-to-image";
+import { getRectOfNodes, useReactFlow } from "reactflow";
 import { memo } from "react";
+import { exportReactFlowToSVG } from "../utils/svg-export";
 
-const imageWidth = 1024;
-const imageHeight = 768;
-
-const downloadImage = (dataUrl: string) => {
-  const a = document.createElement("a");
-  a.setAttribute("download", "diagram.png");
-  a.setAttribute("href", dataUrl);
-  a.click();
-};
+const EXPORT_MARGIN_PX = 30;
 
 type HeaderProps = {
   onPreferencesClick?: () => void;
@@ -19,21 +11,11 @@ type HeaderProps = {
 export const Header = memo(({ onPreferencesClick }: HeaderProps) => {
   const { getNodes } = useReactFlow();
 
-  // https://reactflow.dev/examples/misc/download-image
   const handleExportClick = () => {
     const nodesBounds = getRectOfNodes(getNodes());
-    const transform = getTransformForBounds(nodesBounds, imageWidth + 2, imageHeight, 0.5, 2);
-
-    toPng(document.querySelector(".react-flow__viewport") as HTMLElement, {
-      backgroundColor: "#fff",
-      width: imageWidth,
-      height: imageHeight,
-      style: {
-        width: `${imageWidth}px`,
-        height: `${imageHeight}px`,
-        transform: `translate(${transform[0]}px, ${transform[1]}px) scale(${transform[2]})`,
-      },
-    }).then(downloadImage);
+    const width = nodesBounds.width + EXPORT_MARGIN_PX * 2;
+    const height = nodesBounds.height + EXPORT_MARGIN_PX * 2;
+    exportReactFlowToSVG(width, height);
   };
 
   return (
@@ -67,7 +49,7 @@ export const Header = memo(({ onPreferencesClick }: HeaderProps) => {
           className="py-1 px-2 text-sm rounded shadow-sm bg-white/10 hover:bg-white/20"
           onClick={handleExportClick}
         >
-          📦 Export PNG
+          📦 Export SVG
         </button>
       </div>
     </header>
