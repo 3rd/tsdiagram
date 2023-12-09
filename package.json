@@ -5,11 +5,18 @@
   "description": "Create diagrams and plan your code with TypeScript.",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --open",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "format": "prettier --write .",
+    "prepare": "husky install"
+  },
+  "lint-staged": {
+    "*.{json,js,ts,jsx,tsx,html}": [
+      "prettier --write --ignore-unknown"
+    ]
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",
@@ -39,6 +46,8 @@
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
+    "husky": "^8.0.0",
+    "lint-staged": "^15.2.0",
     "postcss": "^8.3.5",
     "rollup-plugin-visualizer": "^5.10.0",
     "tailwindcss": "^3.3.6",
