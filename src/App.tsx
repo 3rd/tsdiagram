@@ -1,13 +1,12 @@
 import { useCallback, useState } from "react";
 import { ReactFlowProvider } from "reactflow";
 import { Header } from "./components/Header";
-import { Editor } from "./components/Editor";
-import { Renderer } from "./components/Renderer";
-import { Preferences } from "./components/Preferences";
 import { Panels } from "./components/Panels";
+import { Editor } from "./components/Editor";
+import { RendererWrapper } from "./components/Renderer";
+import { Preferences } from "./components/Preferences";
 import { useDocuments } from "./stores/documents";
 import { useUserOptions } from "./stores/user-options";
-import { useIsMobile } from "./hooks/useIsMobile";
 import type { themes } from "./themes";
 import "./App.css";
 
@@ -15,7 +14,6 @@ function App() {
   const [showPreferences, setShowPreferences] = useState(false);
   const documents = useDocuments();
   const options = useUserOptions();
-  const isMobile = useIsMobile();
 
   const handleSourceChange = useCallback(
     (value: string | undefined) => {
@@ -43,9 +41,7 @@ function App() {
               />
             }
             options={options}
-            rendererChildren={
-              <Renderer disableMiniMap={isMobile} source={documents.currentDocument.source} />
-            }
+            rendererChildren={<RendererWrapper source={documents.currentDocument.source} />}
           />
         </main>
         <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />

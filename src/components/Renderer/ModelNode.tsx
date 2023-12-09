@@ -139,7 +139,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
               className={classNames(classes.handles.source, {
                 hidden: !hasFieldSourceHandle,
               })}
-              id={`${model.id}-${field.name}`}
+              id={`${model.id}-source-${field.name}`}
               position={Position.Right}
               type="source"
             />

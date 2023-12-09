@@ -23,12 +23,7 @@ import omit from "lodash/omit";
 import throttle from "lodash/throttle";
 import "../../reactflow.css";
 
-import {
-  Model,
-  ModelParser,
-  isArraySchemaField,
-  isReferenceSchemaField,
-} from "../../lib/parser/TSMorphModelParser";
+import { Model, isArraySchemaField, isReferenceSchemaField } from "../../lib/parser/TSMorphModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
@@ -85,7 +80,7 @@ const getLayoutedElements = async ({
         height: node.height ?? 0,
         ports: node.data?.model?.schema.map((field: Model["schema"][0], index: number) => {
           return {
-            id: `${node.id}-${field.name}`,
+            id: `${node.id}-source-${field.name}`,
             order: index,
             properties: {
               "port.side": "EAST",
@@ -158,7 +153,7 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
           id: `${count++}-${model.id}-${field.name}`,
           source: model.id,
           target: field.type.id,
-          sourceHandle: `${model.id}-${field.name}`,
+          sourceHandle: `${model.id}-source-${field.name}`,
         });
       }
 
@@ -169,7 +164,7 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
           id: `${count++}-${model.id}-${field.name}`,
           source: model.id,
           target: field.elementType.id,
-          sourceHandle: `${model.id}-${field.name}`,
+          sourceHandle: `${model.id}-source-${field.name}`,
         });
       }
 
@@ -182,7 +177,7 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
               id: `${count++}-${model.id}-${field.name}-${argument.id}`,
               source: model.id,
               target: argument.id,
-              sourceHandle: `${model.id}-${field.name}`,
+              sourceHandle: `${model.id}-source-${field.name}`,
             });
           }
         }
@@ -193,12 +188,12 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
 };
 
 export type RendererProps = {
-  source: string;
+  models: Model[];
   disableMiniMap?: boolean;
 };
 
 // eslint-disable-next-line sonarjs/cognitive-complexity
-export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
+export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
   const { fitView, getNodes, getEdges } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const [nodes, setNodes, onNodesChange] = useNodesState<{ model: Model }>([]);
@@ -265,12 +260,6 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
   const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
 
   // parse source
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const parser = useMemo(() => new ModelParser(source), []);
-  const models = useMemo(() => {
-    parser.setSource(source);
-    return parser.getModels();
-  }, [parser, source]);
   const { parsedNodes, parsedEdges } = useMemo(() => {
     return {
       parsedNodes: extractModelNodes(models),
@@ -355,8 +344,9 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
     requestAnimationFrame(handleAutoLayout);
   }, [handleAutoLayout, nodesAreInitialized]);
 
-  // update node internals when node dependencies change
+  // update node internals when node dependencies or edges change
   const previousModels = useRef<Map<string, Model>>(new Map());
+  const previousModelEdgeHashMap = useRef<Map<string, string>>(new Map());
   useEffect(() => {
     const modelsMap = new Map(models.map((model) => [model.id, model]));
     for (const model of models) {
@@ -374,7 +364,39 @@ export const Renderer = memo(({ source, disableMiniMap }: RendererProps) => {
       }
     }
     previousModels.current = modelsMap;
-  }, [models, updateNodeInternals]);
+
+    const currentEdges = getEdges();
+    const modelEdgesMap = new Map<Model, Edge[]>();
+    const modelEdgeHashMap = new Map<string, string>();
+
+    for (const edge of currentEdges) {
+      const sourceModel = modelsMap.get(edge.source);
+      if (sourceModel) {
+        const modelEdges = modelEdgesMap.get(sourceModel) ?? [];
+        modelEdges.push(edge);
+        modelEdgesMap.set(sourceModel, modelEdges);
+      }
+      const targetModel = modelsMap.get(edge.target);
+      if (targetModel) {
+        const modelEdges = modelEdgesMap.get(targetModel) ?? [];
+        modelEdges.push(edge);
+        modelEdgesMap.set(targetModel, modelEdges);
+      }
+    }
+
+    for (const [currentModel, currentModelEdges] of modelEdgesMap.entries()) {
+      const hash = currentModelEdges.map((edge) => edge.id).join(":");
+      modelEdgeHashMap.set(currentModel.id, hash);
+    }
+
+    for (const [modelId, hash] of modelEdgeHashMap.entries()) {
+      const previousHash = previousModelEdgeHashMap.current.get(modelId);
+      if (previousHash !== hash) {
+        updateNodeInternals(modelId);
+      }
+    }
+    previousModelEdgeHashMap.current = modelEdgeHashMap;
+  }, [getEdges, models, updateNodeInternals]);
 
   // option handlers
   const handleAutoFitToggle = useCallback(() => {
