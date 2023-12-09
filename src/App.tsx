@@ -41,6 +41,7 @@ function App() {
           <Panels
             editorChildren={
               <Editor
+                editingMode={options.editor.editingMode}
                 source={documents.currentDocument.source}
                 theme={options.editor.theme as keyof typeof themes}
                 onChange={handleSourceChange}

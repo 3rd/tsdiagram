@@ -35,6 +35,9 @@ dependencies:
   lz-string:
     specifier: ^1.5.0
     version: 1.5.0
+  monaco-vim:
+    specifier: ^0.4.1
+    version: 0.4.1(monaco-editor@0.45.0)
   path-browserify:
     specifier: ^1.0.1
     version: 1.0.1
@@ -2037,6 +2040,14 @@ packages:
 
   /monaco-editor@0.45.0:
     resolution: {integrity: sha512-mjv1G1ZzfEE3k9HZN0dQ2olMdwIfaeAAjFiwNprLfYNRSz7ctv9XuCT7gPtBGrMUeV1/iZzYKj17Khu1hxoHOA==}
+    dev: false
+
+  /monaco-vim@0.4.1(monaco-editor@0.45.0):
+    resolution: {integrity: sha512-+cy0TE9xarjLIgUexqxIEbat3K1l7WbiFSLZKAO2kYl1qFRvkeWn4ro/C4c6dK0i9+WQKUC4Dhu/nyCbZfA37w==}
+    peerDependencies:
+      monaco-editor: '*'
+    dependencies:
+      monaco-editor: 0.45.0
     dev: false
 
   /ms@2.1.2:

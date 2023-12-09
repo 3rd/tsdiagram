@@ -8,6 +8,7 @@ const userOptionsSchema = z.object({
   }),
   editor: z.object({
     theme: z.enum(Object.keys(themes) as [string, ...string[]]).default("vsLight"),
+    editingMode: z.enum(["default", "vim"]).default("default"),
   }),
   renderer: z.object({
     direction: z.enum(["horizontal", "vertical"]).default("horizontal"),
@@ -27,6 +28,7 @@ export const optionsStore = createStore<UserOptions>({
   },
   editor: {
     theme: "vsLight",
+    editingMode: "default",
   },
   renderer: {
     direction: "horizontal",
