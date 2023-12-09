@@ -3,14 +3,15 @@ import mainStyle from "../index.css?inline";
 import reactFlowStyle from "../reactflow.css?inline";
 
 const CONTAINER_QUERY = ".react-flow__viewport";
+const PADDING = 24;
 
 export const exportReactFlowToSVG = async (width: number, height: number) => {
   const container = document.querySelector(CONTAINER_QUERY);
   if (!container) throw new Error(`Could not find container with query: ${CONTAINER_QUERY}`);
 
   const iframe = document.createElement("iframe");
-  iframe.style.width = `${width}px`;
-  iframe.style.height = `${height}px`;
+  iframe.style.width = `${width + PADDING}px`;
+  iframe.style.height = `${height + PADDING}px`;
   iframe.style.position = "absolute";
   iframe.style.top = "150%";
   iframe.style.left = "150%";
@@ -25,6 +26,7 @@ export const exportReactFlowToSVG = async (width: number, height: number) => {
 
   const clone = container.cloneNode(true) as HTMLElement;
   clone.style.transform = "none";
+  clone.style.padding = `${PADDING}px`;
   iframeDocument.body.append(clone);
 
   const svgDocument = elementToSVG(iframeDocument.documentElement);
