@@ -55,7 +55,7 @@ export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProp
   useEffect(() => {
     if (isVimMode) {
       if (vimModeRef.current) return;
-      if (!editorRef.current) throw new Error("Tried to initialize vim mode before the editor was mounted.");
+      if (!editorRef.current) return;
       vimModeRef.current = initVimMode(editorRef.current, document.createElement("div"));
     } else {
       vimModeRef.current?.dispose();
