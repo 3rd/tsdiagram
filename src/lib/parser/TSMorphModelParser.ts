@@ -1,4 +1,4 @@
-import { ts } from "ts-morph";
+import { Node, ts, MethodSignature } from "ts-morph";
 import { ParsedInterface, ParsedTypeAlias, Parser } from "./TSMorphParser";
 
 type DefaultSchemaField = { name: string; type: Model | string };
@@ -9,13 +9,22 @@ type ReferenceSchemaField = {
   referenceName: string;
   arguments: (Model | (string & {}))[];
 };
-type SchemaField = ArraySchemaField | DefaultSchemaField | ReferenceSchemaField;
+type FunctionSchemaField = {
+  name: string;
+  type: "function";
+  arguments: { name: string; type: Model | string }[];
+  returnType: Model | (string & {});
+};
+type SchemaField = ArraySchemaField | DefaultSchemaField | FunctionSchemaField | ReferenceSchemaField;
 
 export const isArraySchemaField = (field: SchemaField): field is ArraySchemaField => {
   return field.type === "array";
 };
 export const isReferenceSchemaField = (field: SchemaField): field is ReferenceSchemaField => {
   return field.type === "reference";
+};
+export const isFunctionSchemaField = (field: SchemaField): field is FunctionSchemaField => {
+  return field.type === "function";
 };
 export const isDefaultSchemaField = (field: SchemaField): field is DefaultSchemaField => {
   return !isArraySchemaField(field) && !isReferenceSchemaField(field);
@@ -24,7 +33,7 @@ export const isDefaultSchemaField = (field: SchemaField): field is DefaultSchema
 type ModelBase = {
   id: string;
   name: string;
-  schema: (ArraySchemaField | DefaultSchemaField | ReferenceSchemaField)[];
+  schema: SchemaField[];
   dependencies: Model[];
   dependants: Model[];
 };
@@ -32,6 +41,8 @@ type ModelBase = {
 type InterfaceModel = ModelBase & { type: "interface" };
 type TypeAliasModel = ModelBase & { type: "typeAlias" };
 export type Model = InterfaceModel | TypeAliasModel;
+
+const trimImport = (str: string) => str.replace(`import("/source").`, "");
 
 export class ModelParser extends Parser {
   // eslint-disable-next-line sonarjs/cognitive-complexity
@@ -41,13 +52,14 @@ export class ModelParser extends Parser {
     const dependencyMap = new Map<string, Set<Model>>();
 
     // first pass: build nodes and models
-    const items: ({ id: string; name: string; type: ts.Type } & (
-      | { model: InterfaceModel; node: ParsedInterface }
-      | { model: TypeAliasModel; node: ParsedTypeAlias }
+    const items: ({ id: string; name: string; compilerType: ts.Type } & (
+      | { type: "interface"; model: InterfaceModel; node: ParsedInterface }
+      | { type: "typeAlias"; model: TypeAliasModel; node: ParsedTypeAlias }
     ))[] = [];
+
     for (const _interface of this.interfaces) {
       const name = _interface.name;
-      const type = _interface.declaration.getType().compilerType;
+      const compilerType = _interface.declaration.getType().compilerType;
 
       const model: InterfaceModel = {
         id: name,
@@ -60,7 +72,14 @@ export class ModelParser extends Parser {
       models.push(model);
 
       modelNameToModelMap.set(model.id, model);
-      items.push({ id: name, name, node: _interface, type, model });
+      items.push({
+        type: "interface",
+        id: name,
+        name,
+        node: _interface,
+        compilerType,
+        model,
+      });
     }
     for (const typeAlias of this.typeAliases) {
       const name = typeAlias.name;
@@ -75,9 +94,16 @@ export class ModelParser extends Parser {
         type: "typeAlias",
       };
       models.push(model);
-
       modelNameToModelMap.set(model.id, model);
-      items.push({ id: name, name, node: typeAlias, type, model });
+
+      items.push({
+        type: "typeAlias",
+        id: name,
+        name,
+        node: typeAlias,
+        compilerType: type,
+        model,
+      });
     }
 
     // second pass: parse schema
@@ -85,81 +111,225 @@ export class ModelParser extends Parser {
       const model = modelNameToModelMap.get(item.name);
       if (!model) continue;
 
-      // bail if it doesn't have a symbol
-      if (!item.type.symbol) continue;
-
       const dependencies = dependencyMap.get(item.name) ?? new Set<Model>();
 
-      for (const prop of item.type.getProperties()) {
-        const propDeclaration = prop.valueDeclaration as ts.PropertyDeclaration | ts.PropertySignature;
-        if (!propDeclaration?.type) continue;
-
-        // arrays
-        if (ts.isArrayTypeNode(propDeclaration.type)) {
-          const elementType = propDeclaration.type.elementType;
-          const referencedTypeName = elementType.getText();
-          const typeModel = modelNameToModelMap.get(referencedTypeName);
-
-          model.schema.push({
-            name: prop.name,
-            type: "array",
-            elementType:
-              typeModel ?? this.tsChecker.typeToString(this.tsChecker.getTypeFromTypeNode(elementType)),
-          });
-          if (typeModel) dependencies.add(typeModel);
+      if (item.type === "typeAlias") {
+        if (
+          [
+            //
+            item.node.type.isNumber(),
+            item.node.type.isString(),
+            item.node.type.isBoolean(),
+            item.node.type.isUndefined(),
+            item.node.type.isNull(),
+            item.node.type.isAny(),
+            item.node.type.isUnknown(),
+            item.node.type.isNever(),
+            item.node.type.isEnum(),
+            item.node.type.isEnumLiteral(),
+            item.node.type.isLiteral(),
+            item.node.type.isUnion(),
+          ].some(Boolean)
+        ) {
+          model.schema.push({ name: "==>", type: item.node.type.getText() });
           continue;
         }
 
-        // references
-        if (ts.isTypeReferenceNode(propDeclaration.type)) {
-          const typeArguments = propDeclaration.type.typeArguments;
-          if (!typeArguments || typeArguments.length === 0) {
-            const referencedTypeName = propDeclaration.type.typeName.getText();
-            const typeModel = modelNameToModelMap.get(referencedTypeName);
+        for (const prop of item.node.type.getProperties()) {
+          const name = prop.getName();
+          const signature = prop.getValueDeclaration() as MethodSignature;
+          if (!signature) continue;
+          const signatureType = signature.getType();
+
+          // console.log(name, prop.getTypeAtLocation(signature).getText());
+
+          // functions
+          const callSignatures = signatureType.getCallSignatures();
+          if (callSignatures.length === 1) {
+            const callSignature = callSignatures[0];
+            const functionArguments: { name: string; type: Model | string }[] = [];
+            for (const parameter of callSignature.getParameters()) {
+              const parameterName = parameter.getName();
+              const parameterTypeName = trimImport(parameter.getTypeAtLocation(signature).getText());
+              const parameterTypeModel = modelNameToModelMap.get(parameterTypeName);
+              if (parameterTypeModel) dependencies.add(parameterTypeModel);
+              functionArguments.push({ name: parameterName, type: parameterTypeModel ?? parameterTypeName });
+            }
+
+            const returnType = callSignature.getReturnType();
+            const returnTypeName = trimImport(returnType.getText());
+            const returnTypeModel = modelNameToModelMap.get(returnTypeName);
+            if (returnTypeModel) dependencies.add(returnTypeModel);
 
             model.schema.push({
-              name: prop.name,
-              type:
-                typeModel ??
-                this.tsChecker.typeToString(this.tsChecker.getTypeFromTypeNode(propDeclaration.type)),
+              name,
+              type: "function",
+              arguments: functionArguments,
+              returnType: returnTypeModel ?? returnTypeName,
             });
-            if (typeModel) dependencies.add(typeModel);
             continue;
           }
 
-          const referenceName = propDeclaration.type.typeName.getText();
+          // arrays
+          if (signatureType.isArray()) {
+            const elementType = signatureType.getArrayElementType();
+            if (!elementType) continue;
+            const elementTypeName = trimImport(elementType.getText());
+            const elementTypeModel = modelNameToModelMap.get(elementTypeName);
 
-          const schemaField: ReferenceSchemaField = {
-            name: prop.name,
-            type: "reference",
-            referenceName,
-            arguments: [],
-          };
+            model.schema.push({
+              name,
+              type: "array",
+              elementType: elementTypeModel ?? elementTypeName,
+            });
+            if (elementTypeModel) dependencies.add(elementTypeModel);
+            continue;
+          }
 
-          for (const typeArgument of typeArguments) {
-            const typeArgumentNode = this.tsChecker.getTypeFromTypeNode(typeArgument);
+          // generics
+          const aliasSymbol = signatureType.getAliasSymbol();
+          const symbol = aliasSymbol ?? signatureType.getSymbol();
+          const typeArguments = aliasSymbol
+            ? signatureType.getAliasTypeArguments()
+            : signatureType.getTypeArguments();
 
-            if (ts.isTypeReferenceNode(typeArgument)) {
-              const typeArgumentName = typeArgument.typeName.getText();
+          if (symbol && typeArguments.length > 0) {
+            const genericName = symbol.getName();
+            if (!genericName) continue;
+
+            const genericModel = modelNameToModelMap.get(genericName);
+            if (genericModel) dependencies.add(genericModel);
+
+            const schemaField: ReferenceSchemaField = {
+              name,
+              type: "reference",
+              referenceName: genericName,
+              arguments: [],
+            };
+
+            for (const typeArgument of typeArguments) {
+              const typeArgumentName = trimImport(typeArgument.getText());
               const typeArgumentModel = modelNameToModelMap.get(typeArgumentName);
 
               schemaField.arguments.push(typeArgumentModel ?? typeArgumentName);
               if (typeArgumentModel) dependencies.add(typeArgumentModel);
-              continue;
             }
 
-            schemaField.arguments.push(this.tsChecker.typeToString(typeArgumentNode));
+            model.schema.push(schemaField);
+            continue;
           }
 
-          model.schema.push(schemaField);
-          continue;
-        }
+          // default
+          const propDeclaration = prop.getDeclarations()[0]?.compilerNode as ts.PropertyDeclaration;
+          if (!propDeclaration) continue;
 
-        // default
-        model.schema.push({
-          name: prop.name,
-          type: this.tsChecker.typeToString(this.tsChecker.getTypeFromTypeNode(propDeclaration.type)),
-        });
+          const typeName = propDeclaration.type
+            ? trimImport(propDeclaration.type.getText())
+            : trimImport(signatureType.getText());
+          const typeModel = modelNameToModelMap.get(typeName);
+          // console.log("default", name, typeName, typeModel);
+          if (typeModel) dependencies.add(typeModel);
+
+          model.schema.push({ name, type: (typeModel ?? typeName) || "any" });
+        }
+      }
+
+      if (item.type === "interface") {
+        for (const prop of [
+          ...item.node.properties,
+          ...item.node.declaration.getMethods(),
+          ...item.node.declaration.getGetAccessors(),
+          ...item.node.declaration.getSetAccessors(),
+        ]) {
+          const name = prop.getName();
+
+          // functions
+          if (Node.isMethodSignature(prop)) {
+            const callSignatures = prop.getType().getCallSignatures();
+            if (callSignatures.length === 1) {
+              const callSignature = callSignatures[0];
+              const functionArguments: { name: string; type: Model | string }[] = [];
+
+              for (const parameter of callSignature.getParameters()) {
+                const parameterName = parameter.getName();
+                const parameterTypeName = trimImport(parameter.getTypeAtLocation(prop).getText());
+                const parameterTypeModel = modelNameToModelMap.get(parameterTypeName);
+                if (parameterTypeModel) dependencies.add(parameterTypeModel);
+                functionArguments.push({
+                  name: parameterName,
+                  type: parameterTypeModel ?? parameterTypeName,
+                });
+              }
+
+              const returnType = callSignature.getReturnType();
+              const returnTypeName = trimImport(returnType.getText());
+              const returnTypeModel = modelNameToModelMap.get(returnTypeName);
+              if (returnTypeModel) dependencies.add(returnTypeModel);
+
+              model.schema.push({
+                name,
+                type: "function",
+                arguments: functionArguments,
+                returnType: returnTypeModel ?? returnTypeName,
+              });
+              continue;
+            }
+          }
+
+          // arrays
+          if (prop.getType().isArray()) {
+            const elementType = prop.getType().getArrayElementType();
+            if (!elementType) continue;
+            const elementTypeName = trimImport(elementType.getText());
+            const elementTypeModel = modelNameToModelMap.get(elementTypeName);
+
+            model.schema.push({
+              name,
+              type: "array",
+              elementType: elementTypeModel ?? elementTypeName,
+            });
+            if (elementTypeModel) dependencies.add(elementTypeModel);
+            continue;
+          }
+
+          // generics
+          const aliasSymbol = prop.getType().getAliasSymbol();
+          const aliasArguments = prop.getType().getAliasTypeArguments();
+          if (aliasSymbol && aliasArguments.length > 0) {
+            const genericName = aliasSymbol.getName();
+            if (!genericName) continue;
+
+            const genericModel = modelNameToModelMap.get(genericName);
+            if (genericModel) dependencies.add(genericModel);
+
+            const schemaField: ReferenceSchemaField = {
+              name,
+              type: "reference",
+              referenceName: genericName,
+              arguments: [],
+            };
+
+            for (const typeArgument of aliasArguments) {
+              const typeArgumentName = trimImport(typeArgument.getText());
+              const typeArgumentModel = modelNameToModelMap.get(typeArgumentName);
+
+              schemaField.arguments.push(typeArgumentModel ?? typeArgumentName);
+              if (typeArgumentModel) dependencies.add(typeArgumentModel);
+            }
+
+            model.schema.push(schemaField);
+            continue;
+          }
+
+          // default
+          const typeName = trimImport(prop.getType().getText());
+          const typeModel = modelNameToModelMap.get(typeName);
+          if (typeModel) dependencies.add(typeModel);
+          model.schema.push({
+            name,
+            type: typeModel ?? typeName,
+          });
+        }
       }
 
       dependencyMap.set(item.name, dependencies);

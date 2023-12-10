@@ -1,7 +1,12 @@
 import { useMemo } from "react";
 import { Position } from "reactflow";
 import classNames from "classnames";
-import { Model, isArraySchemaField, isReferenceSchemaField } from "../../lib/parser/TSMorphModelParser";
+import {
+  Model,
+  isArraySchemaField,
+  isFunctionSchemaField,
+  isReferenceSchemaField,
+} from "../../lib/parser/TSMorphModelParser";
 import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
 
@@ -45,6 +50,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
   const fieldRows = useMemo(() => {
     return model.schema.map((field) => {
+      const keyFragments: JSX.Element[] = [<span key={`${model.id}-${field.name}`}>{field.name}</span>];
       const typeFragments: JSX.Element[] = [];
 
       let hasFieldSourceHandle = false;
@@ -81,12 +87,10 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         // generics
         const argumentFragments: JSX.Element[] = [];
 
-        for (let i = 0; i < field.arguments.length; i++) {
-          const argument = field.arguments[i];
-
+        for (const argument of field.arguments) {
           const argumentKey = `${model.id}-${field.name}-${
             argument instanceof Object ? argument.name : argument
-          }-${i}`;
+          }`;
 
           // of model references
           if (argument instanceof Object) {
@@ -121,10 +125,58 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
             {">"}
           </span>
         );
+      } else if (isFunctionSchemaField(field)) {
+        // change key fragments
+        keyFragments.push(
+          <span key={`${model.id}-${field.name}-arguments-start`} className={classes.field.defaultTypeColor}>
+            (
+          </span>
+        );
+
+        for (const argument of field.arguments) {
+          const argumentKey = `${model.id}-${field.name}-${argument.name}`;
+          if (argument.type instanceof Object) {
+            hasFieldSourceHandle = true;
+
+            keyFragments.push(
+              <span key={argumentKey}>
+                {argument.name}:<span className={classes.field.modelTypeColor}> {argument.type.name}</span>
+              </span>
+            );
+          } else {
+            keyFragments.push(
+              <span key={argumentKey}>
+                {argument.name}:<span className={classes.field.defaultTypeColor}> {argument.type}</span>
+              </span>
+            );
+          }
+        }
+        keyFragments.push(
+          <span key={`${model.id}-${field.name}-arguments-end`} className={classes.field.defaultTypeColor}>
+            )
+          </span>
+        );
+
+        const returnTypeKey = `${model.id}-${field.name}-return`;
+        if (field.returnType instanceof Object) {
+          hasFieldSourceHandle = true;
+
+          typeFragments.push(
+            <span key={returnTypeKey} className={classes.field.modelTypeColor}>
+              {field.returnType.name}
+            </span>
+          );
+        } else {
+          typeFragments.push(
+            <span key={returnTypeKey} className={classes.field.defaultTypeColor}>
+              {field.returnType}
+            </span>
+          );
+        }
       } else {
         // default
         typeFragments.push(
-          <span key="default" className={classes.field.defaultTypeColor}>
+          <span key={`${model.id}-${field.name}-type`} className={classes.field.defaultTypeColor}>
             {field.type}
           </span>
         );
@@ -132,7 +184,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
       return (
         <tr key={`${model.id}-${field.name}`} className={classes.field.root}>
-          <td className={classes.field.keyCell}>{field.name}</td>
+          <td className={classes.field.keyCell}>{keyFragments}</td>
           <td align="right" className={classes.field.typeCell}>
             {typeFragments}
             <CustomHandle

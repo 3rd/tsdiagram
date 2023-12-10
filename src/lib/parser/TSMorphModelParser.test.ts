@@ -56,7 +56,12 @@ it("supports type aliases with kind != TypeLiteral", () => {
   expect(models[0]).toEqual({
     id: "A",
     name: "A",
-    schema: [],
+    schema: [
+      {
+        name: "==>",
+        type: "string",
+      },
+    ],
     dependencies: [],
     dependants: [expect.objectContaining({ name: "B" })],
     type: "typeAlias",
@@ -152,7 +157,7 @@ it("parses references", () => {
   expect(models[0]).toEqual({
     id: "A",
     name: "A",
-    schema: [{ name: "a", type: "reference", referenceName: "Array", arguments: ["string"] }],
+    schema: [{ name: "a", type: "array", elementType: "string" }],
     dependencies: [],
     dependants: [expect.objectContaining({ name: "B" }), expect.objectContaining({ name: "C" })],
     type: "typeAlias",
@@ -184,6 +189,50 @@ it("parses references", () => {
       },
     ],
     dependencies: [expect.objectContaining({ name: "A" })],
+    dependants: [],
+    type: "typeAlias",
+  });
+});
+
+it("parses type alias functions and interface methods", () => {
+  const parser = new ModelParser(`
+    type A = { a: (b: string) => string };
+    interface B {
+      b(c: string) => string
+    };
+  `);
+  const models = parser.getModels();
+
+  expect(models.length).toBe(2);
+
+  expect(models[0]).toEqual({
+    id: "B",
+    name: "B",
+    schema: [
+      {
+        name: "b",
+        type: "function",
+        arguments: [{ name: "c", type: "string" }],
+        returnType: "string",
+      },
+    ],
+    dependencies: [],
+    dependants: [],
+    type: "interface",
+  });
+
+  expect(models[1]).toEqual({
+    id: "A",
+    name: "A",
+    schema: [
+      {
+        name: "a",
+        type: "function",
+        arguments: [{ name: "b", type: "string" }],
+        returnType: "string",
+      },
+    ],
+    dependencies: [],
     dependants: [],
     type: "typeAlias",
   });

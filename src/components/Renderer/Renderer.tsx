@@ -23,7 +23,12 @@ import omit from "lodash/omit";
 import throttle from "lodash/throttle";
 import "../../reactflow.css";
 
-import { Model, isArraySchemaField, isReferenceSchemaField } from "../../lib/parser/TSMorphModelParser";
+import {
+  Model,
+  isArraySchemaField,
+  isFunctionSchemaField,
+  isReferenceSchemaField,
+} from "../../lib/parser/TSMorphModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
@@ -181,6 +186,17 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
             });
           }
         }
+      }
+
+      // functions
+      if (isFunctionSchemaField(field) && field.returnType instanceof Object) {
+        result.push({
+          ...sharedEdgeProps,
+          id: `${count++}-${model.id}-${field.name}-${field.returnType.id}`,
+          source: model.id,
+          target: field.returnType.id,
+          sourceHandle: `${model.id}-source-${field.name}`,
+        });
       }
     }
   }
