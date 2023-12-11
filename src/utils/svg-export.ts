@@ -3,7 +3,7 @@ import mainStyle from "../index.css?inline";
 import reactFlowStyle from "../reactflow.css?inline";
 
 const CONTAINER_QUERY = ".react-flow__viewport";
-const PADDING = 24;
+const PADDING = 18;
 
 export const exportReactFlowToSVG = async (width: number, height: number) => {
   const container = document.querySelector(CONTAINER_QUERY);
@@ -21,12 +21,26 @@ export const exportReactFlowToSVG = async (width: number, height: number) => {
   if (!iframeDocument) throw new Error("Could not get iframe document");
 
   const iframeStyle = iframeDocument.createElement("style");
-  iframeStyle.innerHTML = mainStyle + reactFlowStyle;
+  iframeStyle.innerHTML = `
+    ${mainStyle + reactFlowStyle}
+    * {
+      box-sizing: border-box;
+    }
+    svg > g {
+      transform: translate(${PADDING}px, 0px);
+    }
+    .react-flow__nodes {
+      transform: translate(${PADDING}px, 0px);
+    }
+  `;
   iframeDocument.body.append(iframeStyle);
 
   const clone = container.cloneNode(true) as HTMLElement;
-  clone.style.transform = "none";
-  clone.style.padding = `${PADDING}px`;
+  Object.assign(clone.style, {
+    transform: "none",
+    width: `${width}px`,
+    height: `${height}px`,
+  });
   iframeDocument.body.append(clone);
 
   const svgDocument = elementToSVG(iframeDocument.documentElement);
