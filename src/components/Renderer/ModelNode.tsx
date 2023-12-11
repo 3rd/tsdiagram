@@ -201,6 +201,22 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
     });
   }, [classes, model.id, model.schema]);
 
+  const modelName = useMemo(() => {
+    const nameParts = [model.name];
+    if (model.arguments.length > 0) {
+      const argumentsParts = [];
+      for (const argument of model.arguments) {
+        let argumentStr = argument.name;
+        if (argument.extends) {
+          argumentStr += ` extends ${argument.extends}`;
+        }
+        argumentsParts.push(argumentStr);
+      }
+      nameParts.push(`<${argumentsParts.join(", ")}>`);
+    }
+    return nameParts.join("");
+  }, [model]);
+
   return (
     <div key={id} className={classes.root}>
       {/* header */}
@@ -215,7 +231,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
           type="target"
         />
         {/* title */}
-        {model.name}
+        {modelName}
       </div>
       {/* fields */}
       {model.schema.length > 0 && (

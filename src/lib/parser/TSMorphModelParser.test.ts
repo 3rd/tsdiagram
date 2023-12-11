@@ -14,6 +14,7 @@ it("parses top level type aliases and interfaces into models", () => {
     dependencies: [],
     dependants: [],
     type: "interface",
+    arguments: [],
   });
   expect(models[1]).toEqual({
     id: "B",
@@ -22,6 +23,7 @@ it("parses top level type aliases and interfaces into models", () => {
     dependencies: [],
     dependants: [],
     type: "typeAlias",
+    arguments: [],
   });
 });
 
@@ -37,6 +39,7 @@ it("parses exported top level type aliases and interfaces into models", () => {
     dependencies: [],
     dependants: [],
     type: "interface",
+    arguments: [],
   });
   expect(models[1]).toEqual({
     id: "B",
@@ -45,6 +48,7 @@ it("parses exported top level type aliases and interfaces into models", () => {
     dependencies: [],
     dependants: [],
     type: "typeAlias",
+    arguments: [],
   });
 });
 
@@ -65,6 +69,7 @@ it("supports type aliases with kind != TypeLiteral", () => {
     dependencies: [],
     dependants: [expect.objectContaining({ name: "B" })],
     type: "typeAlias",
+    arguments: [],
   });
   expect(models[1]).toEqual({
     id: "B",
@@ -73,6 +78,7 @@ it("supports type aliases with kind != TypeLiteral", () => {
     dependencies: [expect.objectContaining({ name: "A" })],
     dependants: [],
     type: "typeAlias",
+    arguments: [],
   });
 });
 
@@ -94,6 +100,7 @@ it("supports declaration merging", () => {
     dependencies: [],
     dependants: [],
     type: "interface",
+    arguments: [],
   });
 });
 
@@ -109,6 +116,7 @@ it("parses arrays of primitives", () => {
     dependencies: [],
     dependants: [],
     type: "typeAlias",
+    arguments: [],
   });
 });
 
@@ -134,6 +142,7 @@ it("parses arrays of models", () => {
     dependencies: [expect.objectContaining({ name: "B" })],
     dependants: [],
     type: "typeAlias",
+    arguments: [],
   });
   expect(models[1]).toEqual({
     id: "B",
@@ -142,6 +151,7 @@ it("parses arrays of models", () => {
     dependencies: [],
     dependants: [expect.objectContaining({ name: "A" })],
     type: "typeAlias",
+    arguments: [],
   });
 });
 
@@ -161,6 +171,7 @@ it("parses references", () => {
     dependencies: [],
     dependants: [expect.objectContaining({ name: "B" }), expect.objectContaining({ name: "C" })],
     type: "typeAlias",
+    arguments: [],
   });
   expect(models[1]).toEqual({
     id: "B",
@@ -176,6 +187,7 @@ it("parses references", () => {
     dependencies: [expect.objectContaining({ name: "A" })],
     dependants: [],
     type: "typeAlias",
+    arguments: [],
   });
   expect(models[2]).toEqual({
     id: "C",
@@ -191,6 +203,7 @@ it("parses references", () => {
     dependencies: [expect.objectContaining({ name: "A" })],
     dependants: [],
     type: "typeAlias",
+    arguments: [],
   });
 });
 
@@ -219,6 +232,7 @@ it("parses type alias functions and interface methods", () => {
     dependencies: [],
     dependants: [],
     type: "interface",
+    arguments: [],
   });
 
   expect(models[1]).toEqual({
@@ -235,5 +249,38 @@ it("parses type alias functions and interface methods", () => {
     dependencies: [],
     dependants: [],
     type: "typeAlias",
+    arguments: [],
+  });
+});
+
+it("parses generic alias and interface arguments", () => {
+  const parser = new ModelParser(`
+    type A<T> = { a: T };
+    interface B<T, U extends string> {
+      b: T
+    };
+  `);
+  const models = parser.getModels();
+
+  expect(models.length).toBe(2);
+
+  expect(models[0]).toEqual({
+    id: "B",
+    name: "B",
+    schema: [{ name: "b", type: "T" }],
+    dependencies: [],
+    dependants: [],
+    type: "interface",
+    arguments: [{ name: "T" }, { name: "U", extends: "string" }],
+  });
+
+  expect(models[1]).toEqual({
+    id: "A",
+    name: "A",
+    schema: [{ name: "a", type: "T" }],
+    dependencies: [],
+    dependants: [],
+    type: "typeAlias",
+    arguments: [{ name: "T" }],
   });
 });

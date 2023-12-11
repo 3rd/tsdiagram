@@ -36,10 +36,15 @@ type ModelBase = {
   schema: SchemaField[];
   dependencies: Model[];
   dependants: Model[];
+  arguments: { name: string; extends?: string }[];
 };
 
-type InterfaceModel = ModelBase & { type: "interface" };
-type TypeAliasModel = ModelBase & { type: "typeAlias" };
+type InterfaceModel = ModelBase & {
+  type: "interface";
+};
+type TypeAliasModel = ModelBase & {
+  type: "typeAlias";
+};
 export type Model = InterfaceModel | TypeAliasModel;
 
 const trimImport = (str: string) => str.replace(`import("/source").`, "");
@@ -68,7 +73,16 @@ export class ModelParser extends Parser {
         dependencies: [],
         dependants: [],
         type: "interface",
+        arguments: [],
       };
+
+      for (const parameter of _interface.declaration.getTypeParameters()) {
+        const parameterName = parameter.getName();
+        const parameterType = parameter.getType();
+        const parameterExtends = parameterType.getConstraint()?.getText();
+        model.arguments.push({ name: parameterName, extends: parameterExtends });
+      }
+
       models.push(model);
 
       modelNameToModelMap.set(model.id, model);
@@ -81,6 +95,7 @@ export class ModelParser extends Parser {
         model,
       });
     }
+
     for (const typeAlias of this.typeAliases) {
       const name = typeAlias.name;
       const type = typeAlias.declaration.getType().compilerType;
@@ -92,7 +107,16 @@ export class ModelParser extends Parser {
         dependencies: [],
         dependants: [],
         type: "typeAlias",
+        arguments: [],
       };
+
+      for (const parameter of typeAlias.declaration.getTypeParameters()) {
+        const parameterName = parameter.getName();
+        const parameterType = parameter.getType();
+        const parameterExtends = parameterType.getConstraint()?.getText();
+        model.arguments.push({ name: parameterName, extends: parameterExtends });
+      }
+
       models.push(model);
       modelNameToModelMap.set(model.id, model);
 
