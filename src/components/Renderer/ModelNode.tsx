@@ -158,7 +158,25 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         );
 
         const returnTypeKey = `${model.id}-${field.name}-return`;
-        if (field.returnType instanceof Object) {
+
+        if (Array.isArray(field.returnType)) {
+          const [returnType] = field.returnType;
+
+          if (returnType instanceof Object) {
+            hasFieldSourceHandle = true;
+            typeFragments.push(
+              <span key={returnTypeKey} className={classes.field.modelTypeColor}>
+                {returnType.name}[]
+              </span>
+            );
+          } else {
+            typeFragments.push(
+              <span key={returnTypeKey} className={classes.field.defaultTypeColor}>
+                {returnType}[]
+              </span>
+            );
+          }
+        } else if (field.returnType instanceof Object) {
           hasFieldSourceHandle = true;
 
           typeFragments.push(

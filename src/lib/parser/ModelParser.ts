@@ -13,7 +13,7 @@ type FunctionSchemaField = {
   name: string;
   type: "function";
   arguments: { name: string; type: Model | string }[];
-  returnType: Model | (string & {});
+  returnType: Model | [Model | (string & {})] | (string & {});
 };
 type SchemaField = ArraySchemaField | DefaultSchemaField | FunctionSchemaField | ReferenceSchemaField;
 
@@ -220,7 +220,10 @@ export class ModelParser extends Parser {
             }
 
             const returnType = callSignature.getReturnType();
-            const returnTypeName = trimImport(returnType.getText());
+            const isArray = returnType.isArray();
+            const returnTypeName = isArray
+              ? trimImport(returnType.getArrayElementType()?.getText() ?? "")
+              : trimImport(returnType.getText());
             const returnTypeModel = modelNameToModelMap.get(returnTypeName);
             if (returnTypeModel) dependencies.add(returnTypeModel);
 
@@ -228,7 +231,7 @@ export class ModelParser extends Parser {
               name,
               type: "function",
               arguments: functionArguments,
-              returnType: returnTypeModel ?? returnTypeName,
+              returnType: isArray ? [returnTypeModel ?? returnTypeName] : returnTypeModel ?? returnTypeName,
             });
             continue;
           }
@@ -325,7 +328,10 @@ export class ModelParser extends Parser {
               }
 
               const returnType = callSignature.getReturnType();
-              const returnTypeName = trimImport(returnType.getText());
+              const isArray = returnType.isArray();
+              const returnTypeName = isArray
+                ? trimImport(returnType.getArrayElementType()?.getText() ?? "")
+                : trimImport(returnType.getText());
               const returnTypeModel = modelNameToModelMap.get(returnTypeName);
               if (returnTypeModel) dependencies.add(returnTypeModel);
 
@@ -333,7 +339,7 @@ export class ModelParser extends Parser {
                 name,
                 type: "function",
                 arguments: functionArguments,
-                returnType: returnTypeModel ?? returnTypeName,
+                returnType: isArray ? [returnTypeModel ?? returnTypeName] : returnTypeModel ?? returnTypeName,
               });
               continue;
             }
@@ -423,7 +429,10 @@ export class ModelParser extends Parser {
               }
 
               const returnType = callSignature.getReturnType();
-              const returnTypeName = trimImport(returnType.getText());
+              const isArray = returnType.isArray();
+              const returnTypeName = isArray
+                ? trimImport(returnType.getArrayElementType()?.getText() ?? "")
+                : trimImport(returnType.getText());
               const returnTypeModel = modelNameToModelMap.get(returnTypeName);
               if (returnTypeModel) dependencies.add(returnTypeModel);
 
@@ -431,7 +440,7 @@ export class ModelParser extends Parser {
                 name,
                 type: "function",
                 arguments: functionArguments,
-                returnType: returnTypeModel ?? returnTypeName,
+                returnType: isArray ? [returnTypeModel ?? returnTypeName] : returnTypeModel ?? returnTypeName,
               });
               continue;
             }

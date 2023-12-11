@@ -190,14 +190,27 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
       }
 
       // functions
-      if (isFunctionSchemaField(field) && field.returnType instanceof Object) {
-        result.push({
-          ...sharedEdgeProps,
-          id: `${count++}-${model.id}-${field.name}-${field.returnType.id}`,
-          source: model.id,
-          target: field.returnType.id,
-          sourceHandle: `${model.id}-source-${field.name}`,
-        });
+      if (isFunctionSchemaField(field)) {
+        if (Array.isArray(field.returnType)) {
+          const returnType = field.returnType[0];
+          if (returnType instanceof Object) {
+            result.push({
+              ...sharedEdgeProps,
+              id: `${count++}-${model.id}-${field.name}-${returnType.id}`,
+              source: model.id,
+              target: returnType.id,
+              sourceHandle: `${model.id}-source-${field.name}`,
+            });
+          }
+        } else if (field.returnType instanceof Object) {
+          result.push({
+            ...sharedEdgeProps,
+            id: `${count++}-${model.id}-${field.name}-${field.returnType.id}`,
+            source: model.id,
+            target: field.returnType.id,
+            sourceHandle: `${model.id}-source-${field.name}`,
+          });
+        }
       }
     }
   }
