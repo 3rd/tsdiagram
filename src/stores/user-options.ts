@@ -3,6 +3,9 @@ import { z } from "zod";
 import { themes } from "../themes";
 
 const userOptionsSchema = z.object({
+  panels: z.object({
+    splitDirection: z.enum(["horizontal", "vertical"]).default("horizontal"),
+  }),
   editor: z.object({
     theme: z.enum(Object.keys(themes) as [string, ...string[]]).default("vsLight"),
   }),
@@ -19,6 +22,9 @@ export type UserOptions = z.infer<typeof userOptionsSchema> & {
   save: () => void;
 };
 export const optionsStore = createStore<UserOptions>({
+  panels: {
+    splitDirection: "horizontal",
+  },
   editor: {
     theme: "vsLight",
   },
@@ -33,12 +39,20 @@ export const optionsStore = createStore<UserOptions>({
       const data = JSON.parse(localStorage.getItem("options") ?? "");
       const parsedData = userOptionsSchema.parse(data);
       parsedData.renderer.autoFitView = true;
+      this.panels = parsedData.panels;
       this.editor = parsedData.editor;
       this.renderer = parsedData.renderer;
     } catch {}
   },
   save() {
-    localStorage.setItem("options", JSON.stringify({ editor: this.editor, renderer: this.renderer }));
+    localStorage.setItem(
+      "options",
+      JSON.stringify({
+        panels: this.panels,
+        editor: this.editor,
+        renderer: this.renderer,
+      })
+    );
   },
 });
 optionsStore.state.load();

@@ -16,33 +16,37 @@ type PanelsProps = {
 export const Panels = ({ editorChildren, rendererChildren, options }: PanelsProps) => {
   const isMobile = useIsMobile();
 
+  const direction = isMobile ? "vertical" : options.panels.splitDirection;
+  const isVertical = direction === "vertical";
+
   const panelGroupMembers = useMemo(() => {
     const members = [
       <Panel
         key="panel-editor"
         defaultSizePercentage={isMobile ? mobileCodePanelSizePercentage : defaultCodePanelSizePercentage}
         id="editor"
+        order={isVertical ? 1 : 0}
       >
         {editorChildren}
       </Panel>,
       <PanelResizeHandle
         key="panel-resize-handle"
         className={classNames(
-          "w-1.5",
+          isVertical ? "h-1.5" : "w-1.5",
           { "bg-gray-600": options.renderer.theme === "dark" },
           { "bg-gray-200": options.renderer.theme === "light" }
         )}
       />,
-      <Panel key="panel-renderer" id="renderer">
+      <Panel key="panel-renderer" id="renderer" order={isVertical ? 0 : 1}>
         {rendererChildren}
       </Panel>,
     ];
-    if (isMobile) members.reverse();
+    if (isVertical) members.reverse();
     return members;
-  }, [isMobile, editorChildren, options.renderer.theme, rendererChildren]);
+  }, [isMobile, isVertical, editorChildren, options.renderer.theme, rendererChildren]);
 
   return (
-    <PanelGroup autoSaveId="example" direction={isMobile ? "vertical" : "horizontal"}>
+    <PanelGroup autoSaveId="example" direction={direction}>
       {panelGroupMembers}
     </PanelGroup>
   );

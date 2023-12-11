@@ -452,6 +452,14 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     setShouldAnimate(true);
   }, []);
 
+  // auto fit when the panel direction changes
+  const previousPanelDirection = useRef(options.panels.splitDirection);
+  useEffect(() => {
+    if (previousPanelDirection.current === options.panels.splitDirection) return;
+    previousPanelDirection.current = options.panels.splitDirection;
+    requestIdleCallback(() => fitView(fitViewOptions));
+  }, [fitView, fitViewOptions, options.panels.splitDirection, options.renderer]);
+
   // console.log("@render", { nodes, edges });
 
   return (
