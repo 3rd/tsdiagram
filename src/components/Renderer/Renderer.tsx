@@ -32,6 +32,7 @@ import {
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
+import { HeightIcon, TransformIcon, WidthIcon } from "@radix-ui/react-icons";
 
 const AUTO_LAYOUT_THROTTLE_MS = 120;
 
@@ -494,7 +495,7 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
           <div
             ref={panelRef}
             className={classNames(
-              "bg-opacity-90 overflow-hidden rounded-md shadow-md text-gray-800 whitespace-nowrap",
+              "flex flex-nowrap bg-opacity-90 overflow-hidden rounded-md shadow-md text-gray-800 whitespace-nowrap",
               {
                 "bg-gray-100": options.renderer.theme === "light",
                 "bg-stone-100": options.renderer.theme === "dark",
@@ -504,25 +505,30 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
             {/* auto-fit */}
             <button
               className={classNames(
-                "py-1 px-2 text-sm border-r border-stone-300",
+                "flex items-center gap-1 py-0.5 px-2 text-sm border-r border-stone-300",
                 options.renderer.autoFitView ? "text-blue-600" : "hover:text-stone-500"
               )}
               onClick={handleAutoFitToggle}
             >
-              🟅 Auto-fit
+              <TransformIcon />
+              <span>Auto-fit</span>
             </button>
+
             {/* direction: vertical | horizontal */}
-            <button className={classNames("py-0.5 px-2 text-sm ")} onClick={handleDirectionToggle}>
-              Orientation: {options.renderer.direction === "vertical" ? "↕" : "↔"}
+            <button className="flex gap-1 items-center py-0.5 px-2 text-sm" onClick={handleDirectionToggle}>
+              <span>Orientation:</span>{" "}
+              {options.renderer.direction === "vertical" ? <HeightIcon /> : <WidthIcon />}
             </button>
           </div>
         </Panel>
+
         <Controls
           className={classNames("rounded overflow-hidden bg-opacity-90", {
             "bg-gray-50": options.renderer.theme === "light",
             "bg-stone-100": options.renderer.theme === "dark",
           })}
         />
+
         {/* TODO: refactor */}
         {!disableMiniMap && options.renderer.enableMinimap && (
           <MiniMap
