@@ -52,4 +52,6 @@ export const exportReactFlowToSVG = async (width: number, height: number) => {
   a.href = svgUrl;
   a.download = "diagram.svg";
   a.click();
+
+  iframe.remove();
 };
