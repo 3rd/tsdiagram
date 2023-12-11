@@ -32,4 +32,16 @@ interface TaskSession {
   get duration(): number;
   get isCurrent(): boolean;
 }
+
+class Wiki {
+  rootPath: string;
+
+  constructor(rootPath: string) {
+    this.rootPath = rootPath;
+  }
+
+  getNodes(): Node[] {
+    return [];
+  }
+}
 `.trim();
