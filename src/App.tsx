@@ -5,6 +5,7 @@ import { Panels } from "./components/Panels";
 import { Editor } from "./components/Editor";
 import { RendererWrapper } from "./components/Renderer";
 import { Preferences } from "./components/Preferences";
+import { Share } from "./components/Share";
 import { useDocuments } from "./stores/documents";
 import { useUserOptions } from "./stores/user-options";
 import type { themes } from "./themes";
@@ -12,6 +13,7 @@ import "./App.css";
 
 function App() {
   const [showPreferences, setShowPreferences] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const documents = useDocuments();
   const options = useUserOptions();
 
@@ -27,10 +29,14 @@ function App() {
     setShowPreferences((value) => !value);
   }, []);
 
+  const handleShareClick = useCallback(() => {
+    setShowShare((value) => !value);
+  }, []);
+
   return (
     <ReactFlowProvider>
       <div className="flex overflow-hidden flex-col w-full h-full">
-        <Header onPreferencesClick={handlePreferencesClick} />
+        <Header onPreferencesClick={handlePreferencesClick} onShareClick={handleShareClick} />
         <main className="flex flex-1">
           <Panels
             editorChildren={
@@ -45,6 +51,7 @@ function App() {
           />
         </main>
         <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />
+        <Share isOpen={showShare} onClose={handleShareClick} />
       </div>
     </ReactFlowProvider>
   );

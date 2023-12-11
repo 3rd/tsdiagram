@@ -1,23 +1,12 @@
-import { getRectOfNodes, useReactFlow } from "reactflow";
 import { memo } from "react";
-import { exportReactFlowToSVG } from "../utils/svg-export";
-
-const EXPORT_MARGIN_PX = 30;
+import { Share1Icon, GearIcon } from "@radix-ui/react-icons";
 
 type HeaderProps = {
   onPreferencesClick?: () => void;
+  onShareClick?: () => void;
 };
 
-export const Header = memo(({ onPreferencesClick }: HeaderProps) => {
-  const { getNodes } = useReactFlow();
-
-  const handleExportClick = () => {
-    const nodesBounds = getRectOfNodes(getNodes());
-    const width = nodesBounds.width + EXPORT_MARGIN_PX * 2;
-    const height = nodesBounds.height + EXPORT_MARGIN_PX * 2;
-    exportReactFlowToSVG(width, height);
-  };
-
+export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) => {
   return (
     <header className="flex justify-between items-center p-2 text-gray-50 bg-blue-900">
       {/* logo */}
@@ -37,19 +26,19 @@ export const Header = memo(({ onPreferencesClick }: HeaderProps) => {
       </div>
       {/* actions */}
       <div className="flex gap-2 items-center">
+        {/* share */}
+        <button
+          className="flex gap-1 items-center py-1.5 px-2 text-sm leading-none rounded shadow-sm bg-white/10 hover:bg-white/20"
+          onClick={onShareClick}
+        >
+          <Share1Icon /> Share
+        </button>
         {/* preferences */}
         <button
-          className="py-1 px-2 text-sm rounded shadow-sm bg-white/10 hover:bg-white/20"
+          className="flex gap-1 items-center py-1.5 px-2 text-sm leading-none rounded shadow-sm bg-white/10 hover:bg-white/20"
           onClick={onPreferencesClick}
         >
-          ⚙ Preferences
-        </button>
-        {/* export */}
-        <button
-          className="py-1 px-2 text-sm rounded shadow-sm bg-white/10 hover:bg-white/20"
-          onClick={handleExportClick}
-        >
-          📦 Export SVG
+          <GearIcon /> Preferences
         </button>
       </div>
     </header>

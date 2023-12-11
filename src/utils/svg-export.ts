@@ -45,13 +45,22 @@ export const exportReactFlowToSVG = async (width: number, height: number) => {
 
   const svgDocument = elementToSVG(iframeDocument.documentElement);
   const svgString = new XMLSerializer().serializeToString(svgDocument);
+
+  iframe.remove();
+
+  return svgString;
+};
+
+export const downloadSVG = async (svgString: string, filename: string) => {
   const svgBlob = new Blob([svgString], { type: "image/svg+xml" });
   const svgUrl = URL.createObjectURL(svgBlob);
 
   const a = document.createElement("a");
   a.href = svgUrl;
-  a.download = "diagram.svg";
+  a.download = filename;
   a.click();
+};
 
-  iframe.remove();
+export const copySVG = async (svgString: string) => {
+  await navigator.clipboard.writeText(svgString);
 };
