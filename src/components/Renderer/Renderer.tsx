@@ -509,7 +509,7 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
               )}
               onClick={handleAutoFitToggle}
             >
-              🪄 Auto-fit
+              🟅 Auto-fit
             </button>
             {/* direction: vertical | horizontal */}
             <button className={classNames("py-0.5 px-2 text-sm ")} onClick={handleDirectionToggle}>
