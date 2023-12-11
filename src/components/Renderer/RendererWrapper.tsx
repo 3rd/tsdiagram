@@ -1,7 +1,7 @@
 import { Renderer } from "./Renderer";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useMemo } from "react";
-import { ModelParser } from "../../lib/parser/TSMorphModelParser";
+import { ModelParser } from "../../lib/parser/ModelParser";
 
 export type RendererWrapperProps = {
   source: string;

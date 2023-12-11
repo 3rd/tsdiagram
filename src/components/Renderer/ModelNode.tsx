@@ -6,7 +6,7 @@ import {
   isArraySchemaField,
   isFunctionSchemaField,
   isReferenceSchemaField,
-} from "../../lib/parser/TSMorphModelParser";
+} from "../../lib/parser/ModelParser";
 import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
 

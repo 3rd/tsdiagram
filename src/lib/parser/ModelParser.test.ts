@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-magic-numbers */
 import { expect, it } from "vitest";
-import { ModelParser } from "./TSMorphModelParser";
+import { ModelParser } from "./ModelParser";
 
 it("parses top level type aliases and interfaces into models", () => {
   const parser = new ModelParser("interface A { a: string; }; type B = { b: string };");
@@ -282,5 +282,26 @@ it("parses generic alias and interface arguments", () => {
     dependants: [],
     type: "typeAlias",
     arguments: [{ name: "T" }],
+  });
+});
+
+it("parses classes", () => {
+  const parser = new ModelParser(`
+    class A { foo: string; }
+    class B { bar(): string { throw new Error(); } }
+    class C extends A implements B { bar() { return "baz"; } }
+  `);
+  const models = parser.getModels();
+
+  expect(models.length).toBe(3);
+
+  expect(models[0]).toEqual({
+    id: "A",
+    name: "A",
+    schema: [{ name: "foo", type: "string" }],
+    dependencies: [],
+    dependants: [],
+    type: "class",
+    arguments: [],
   });
 });

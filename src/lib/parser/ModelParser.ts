@@ -1,5 +1,5 @@
 import { Node, ts, MethodSignature } from "ts-morph";
-import { ParsedInterface, ParsedTypeAlias, Parser } from "./TSMorphParser";
+import { ParsedClass, ParsedInterface, ParsedTypeAlias, Parser } from "./Parser";
 
 type DefaultSchemaField = { name: string; type: Model | string };
 type ArraySchemaField = { name: string; type: "array"; elementType: Model | (string & {}) };
@@ -45,7 +45,11 @@ type InterfaceModel = ModelBase & {
 type TypeAliasModel = ModelBase & {
   type: "typeAlias";
 };
-export type Model = InterfaceModel | TypeAliasModel;
+type ClassModel = ModelBase & {
+  type: "class";
+};
+
+export type Model = ClassModel | InterfaceModel | TypeAliasModel;
 
 const trimImport = (str: string) => str.replace(`import("/source").`, "");
 
@@ -58,6 +62,7 @@ export class ModelParser extends Parser {
 
     // first pass: build nodes and models
     const items: ({ id: string; name: string; compilerType: ts.Type } & (
+      | { type: "class"; model: ClassModel; node: ParsedClass }
       | { type: "interface"; model: InterfaceModel; node: ParsedInterface }
       | { type: "typeAlias"; model: TypeAliasModel; node: ParsedTypeAlias }
     ))[] = [];
@@ -125,6 +130,40 @@ export class ModelParser extends Parser {
         id: name,
         name,
         node: typeAlias,
+        compilerType: type,
+        model,
+      });
+    }
+
+    for (const currentClass of this.classes) {
+      const name = currentClass.name;
+      const type = currentClass.declaration.getType().compilerType;
+
+      const model: ClassModel = {
+        id: name,
+        name,
+        schema: [],
+        dependencies: [],
+        dependants: [],
+        type: "class",
+        arguments: [],
+      };
+
+      for (const parameter of currentClass.declaration.getTypeParameters()) {
+        const parameterName = parameter.getName();
+        const parameterType = parameter.getType();
+        const parameterExtends = parameterType.getConstraint()?.getText();
+        model.arguments.push({ name: parameterName, extends: parameterExtends });
+      }
+
+      models.push(model);
+      modelNameToModelMap.set(model.id, model);
+
+      items.push({
+        type: "class",
+        id: name,
+        name,
+        node: currentClass,
         compilerType: type,
         model,
       });
@@ -269,6 +308,104 @@ export class ModelParser extends Parser {
 
           // functions
           if (Node.isMethodSignature(prop)) {
+            const callSignatures = prop.getType().getCallSignatures();
+            if (callSignatures.length === 1) {
+              const callSignature = callSignatures[0];
+              const functionArguments: { name: string; type: Model | string }[] = [];
+
+              for (const parameter of callSignature.getParameters()) {
+                const parameterName = parameter.getName();
+                const parameterTypeName = trimImport(parameter.getTypeAtLocation(prop).getText());
+                const parameterTypeModel = modelNameToModelMap.get(parameterTypeName);
+                if (parameterTypeModel) dependencies.add(parameterTypeModel);
+                functionArguments.push({
+                  name: parameterName,
+                  type: parameterTypeModel ?? parameterTypeName,
+                });
+              }
+
+              const returnType = callSignature.getReturnType();
+              const returnTypeName = trimImport(returnType.getText());
+              const returnTypeModel = modelNameToModelMap.get(returnTypeName);
+              if (returnTypeModel) dependencies.add(returnTypeModel);
+
+              model.schema.push({
+                name,
+                type: "function",
+                arguments: functionArguments,
+                returnType: returnTypeModel ?? returnTypeName,
+              });
+              continue;
+            }
+          }
+
+          // arrays
+          if (prop.getType().isArray()) {
+            const elementType = prop.getType().getArrayElementType();
+            if (!elementType) continue;
+            const elementTypeName = trimImport(elementType.getText());
+            const elementTypeModel = modelNameToModelMap.get(elementTypeName);
+
+            model.schema.push({
+              name,
+              type: "array",
+              elementType: elementTypeModel ?? elementTypeName,
+            });
+            if (elementTypeModel) dependencies.add(elementTypeModel);
+            continue;
+          }
+
+          // generics
+          const aliasSymbol = prop.getType().getAliasSymbol();
+          const aliasArguments = prop.getType().getAliasTypeArguments();
+          if (aliasSymbol && aliasArguments.length > 0) {
+            const genericName = aliasSymbol.getName();
+            if (!genericName) continue;
+
+            const genericModel = modelNameToModelMap.get(genericName);
+            if (genericModel) dependencies.add(genericModel);
+
+            const schemaField: ReferenceSchemaField = {
+              name,
+              type: "reference",
+              referenceName: genericName,
+              arguments: [],
+            };
+
+            for (const typeArgument of aliasArguments) {
+              const typeArgumentName = trimImport(typeArgument.getText());
+              const typeArgumentModel = modelNameToModelMap.get(typeArgumentName);
+
+              schemaField.arguments.push(typeArgumentModel ?? typeArgumentName);
+              if (typeArgumentModel) dependencies.add(typeArgumentModel);
+            }
+
+            model.schema.push(schemaField);
+            continue;
+          }
+
+          // default
+          const typeName = trimImport(prop.getType().getText());
+          const typeModel = modelNameToModelMap.get(typeName);
+          if (typeModel) dependencies.add(typeModel);
+          model.schema.push({
+            name,
+            type: typeModel ?? typeName,
+          });
+        }
+      }
+
+      if (item.type === "class") {
+        for (const prop of [
+          ...item.node.properties,
+          ...item.node.declaration.getMethods(),
+          ...item.node.declaration.getGetAccessors(),
+          ...item.node.declaration.getSetAccessors(),
+        ]) {
+          const name = prop.getName();
+
+          // functions
+          if (Node.isMethodDeclaration(prop)) {
             const callSignatures = prop.getType().getCallSignatures();
             if (callSignatures.length === 1) {
               const callSignature = callSignatures[0];

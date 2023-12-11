@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { Parser } from "./TSMorphParser";
+import { Parser } from "./Parser";
 
 it("parses code into AST and updates it on code change", () => {
   const parser = new Parser("interface A { }");
@@ -73,4 +73,38 @@ it("parses type aliases", () => {
   expect(D.name).toBe("D");
   expect(D.declaration.getText()).toBe("type D = string;");
   expect(D.type.getText()).toBe("string");
+});
+
+it("parses classes", () => {
+  const parser = new Parser(`
+    class A { foo: string; }
+    class B { bar(): string { throw new Error(); } }
+    class C extends A implements B { bar() { return "baz"; } }
+  `);
+
+  const classes = parser.classes;
+  expect(classes.length).toBe(3);
+
+  const [A, B, C] = classes;
+
+  expect(A.name).toBe("A");
+  expect(A.declaration.getText()).toBe("class A { foo: string; }");
+  expect(A.extends).toBeUndefined();
+  expect(A.properties.length).toBe(1);
+  expect(A.properties[0].getName()).toBe("foo");
+  expect(A.methods.length).toBe(0);
+
+  expect(B.name).toBe("B");
+  expect(B.declaration.getText()).toBe("class B { bar(): string { throw new Error(); } }");
+  expect(B.extends).toBeUndefined();
+  expect(B.properties.length).toBe(0);
+  expect(B.methods.length).toBe(1);
+  expect(B.methods[0].getName()).toBe("bar");
+
+  expect(C.name).toBe("C");
+  expect(C.declaration.getText()).toBe('class C extends A implements B { bar() { return "baz"; } }');
+  expect(C.extends).toBeDefined();
+  expect(C.extends?.getText()).toBe("A");
+  expect(C.properties.length).toBe(1);
+  expect(C.methods.length).toBe(1);
 });

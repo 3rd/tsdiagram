@@ -28,7 +28,7 @@ import {
   isArraySchemaField,
   isFunctionSchemaField,
   isReferenceSchemaField,
-} from "../../lib/parser/TSMorphModelParser";
+} from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
