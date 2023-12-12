@@ -19,6 +19,7 @@ export type ParsedInterface = {
   extends: ExpressionWithTypeArguments[];
   properties: PropertySignature[];
   methods: MethodSignature[];
+  members: (MethodSignature | PropertySignature)[];
 };
 
 export type ParsedTypeAlias = {
@@ -89,9 +90,19 @@ export class Parser {
       }
     >();
     const declarations = this.source.getInterfaces();
+    const declarationMembersMap = new Map<string, Set<string>>();
 
     for (const declaration of declarations) {
       const name = declaration.getName();
+
+      const declarationMembers = declarationMembersMap.get(name) ?? new Set<string>();
+      for (const member of declaration.getProperties()) {
+        declarationMembers.add(member.getName());
+      }
+      for (const member of declaration.getMethods()) {
+        declarationMembers.add(member.getName());
+      }
+      declarationMembersMap.set(name, declarationMembers);
 
       const item = result.get(name) ?? {
         interface: {
@@ -100,6 +111,7 @@ export class Parser {
           extends: [],
           properties: [],
           methods: [],
+          members: [],
         },
         propertyNames: new Set(),
         methodNames: new Set(),
@@ -120,12 +132,14 @@ export class Parser {
             continue;
           }
           item.interface.properties.push(valueDeclaration as PropertySignature);
+          item.interface.members.push(valueDeclaration as PropertySignature);
           item.propertyNames.add(propertyName);
         } else if (valueDeclaration.getKindName() === "MethodSignature") {
           if (item.methodNames.has(propertyName)) {
             continue;
           }
           item.interface.methods.push(valueDeclaration as MethodSignature);
+          item.interface.members.push(valueDeclaration as MethodSignature);
           item.methodNames.add(propertyName);
         } else {
           // console.error("Unexpected interface property kind", valueDeclaration.getKindName());
@@ -135,7 +149,24 @@ export class Parser {
       result.set(name, item);
     }
 
-    return Array.from(result.values()).map(({ interface: item }) => item);
+    // move declaration members after other members
+    const items = Array.from(result.values()).map(({ interface: item }) => item);
+    for (const item of items) {
+      const declarationMembers = declarationMembersMap.get(item.name);
+      if (!declarationMembers) continue;
+      item.members.sort((a, b) => {
+        const aName = a.getName();
+        const bName = b.getName();
+        if (declarationMembers.has(aName) && !declarationMembers.has(bName)) {
+          return 1;
+        } else if (!declarationMembers.has(aName) && declarationMembers.has(bName)) {
+          return -1;
+        }
+        return 0;
+      });
+    }
+
+    return items;
   }
 
   get typeAliases(): ParsedTypeAlias[] {

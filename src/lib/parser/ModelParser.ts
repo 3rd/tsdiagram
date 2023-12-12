@@ -385,8 +385,7 @@ export class ModelParser extends Parser {
         }
 
         for (const prop of [
-          ...item.node.properties,
-          ...item.node.methods,
+          ...item.node.members,
           ...item.node.declaration.getGetAccessors(),
           ...item.node.declaration.getSetAccessors(),
         ]) {
