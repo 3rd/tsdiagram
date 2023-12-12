@@ -1,15 +1,15 @@
 import { Fragment, useRef, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { copySVG, downloadSVG, exportReactFlowToSVG } from "../utils/svg-export";
-import { getRectOfNodes, useReactFlow } from "reactflow";
+import { getNodesBounds, getTransformForBounds, useReactFlow } from "reactflow";
 import { CopyIcon, DownloadIcon, Link2Icon } from "@radix-ui/react-icons";
+import { useEffect } from "react";
+import { useCallback } from "react";
 
 export type ShareProps = {
   isOpen: boolean;
   onClose: () => void;
 };
-
-const EXPORT_MARGIN_PX = 30;
 
 export const Share = ({ isOpen, onClose }: ShareProps) => {
   const cancelButtonRef = useRef(null);
@@ -17,19 +17,40 @@ export const Share = ({ isOpen, onClose }: ShareProps) => {
   const [hasCopiedSVG, setHasCopiedSVG] = useState(false);
   const { getNodes } = useReactFlow();
 
+  const shareLink = window.location.href;
+
+  const getSVGSource = useCallback(async () => {
+    const nodesBounds = getNodesBounds(getNodes());
+    const width = nodesBounds.width;
+    const height = nodesBounds.height;
+    const transform = getTransformForBounds(nodesBounds, width, height, 0.5, 2);
+    const cssTransform = `translate(${transform[0]}px, ${transform[1]}px) scale(${transform[2]})`;
+    return exportReactFlowToSVG(width, height, cssTransform);
+  }, [getNodes]);
+
+  const [previewImageURL, setPreviewImageURL] = useState<string | null>(null);
+  const needsPreviewBuild = useRef(true);
+  useEffect(() => {
+    if (!isOpen) {
+      needsPreviewBuild.current = true;
+      return;
+    }
+
+    const buildPreviewImage = async () => {
+      const svgSource = await getSVGSource();
+      setPreviewImageURL(URL.createObjectURL(new Blob([svgSource], { type: "image/svg+xml" })));
+      needsPreviewBuild.current = false;
+    };
+    buildPreviewImage();
+  }, [getSVGSource, isOpen]);
+
   const handleExportSVGToFile = async () => {
-    const nodesBounds = getRectOfNodes(getNodes());
-    const width = nodesBounds.width + EXPORT_MARGIN_PX * 2;
-    const height = nodesBounds.height + EXPORT_MARGIN_PX * 2;
-    const svgSource = await exportReactFlowToSVG(width, height);
+    const svgSource = await getSVGSource();
     downloadSVG(svgSource, "diagram.svg");
   };
 
   const handleCopySVG = async () => {
-    const nodesBounds = getRectOfNodes(getNodes());
-    const width = nodesBounds.width + EXPORT_MARGIN_PX * 2;
-    const height = nodesBounds.height + EXPORT_MARGIN_PX * 2;
-    const svgSource = await exportReactFlowToSVG(width, height);
+    const svgSource = await getSVGSource();
     await copySVG(svgSource);
     setHasCopiedSVG(true);
   };
@@ -73,6 +94,12 @@ export const Share = ({ isOpen, onClose }: ShareProps) => {
                   Share
                 </Dialog.Title>
 
+                {previewImageURL && (
+                  <div className="flex justify-center bg-gray-50 checkered">
+                    <img alt="diagram" className="h-[20vh]" src={previewImageURL} />
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-4 py-4 px-3">
                   {/* share link */}
                   <div className="flex flex-col gap-1">
@@ -87,7 +114,7 @@ export const Share = ({ isOpen, onClose }: ShareProps) => {
                           name="email"
                           placeholder="John Smith"
                           type="email"
-                          value={window.location.href}
+                          value={shareLink}
                           readOnly
                         />
                       </div>
