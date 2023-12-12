@@ -41,9 +41,12 @@ it("parses interfaces", () => {
   expect(C.extends.length).toBe(2);
   expect(C.extends[0].getText()).toBe("A");
   expect(C.extends[1].getText()).toBe("B");
-  expect(C.properties.length).toBe(1);
+  expect(C.properties.length).toBe(3);
   expect(C.properties[0].getName()).toBe("qux");
-  expect(C.methods.length).toBe(0);
+  expect(C.properties[1].getName()).toBe("foo");
+  expect(C.properties[2].getName()).toBe("baz");
+  expect(C.methods.length).toBe(1);
+  expect(C.methods[0].getName()).toBe("bar");
 });
 
 it("parses type aliases", () => {

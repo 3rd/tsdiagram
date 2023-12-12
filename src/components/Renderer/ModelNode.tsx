@@ -19,6 +19,16 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
   const { model } = data;
   const options = useUserOptions();
 
+  const hasSourceHandle = useMemo(() => {
+    if (model.type === "interface") {
+      return model.extends.some((item) => item instanceof Object);
+    }
+    if (model.type === "class") {
+      return model.extends instanceof Object || model.implements.some((item) => item instanceof Object);
+    }
+    return false;
+  }, [model]);
+
   const hasTargetHandle = useMemo(() => model.dependants.length > 0, [model.dependants]);
 
   const classes = useMemo(() => {
@@ -87,10 +97,11 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         // generics
         const argumentFragments: JSX.Element[] = [];
 
-        for (const argument of field.arguments) {
+        for (let i = 0; i < field.arguments.length; i++) {
+          const argument = field.arguments[i];
           const argumentKey = `${model.id}-${field.name}-${
             argument instanceof Object ? argument.name : argument
-          }`;
+          }-${i}`;
 
           // of model references
           if (argument instanceof Object) {
@@ -221,6 +232,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
   const modelName = useMemo(() => {
     const nameParts = [model.name];
+
     if (model.arguments.length > 0) {
       const argumentsParts = [];
       for (const argument of model.arguments) {
@@ -232,6 +244,27 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       }
       nameParts.push(`<${argumentsParts.join(", ")}>`);
     }
+
+    if (model.type === "interface" && model.extends.length > 0) {
+      const extendParts = [];
+      for (const extendedItem of model.extends) {
+        extendParts.push(extendedItem instanceof Object ? extendedItem.name : extendedItem);
+      }
+      nameParts.push(` extends ${extendParts.join(", ")}`);
+    }
+
+    if (model.type === "class" && model.extends) {
+      nameParts.push(` extends ${model.extends instanceof Object ? model.extends.name : model.extends}`);
+    }
+
+    if (model.type === "class" && model.implements.length > 0) {
+      const implementParts = [];
+      for (const implementedItem of model.implements) {
+        implementParts.push(implementedItem instanceof Object ? implementedItem.name : implementedItem);
+      }
+      nameParts.push(` implements ${implementParts.join(", ")}`);
+    }
+
     return nameParts.join("");
   }, [model]);
 
@@ -250,6 +283,15 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         />
         {/* title */}
         {modelName}
+        {/* source handle */}
+        <CustomHandle
+          className={classNames(classes.handles.source, {
+            hidden: !hasSourceHandle,
+          })}
+          id={`${model.id}-source`}
+          position={Position.Right}
+          type="source"
+        />
       </div>
       {/* fields */}
       {model.schema.length > 0 && (

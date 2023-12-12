@@ -10,6 +10,7 @@ it("parses top level type aliases and interfaces into models", () => {
   expect(models[0]).toEqual({
     id: "A",
     name: "A",
+    extends: [],
     schema: [{ name: "a", type: "string" }],
     dependencies: [],
     dependants: [],
@@ -35,6 +36,7 @@ it("parses exported top level type aliases and interfaces into models", () => {
   expect(models[0]).toEqual({
     id: "A",
     name: "A",
+    extends: [],
     schema: [{ name: "a", type: "string" }],
     dependencies: [],
     dependants: [],
@@ -53,10 +55,14 @@ it("parses exported top level type aliases and interfaces into models", () => {
 });
 
 it("supports type aliases with kind != TypeLiteral", () => {
-  const parser = new ModelParser("type A = string; type B = { field: A };");
+  const parser = new ModelParser(`
+    type A = string;
+    type B = { field: A };
+    type C = { field: Record<A, A> };
+  `);
   const models = parser.getModels();
 
-  expect(models.length).toBe(2);
+  expect(models.length).toBe(3);
   expect(models[0]).toEqual({
     id: "A",
     name: "A",
@@ -67,7 +73,11 @@ it("supports type aliases with kind != TypeLiteral", () => {
       },
     ],
     dependencies: [],
-    dependants: [expect.objectContaining({ name: "B" })],
+    dependants: [
+      //
+      expect.objectContaining({ name: "B" }),
+      expect.objectContaining({ name: "C" }),
+    ],
     type: "typeAlias",
     arguments: [],
   });
@@ -80,12 +90,31 @@ it("supports type aliases with kind != TypeLiteral", () => {
     type: "typeAlias",
     arguments: [],
   });
+  expect(models[2]).toEqual({
+    id: "C",
+    name: "C",
+    schema: [
+      {
+        name: "field",
+        type: "reference",
+        referenceName: "Record",
+        arguments: [expect.objectContaining({ name: "A" }), expect.objectContaining({ name: "A" })],
+      },
+    ],
+    dependencies: [
+      //
+      expect.objectContaining({ name: "A" }),
+    ],
+    dependants: [],
+    type: "typeAlias",
+    arguments: [],
+  });
 });
 
 it("supports declaration merging", () => {
   const parser = new ModelParser(`
     interface A { a: string; }
-    interface A { b: string; }
+    interface A { a: string; b: string; }
   `);
   const models = parser.getModels();
 
@@ -93,6 +122,7 @@ it("supports declaration merging", () => {
   expect(models[0]).toEqual({
     id: "A",
     name: "A",
+    extends: [],
     schema: [
       { name: "a", type: "string" },
       { name: "b", type: "string" },
@@ -221,6 +251,7 @@ it("parses type alias functions and interface methods", () => {
   expect(models[0]).toEqual({
     id: "B",
     name: "B",
+    extends: [],
     schema: [
       {
         name: "b",
@@ -267,6 +298,7 @@ it("parses generic alias and interface arguments", () => {
   expect(models[0]).toEqual({
     id: "B",
     name: "B",
+    extends: [],
     schema: [{ name: "b", type: "T" }],
     dependencies: [],
     dependants: [],
@@ -300,6 +332,46 @@ it("parses classes", () => {
     name: "A",
     schema: [{ name: "foo", type: "string" }],
     dependencies: [],
+    dependants: [expect.objectContaining({ name: "C" })],
+    type: "class",
+    arguments: [],
+    implements: [],
+  });
+  expect(models[1]).toEqual({
+    id: "B",
+    name: "B",
+    schema: [
+      {
+        name: "bar",
+        type: "function",
+        arguments: [],
+        returnType: "string",
+      },
+    ],
+    dependencies: [],
+    dependants: [expect.objectContaining({ name: "C" })],
+    type: "class",
+    arguments: [],
+    implements: [],
+  });
+  expect(models[2]).toEqual({
+    id: "C",
+    name: "C",
+    extends: expect.objectContaining({ name: "A" }),
+    implements: [expect.objectContaining({ name: "B" })],
+    schema: [
+      {
+        name: "foo",
+        type: "string",
+      },
+      {
+        name: "bar",
+        type: "function",
+        arguments: [],
+        returnType: "string",
+      },
+    ],
+    dependencies: [expect.objectContaining({ name: "A" }), expect.objectContaining({ name: "B" })],
     dependants: [],
     type: "class",
     arguments: [],

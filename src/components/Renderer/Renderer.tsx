@@ -146,11 +146,47 @@ const extractModelNodes = (models: Model[]) => {
   });
 };
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {}) => {
   const result: Edge[] = [];
 
   let count = 1;
   for (const model of models) {
+    if (model.type === "interface") {
+      for (const extended of model.extends) {
+        if (extended instanceof Object) {
+          result.push({
+            ...sharedEdgeProps,
+            id: `${count++}-${model.id}-${extended.id}`,
+            source: model.id,
+            target: extended.id,
+          });
+        }
+      }
+    }
+
+    if (model.type === "class") {
+      if (model.extends instanceof Object) {
+        result.push({
+          ...sharedEdgeProps,
+          id: `${count++}-${model.id}-${model.extends.id}`,
+          source: model.id,
+          target: model.extends.id,
+        });
+      }
+
+      for (const implemented of model.implements) {
+        if (implemented instanceof Object) {
+          result.push({
+            ...sharedEdgeProps,
+            id: `${count++}-${model.id}-${implemented.id}`,
+            source: model.id,
+            target: implemented.id,
+          });
+        }
+      }
+    }
+
     for (const field of model.schema) {
       // direct model reference
       if (field.type instanceof Object) {

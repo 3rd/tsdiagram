@@ -31,8 +31,9 @@ export type ParsedClass = {
   name: string;
   declaration: ClassDeclaration;
   extends?: ExpressionWithTypeArguments;
-  properties: PropertyDeclaration[];
-  methods: MethodDeclaration[];
+  implements: ExpressionWithTypeArguments[];
+  properties: (PropertyDeclaration | PropertySignature)[];
+  methods: (MethodDeclaration | MethodSignature)[];
 };
 
 export class Parser {
@@ -79,28 +80,62 @@ export class Parser {
   }
 
   get interfaces(): ParsedInterface[] {
-    const result = new Map<string, ParsedInterface>();
+    const result = new Map<
+      string,
+      {
+        interface: ParsedInterface;
+        propertyNames: Set<string>;
+        methodNames: Set<string>;
+      }
+    >();
     const declarations = this.source.getInterfaces();
 
     for (const declaration of declarations) {
       const name = declaration.getName();
 
-      const item: ParsedInterface = result.get(name) ?? {
-        name,
-        declaration,
-        extends: [],
-        properties: [],
-        methods: [],
+      const item = result.get(name) ?? {
+        interface: {
+          name,
+          declaration,
+          extends: [],
+          properties: [],
+          methods: [],
+        },
+        propertyNames: new Set(),
+        methodNames: new Set(),
       };
 
-      item.extends.push(...declaration.getExtends());
-      item.properties.push(...declaration.getProperties());
-      item.methods.push(...declaration.getMethods());
+      item.interface.extends.push(...declaration.getExtends());
+
+      const checkerType = this.checker.getTypeAtLocation(declaration);
+      if (!checkerType.isInterface()) continue;
+
+      for (const property of checkerType.getProperties()) {
+        const propertyName = property.getName();
+        const valueDeclaration = property.getValueDeclaration();
+        if (!valueDeclaration) continue;
+
+        if (valueDeclaration.getKindName() === "PropertySignature") {
+          if (item.propertyNames.has(propertyName)) {
+            continue;
+          }
+          item.interface.properties.push(valueDeclaration as PropertySignature);
+          item.propertyNames.add(propertyName);
+        } else if (valueDeclaration.getKindName() === "MethodSignature") {
+          if (item.methodNames.has(propertyName)) {
+            continue;
+          }
+          item.interface.methods.push(valueDeclaration as MethodSignature);
+          item.methodNames.add(propertyName);
+        } else {
+          // console.error("Unexpected interface property kind", valueDeclaration.getKindName());
+        }
+      }
 
       result.set(name, item);
     }
 
-    return Array.from(result.values());
+    return Array.from(result.values()).map(({ interface: item }) => item);
   }
 
   get typeAliases(): ParsedTypeAlias[] {
@@ -118,38 +153,62 @@ export class Parser {
   }
 
   get classes(): ParsedClass[] {
-    const result = new Map<string, ParsedClass>();
+    const result = new Map<
+      string,
+      {
+        class: ParsedClass;
+        propertyNames: Set<string>;
+        methodNames: Set<string>;
+      }
+    >();
     const declarations = this.source.getClasses();
 
     for (const declaration of declarations) {
       const name = declaration.getName();
       if (!name) continue;
 
-      const item: ParsedClass = result.get(name) ?? {
-        name,
-        declaration,
-        extends: declaration.getExtends(),
-        properties: [],
-        methods: [],
+      const item = result.get(name) ?? {
+        class: {
+          name,
+          declaration,
+          extends: declaration.getExtends(),
+          implements: declaration.getImplements(),
+          properties: [],
+          methods: [],
+        },
+        propertyNames: new Set(),
+        methodNames: new Set(),
       };
 
-      item.properties.push(...declaration.getProperties());
-      item.methods.push(...declaration.getMethods());
+      const checkerType = this.checker.getTypeAtLocation(declaration);
 
-      let baseClass = declaration.getBaseClass();
-      while (baseClass) {
-        const baseName = baseClass.getName();
-        if (!baseName) break;
+      for (const property of checkerType.getProperties()) {
+        const propertyName = property.getName();
+        const valueDeclaration = property.getValueDeclaration();
+        if (!valueDeclaration) continue;
 
-        item.properties.push(...baseClass.getProperties());
-        item.methods.push(...baseClass.getMethods());
-
-        baseClass = baseClass.getBaseClass();
+        if (
+          valueDeclaration.getKindName() === "PropertySignature" ||
+          valueDeclaration.getKindName() === "PropertyDeclaration"
+        ) {
+          if (item.propertyNames.has(propertyName)) continue;
+          item.class.properties.push(valueDeclaration as PropertySignature);
+          item.propertyNames.add(propertyName);
+        } else if (
+          valueDeclaration.getKindName() === "MethodSignature" ||
+          valueDeclaration.getKindName() === "MethodDeclaration"
+        ) {
+          if (item.methodNames.has(propertyName)) continue;
+          item.class.methods.push(valueDeclaration as MethodSignature);
+          item.methodNames.add(propertyName);
+        } else {
+          // console.error("Unexpected class property kind", valueDeclaration.getKindName());
+        }
       }
 
       result.set(name, item);
     }
 
-    return Array.from(result.values());
+    return Array.from(result.values()).map(({ class: item }) => item);
   }
 }
