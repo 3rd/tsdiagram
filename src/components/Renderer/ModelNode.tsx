@@ -65,6 +65,14 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
       let hasFieldSourceHandle = false;
 
+      if (field.optional) {
+        keyFragments.push(
+          <span key={`${model.id}-${field.name}-optional`} className={classes.field.defaultTypeColor}>
+            ?
+          </span>
+        );
+      }
+
       // model reference
       if (field.type instanceof Object) {
         hasFieldSourceHandle = true;

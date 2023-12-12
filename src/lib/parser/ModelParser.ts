@@ -10,16 +10,15 @@ import {
 } from "ts-morph";
 import { ParsedClass, ParsedInterface, ParsedTypeAlias, Parser } from "./Parser";
 
-type DefaultSchemaField = { name: string; type: Model | string };
-type ArraySchemaField = { name: string; type: "array"; elementType: Model | (string & {}) };
-type ReferenceSchemaField = {
-  name: string;
+type SharedSchemaField = { name: string; optional: boolean };
+type DefaultSchemaField = SharedSchemaField & { type: Model | string };
+type ArraySchemaField = SharedSchemaField & { type: "array"; elementType: Model | (string & {}) };
+type ReferenceSchemaField = SharedSchemaField & {
   type: "reference";
   referenceName: string;
   arguments: (Model | (string & {}))[];
 };
-type FunctionSchemaField = {
-  name: string;
+type FunctionSchemaField = SharedSchemaField & {
   type: "function";
   arguments: { name: string; type: Model | string }[];
   returnType: Model | [Model | (string & {})] | (string & {});
@@ -249,11 +248,17 @@ export class ModelParser extends Parser {
           const returnTypeModel = modelNameToModelMap.get(returnTypeName);
           if (returnTypeModel) dependencies.add(returnTypeModel);
 
+          let optional = false;
+          if (prop.isKind(ts.SyntaxKind.PropertySignature)) {
+            optional = prop.hasQuestionToken();
+          }
+
           model.schema.push({
             name,
             type: "function",
             arguments: functionArguments,
             returnType: isArray ? [returnTypeModel ?? returnTypeName] : returnTypeModel ?? returnTypeName,
+            optional,
           });
           return true;
         }
@@ -271,10 +276,16 @@ export class ModelParser extends Parser {
         const elementTypeName = trimImport(elementType.getText());
         const elementTypeModel = modelNameToModelMap.get(elementTypeName);
 
+        let optional = false;
+        if (prop.isKind(ts.SyntaxKind.PropertySignature)) {
+          optional = prop.hasQuestionToken();
+        }
+
         model.schema.push({
           name,
           type: "array",
           elementType: elementTypeModel ?? elementTypeName,
+          optional,
         });
         if (elementTypeModel) dependencies.add(elementTypeModel);
 
@@ -302,11 +313,17 @@ export class ModelParser extends Parser {
           const genericModel = modelNameToModelMap.get(genericName);
           if (genericModel) dependencies.add(genericModel);
 
+          let optional = false;
+          if (prop.isKind(ts.SyntaxKind.PropertySignature)) {
+            optional = prop.hasQuestionToken();
+          }
+
           const schemaField: ReferenceSchemaField = {
             name,
             type: "reference",
             referenceName: genericName,
             arguments: [],
+            optional,
           };
 
           for (const [i, typeArgument] of typeArguments.entries()) {
@@ -340,9 +357,16 @@ export class ModelParser extends Parser {
 
         const typeModel = modelNameToModelMap.get(typeName);
         if (typeModel) dependencies.add(typeModel);
+
+        let optional = false;
+        if (prop.isKind(ts.SyntaxKind.PropertySignature)) {
+          optional = prop.hasQuestionToken();
+        }
+
         model.schema.push({
           name,
           type: typeModel ?? typeName,
+          optional,
         });
       };
 
@@ -364,7 +388,7 @@ export class ModelParser extends Parser {
             item.node.type.isUnion(),
           ].some(Boolean)
         ) {
-          model.schema.push({ name: "==>", type: item.node.type.getText() });
+          model.schema.push({ name: "==>", type: item.node.type.getText(), optional: false });
           continue;
         }
 
