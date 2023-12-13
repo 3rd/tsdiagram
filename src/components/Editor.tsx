@@ -52,7 +52,7 @@ export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProp
       vimModeRef.current = initVimMode(mountedEditor, vimStatusLineRef.current);
       vimModeRef.current.on("vim-mode-change", ({ mode }) => {
         if (!editorRef.current) return;
-        mountedEditor.updateOptions({ cursorStyle: mode.toString() === "insert" ? "line" : "block" });
+        mountedEditor.updateOptions({ cursorStyle: mode === "insert" ? "line" : "block" });
       });
     }
   };
