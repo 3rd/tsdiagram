@@ -143,7 +143,10 @@ const extractModelNodes = (models: Model[]) => {
       id: model.id,
       type: "model",
       position: { x: -1, y: -1 },
-      data: { model },
+      data: {
+        model,
+        highlighted: false,
+      },
     };
   });
 };
@@ -513,6 +516,47 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
   const handleNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
     manuallyMovedNodesSet.current.add(node.id);
   }, []);
+  const handleNodeMouseEnter = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      let hasAnyHighlight = false;
+      const updatedNodes = nodes.map((curr) => {
+        let highlight = false;
+        if (curr.id === node.id) highlight = true;
+        if (curr.data.model.dependencies.some((dependency) => dependency.id === node.id)) highlight = true;
+        if (curr.data.model.dependants.some((dependant) => dependant.id === node.id)) highlight = true;
+        if (highlight) {
+          hasAnyHighlight = true;
+          return { ...curr, data: { ...curr.data, highlighted: true } };
+        }
+        return curr;
+      });
+      setNodes(updatedNodes);
+
+      if (!hasAnyHighlight) return;
+      const updatedEdges = edges.map((curr) => {
+        let highlight = false;
+        if (curr.source === node.id) highlight = true;
+        if (curr.target === node.id) highlight = true;
+        if (highlight) {
+          return { ...curr, animated: true };
+        }
+        return { ...curr, style: { ...curr.style, opacity: "0.35" } };
+      });
+      setEdges(updatedEdges);
+    },
+    [edges, nodes, setEdges, setNodes]
+  );
+  const handleNodeMouseLeave = useCallback(() => {
+    const updatedNodes = nodes.map((curr) => {
+      return { ...curr, data: { ...curr.data, highlighted: false } };
+    });
+    setNodes(updatedNodes);
+
+    const updatedEdges = edges.map((curr) => {
+      return { ...curr, animated: false, style: { ...curr.style, opacity: "1" } };
+    });
+    setEdges(updatedEdges);
+  }, [edges, nodes, setEdges, setNodes]);
 
   // enable animation after the initial render
   useEffect(() => {
@@ -562,6 +606,8 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
         onMouseDownCapture={handleMouseDown}
         onMove={handleMove}
         onNodeDragStop={handleNodeDragStop}
+        onNodeMouseEnter={handleNodeMouseEnter}
+        onNodeMouseLeave={handleNodeMouseLeave}
         onNodesChange={onNodesChange}
       >
         <Panel position="top-center">

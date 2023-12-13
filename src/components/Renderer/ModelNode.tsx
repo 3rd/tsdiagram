@@ -13,11 +13,14 @@ import { CustomHandle } from "./CustomHandle";
 
 export type ModelNodeProps = {
   id: string;
-  data: { model: Model };
+  data: {
+    model: Model;
+    highlighted: boolean;
+  };
 };
 
 export const ModelNode = ({ id, data }: ModelNodeProps) => {
-  const { model } = data;
+  const { model, highlighted } = data;
   const options = useUserOptions();
 
   const hasSourceHandle = useMemo(() => {
@@ -37,11 +40,14 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
     const isLightTheme = options.renderer.theme === "light";
     return {
       root: classNames("shadow-md"),
-      header: classNames("relative px-1.5 py-0.5 text-white rounded-t", {
-        "bg-blue-700": isLightTheme,
-        "bg-blue-600": isDarkTheme,
-        "rounded-b": model.schema.length === 0,
-      }),
+      header: classNames(
+        "relative px-1.5 py-0.5 text-white rounded-t",
+        isLightTheme && (highlighted ? "bg-blue-500" : "bg-blue-700"),
+        isDarkTheme && (highlighted ? "bg-blue-500" : "bg-blue-600"),
+        {
+          "rounded-b": model.schema.length === 0,
+        }
+      ),
       fieldsWrapper: classNames("bg-gray-50 flex flex-col", {
         "border-x border-b border-blue-800": isLightTheme,
       }),
@@ -57,7 +63,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         target: classNames("w-2 h-2 bg-blue-500"),
       },
     };
-  }, [model.schema.length, options.renderer.theme]);
+  }, [highlighted, model.schema.length, options.renderer.theme]);
 
   // eslint-disable-next-line sonarjs/cognitive-complexity
   const fieldRows = useMemo(() => {
