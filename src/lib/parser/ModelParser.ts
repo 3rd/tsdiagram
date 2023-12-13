@@ -14,9 +14,9 @@ import { ParsedClass, ParsedInterface, ParsedTypeAlias, Parser } from "./Parser"
 type SharedSchemaField = { name: string; optional: boolean };
 type DefaultSchemaField = SharedSchemaField & { type: Model | string };
 type ArraySchemaField = SharedSchemaField & { type: "array"; elementType: Model | (string & {}) };
-type ReferenceSchemaField = SharedSchemaField & {
-  type: "reference";
-  referenceName: string;
+type GenericSchemaField = SharedSchemaField & {
+  type: "generic";
+  genericName: string;
   arguments: (Model | (string & {}))[];
 };
 type FunctionSchemaField = SharedSchemaField & {
@@ -24,7 +24,7 @@ type FunctionSchemaField = SharedSchemaField & {
   arguments: { name: string; type: Model | string }[];
   returnType: Model | [Model | (string & {})] | (string & {});
 };
-type SchemaField = ArraySchemaField | DefaultSchemaField | FunctionSchemaField | ReferenceSchemaField;
+type SchemaField = ArraySchemaField | DefaultSchemaField | FunctionSchemaField | GenericSchemaField;
 type Prop =
   | GetAccessorDeclaration
   | MethodDeclaration
@@ -36,14 +36,14 @@ type Prop =
 export const isArraySchemaField = (field: SchemaField): field is ArraySchemaField => {
   return field.type === "array";
 };
-export const isReferenceSchemaField = (field: SchemaField): field is ReferenceSchemaField => {
-  return field.type === "reference";
+export const isGenericSchemaField = (field: SchemaField): field is GenericSchemaField => {
+  return field.type === "generic";
 };
 export const isFunctionSchemaField = (field: SchemaField): field is FunctionSchemaField => {
   return field.type === "function";
 };
 export const isDefaultSchemaField = (field: SchemaField): field is DefaultSchemaField => {
-  return !isArraySchemaField(field) && !isReferenceSchemaField(field);
+  return !isArraySchemaField(field) && !isGenericSchemaField(field);
 };
 
 type ModelBase = {
@@ -321,10 +321,10 @@ export class ModelParser extends Parser {
             optional = prop.hasQuestionToken();
           }
 
-          const schemaField: ReferenceSchemaField = {
+          const schemaField: GenericSchemaField = {
             name: propName,
-            type: "reference",
-            referenceName: genericName,
+            type: "generic",
+            genericName,
             arguments: [],
             optional,
           };

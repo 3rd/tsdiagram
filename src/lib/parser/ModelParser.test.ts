@@ -91,8 +91,8 @@ it("supports type aliases with kind != TypeLiteral", () => {
     schema: [
       {
         name: "field",
-        type: "reference",
-        referenceName: "Record",
+        type: "generic",
+        genericName: "Record",
         arguments: [expect.objectContaining({ name: "A" }), expect.objectContaining({ name: "A" })],
         optional: false,
       },
@@ -182,7 +182,7 @@ it("parses arrays of models", () => {
   });
 });
 
-it("parses references", () => {
+it("parses generics", () => {
   const parser = new ModelParser(`
     type A = { a: Array<string> };
     type B = { b: Record<string, A> };
@@ -206,8 +206,8 @@ it("parses references", () => {
     schema: [
       {
         name: "b",
-        type: "reference",
-        referenceName: "Record",
+        type: "generic",
+        genericName: "Record",
         arguments: ["string", expect.objectContaining({ name: "A" })],
         optional: false,
       },
@@ -223,8 +223,8 @@ it("parses references", () => {
     schema: [
       {
         name: "c",
-        type: "reference",
-        referenceName: "Map",
+        type: "generic",
+        genericName: "Map",
         arguments: [expect.objectContaining({ name: "A" }), expect.objectContaining({ name: "A" })],
         optional: false,
       },

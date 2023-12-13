@@ -5,7 +5,7 @@ import {
   Model,
   isArraySchemaField,
   isFunctionSchemaField,
-  isReferenceSchemaField,
+  isGenericSchemaField,
 } from "../../lib/parser/ModelParser";
 import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
@@ -73,7 +73,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         );
       }
 
-      // model reference
+      // reference
       if (field.type instanceof Object) {
         hasFieldSourceHandle = true;
         typeFragments.push(
@@ -101,7 +101,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
             >{`${field.elementType}[]`}</span>
           );
         }
-      } else if (isReferenceSchemaField(field)) {
+      } else if (isGenericSchemaField(field)) {
         // generics
         const argumentFragments: JSX.Element[] = [];
 
@@ -131,7 +131,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
         // add separated by ", "
         typeFragments.push(
-          <span key="prefix" className={classes.field.defaultTypeColor}>{`${field.referenceName}<`}</span>,
+          <span key="prefix" className={classes.field.defaultTypeColor}>{`${field.genericName}<`}</span>,
           <span key="generic" className={classes.field.modelTypeColor}>
             {argumentFragments.map((fragment, index) => (
               <span key={fragment.key}>

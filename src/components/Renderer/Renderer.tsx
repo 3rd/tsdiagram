@@ -27,7 +27,7 @@ import {
   Model,
   isArraySchemaField,
   isFunctionSchemaField,
-  isReferenceSchemaField,
+  isGenericSchemaField,
 } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
@@ -212,7 +212,7 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
       }
 
       // generics
-      if (isReferenceSchemaField(field)) {
+      if (isGenericSchemaField(field)) {
         for (const argument of field.arguments) {
           if (argument instanceof Object) {
             result.push({
