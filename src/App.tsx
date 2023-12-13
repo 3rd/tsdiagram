@@ -6,7 +6,6 @@ import { Editor } from "./components/Editor";
 import { RendererWrapper } from "./components/Renderer";
 import { Preferences } from "./components/Preferences";
 import { Share } from "./components/Share";
-import { useDocuments } from "./stores/documents";
 import { useUserOptions } from "./stores/user-options";
 import type { themes } from "./themes";
 import "./App.css";
@@ -14,16 +13,7 @@ import "./App.css";
 function App() {
   const [showPreferences, setShowPreferences] = useState(false);
   const [showShare, setShowShare] = useState(false);
-  const documents = useDocuments();
   const options = useUserOptions();
-
-  const handleSourceChange = useCallback(
-    (value: string | undefined) => {
-      documents.currentDocument.source = value ?? "";
-      documents.save();
-    },
-    [documents]
-  );
 
   const handlePreferencesClick = useCallback(() => {
     setShowPreferences((value) => !value);
@@ -42,13 +32,11 @@ function App() {
             editorChildren={
               <Editor
                 editingMode={options.editor.editingMode}
-                source={documents.currentDocument.source}
                 theme={options.editor.theme as keyof typeof themes}
-                onChange={handleSourceChange}
               />
             }
             options={options}
-            rendererChildren={<RendererWrapper source={documents.currentDocument.source} />}
+            rendererChildren={<RendererWrapper />}
           />
         </main>
         <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />

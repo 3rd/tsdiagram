@@ -1,7 +1,8 @@
-import { ComponentProps, memo, useEffect, useRef } from "react";
+import { ComponentProps, memo, useCallback, useEffect, useRef } from "react";
 import MonacoEditor, { useMonaco } from "@monaco-editor/react";
 import { InitVimModeResult, initVimMode } from "monaco-vim";
 import { themes } from "../themes";
+import { useDocuments } from "../stores/documents";
 
 type MonacoMountHandler = ComponentProps<typeof MonacoEditor>["onMount"];
 type IStandaloneCodeEditor = Parameters<Exclude<MonacoMountHandler, undefined>>[0];
@@ -17,19 +18,26 @@ const editorOptions: ComponentProps<typeof MonacoEditor>["options"] = {
 };
 
 export type EditorProps = {
-  source: string;
-  onChange: (source?: string) => void;
   theme?: keyof typeof themes;
   editingMode?: "default" | "vim";
 };
 
-export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProps) => {
+export const Editor = memo(({ theme, editingMode }: EditorProps) => {
+  const documents = useDocuments();
   const monaco = useMonaco();
   const editorRef = useRef<IStandaloneCodeEditor | null>(null);
   const vimModeRef = useRef<InitVimModeResult | null>(null);
   const vimStatusLineRef = useRef<HTMLDivElement>(null);
 
   const isVimMode = editingMode === "vim";
+
+  const handleSourceChange = useCallback(
+    (value: string | undefined) => {
+      documents.currentDocument.source = value ?? "";
+      documents.save();
+    },
+    [documents]
+  );
 
   useEffect(() => {
     if (!monaco) return;
@@ -76,8 +84,8 @@ export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProp
       <MonacoEditor
         defaultLanguage="typescript"
         options={editorOptions}
-        value={source}
-        onChange={onChange}
+        value={documents.currentDocument.source}
+        onChange={handleSourceChange}
         onMount={handleMount}
       />
       {isVimMode && <div ref={vimStatusLineRef} className="text-sm text-gray-900 bg-gray-100 vim-status" />}

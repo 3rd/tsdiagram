@@ -532,7 +532,8 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
         edgeTypes={edgeTypes}
         edges={edges}
         fitViewOptions={fitViewOptions}
-        maxZoom={1.5}
+        maxZoom={2}
+        minZoom={0.2}
         nodeTypes={nodeTypes}
         nodes={nodes}
         nodesConnectable={false}
