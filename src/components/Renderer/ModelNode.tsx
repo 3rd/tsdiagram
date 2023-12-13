@@ -6,6 +6,7 @@ import {
   isArraySchemaField,
   isFunctionSchemaField,
   isGenericSchemaField,
+  isUnionSchemaField,
 } from "../../lib/parser/ModelParser";
 import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
@@ -58,6 +59,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
     };
   }, [model.schema.length, options.renderer.theme]);
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   const fieldRows = useMemo(() => {
     return model.schema.map((field) => {
       const keyFragments: JSX.Element[] = [<span key={`${model.id}-${field.name}`}>{field.name}</span>];
@@ -210,6 +212,42 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
             </span>
           );
         }
+      } else if (isUnionSchemaField(field)) {
+        const unionFragments: JSX.Element[] = [];
+
+        for (let i = 0; i < field.types.length; i++) {
+          const type = field.types[i];
+          const typeKey = `${model.id}-${field.name}-${type instanceof Object ? type.name : type}-${i}`;
+
+          // of model references
+          if (type instanceof Object) {
+            hasFieldSourceHandle = true;
+            unionFragments.push(
+              <span key={typeKey} className={classes.field.modelTypeColor}>
+                {type.name}
+              </span>
+            );
+          } else {
+            // of primitives
+            unionFragments.push(
+              <span key={typeKey} className={classes.field.defaultTypeColor}>
+                {type}
+              </span>
+            );
+          }
+        }
+
+        // add separated by " | "
+        typeFragments.push(
+          <span key="union" className={classes.field.defaultTypeColor}>
+            {unionFragments.map((fragment, index) => (
+              <span key={fragment.key}>
+                {fragment}
+                {index < unionFragments.length - 1 && " | "}
+              </span>
+            ))}
+          </span>
+        );
       } else {
         // default
         typeFragments.push(

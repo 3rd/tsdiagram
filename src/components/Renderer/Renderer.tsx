@@ -28,6 +28,7 @@ import {
   isArraySchemaField,
   isFunctionSchemaField,
   isGenericSchemaField,
+  isUnionSchemaField,
 } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
@@ -211,7 +212,7 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
         });
       }
 
-      // generics
+      // generic
       if (isGenericSchemaField(field)) {
         for (const argument of field.arguments) {
           if (argument instanceof Object) {
@@ -226,7 +227,7 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
         }
       }
 
-      // functions
+      // function
       if (isFunctionSchemaField(field)) {
         if (Array.isArray(field.returnType)) {
           const returnType = field.returnType[0];
@@ -247,6 +248,21 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
             target: field.returnType.id,
             sourceHandle: `${model.id}-source-${field.name}`,
           });
+        }
+      }
+
+      // union
+      if (isUnionSchemaField(field)) {
+        for (const unionType of field.types) {
+          if (unionType instanceof Object) {
+            result.push({
+              ...sharedEdgeProps,
+              id: `${count++}-${model.id}-${field.name}-${unionType.id}`,
+              source: model.id,
+              target: unionType.id,
+              sourceHandle: `${model.id}-source-${field.name}`,
+            });
+          }
         }
       }
     }

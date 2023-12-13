@@ -13,18 +13,25 @@ import { ParsedClass, ParsedInterface, ParsedTypeAlias, Parser } from "./Parser"
 
 type SharedSchemaField = { name: string; optional: boolean };
 type DefaultSchemaField = SharedSchemaField & { type: Model | string };
-type ArraySchemaField = SharedSchemaField & { type: "array"; elementType: Model | (string & {}) };
+type ArraySchemaField = SharedSchemaField & { type: "array"; elementType: Model | string };
 type GenericSchemaField = SharedSchemaField & {
   type: "generic";
   genericName: string;
-  arguments: (Model | (string & {}))[];
+  arguments: (Model | string)[];
 };
 type FunctionSchemaField = SharedSchemaField & {
   type: "function";
   arguments: { name: string; type: Model | string }[];
-  returnType: Model | [Model | (string & {})] | (string & {});
+  returnType: Model | string | [Model | string];
 };
-type SchemaField = ArraySchemaField | DefaultSchemaField | FunctionSchemaField | GenericSchemaField;
+type UnionSchemaField = SharedSchemaField & { type: "union"; types: (Model | string)[] };
+type SchemaField =
+  | ArraySchemaField
+  | DefaultSchemaField
+  | FunctionSchemaField
+  | GenericSchemaField
+  | UnionSchemaField;
+
 type Prop =
   | GetAccessorDeclaration
   | MethodDeclaration
@@ -41,6 +48,9 @@ export const isGenericSchemaField = (field: SchemaField): field is GenericSchema
 };
 export const isFunctionSchemaField = (field: SchemaField): field is FunctionSchemaField => {
   return field.type === "function";
+};
+export const isUnionSchemaField = (field: SchemaField): field is UnionSchemaField => {
+  return field.type === "union";
 };
 export const isDefaultSchemaField = (field: SchemaField): field is DefaultSchemaField => {
   return !isArraySchemaField(field) && !isGenericSchemaField(field);
@@ -390,10 +400,23 @@ export class ModelParser extends Parser {
             item.node.type.isEnum(),
             item.node.type.isEnumLiteral(),
             item.node.type.isLiteral(),
-            item.node.type.isUnion(),
           ].some(Boolean)
         ) {
           model.schema.push({ name: "==>", type: item.node.type.getText(), optional: false });
+          continue;
+        }
+
+        if (item.node.type.isUnion()) {
+          const types: (Model | (string & {}))[] = [];
+          for (const type of item.node.type.getUnionTypes()) {
+            const typeName = trimImport(type.getText());
+            const typeModel = modelNameToModelMap.get(typeName);
+            if (typeModel) dependencies.add(typeModel);
+            types.push(typeModel ?? typeName);
+          }
+
+          model.schema.push({ name: "==>", type: "union", types, optional: false });
+          dependencyMap.set(item.name, dependencies);
           continue;
         }
 
