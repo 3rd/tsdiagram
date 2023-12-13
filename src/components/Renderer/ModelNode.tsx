@@ -48,9 +48,12 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
           "rounded-b": model.schema.length === 0,
         }
       ),
-      fieldsWrapper: classNames("bg-gray-50 flex flex-col", {
-        "border-x border-b border-blue-800": isLightTheme,
-      }),
+      fieldsWrapper: classNames(
+        "bg-gray-50 flex flex-col",
+        isLightTheme && highlighted
+          ? "border-x border-b border-blue-500"
+          : "border-x border-b border-blue-800"
+      ),
       field: {
         root: classNames("odd:bg-gray-50 even:bg-gray-100 leading-tight text-sm"),
         keyCell: classNames("pr-4 pl-2 text-gray-950"),
