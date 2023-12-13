@@ -96,22 +96,20 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
                   )}
 
                   {/* editing mode */}
-                  {!isMobile && (
-                    <div className="flex flex-col gap-1">
-                      <label className="text-sm font-medium leading-6 text-gray-900" htmlFor="editing-mode">
-                        Editing mode
-                      </label>
-                      <select
-                        className="block py-1.5 pr-10 pl-3 mt-2 w-full text-gray-900 rounded-md border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-indigo-600"
-                        id="editing-mode"
-                        value={options.editor.editingMode}
-                        onChange={handleEditingModeChange}
-                      >
-                        <option value="default">Default</option>
-                        <option value="vim">Vim</option>
-                      </select>
-                    </div>
-                  )}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium leading-6 text-gray-900" htmlFor="editing-mode">
+                      Editing mode
+                    </label>
+                    <select
+                      className="block py-1.5 pr-10 pl-3 mt-2 w-full text-gray-900 rounded-md border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-indigo-600"
+                      id="editing-mode"
+                      value={options.editor.editingMode}
+                      onChange={handleEditingModeChange}
+                    >
+                      <option value="default">Default</option>
+                      <option value="vim">Vim</option>
+                    </select>
+                  </div>
 
                   {/* theme */}
                   <div className="flex gap-2">

@@ -39,16 +39,21 @@ export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProp
   }, [monaco, theme]);
 
   const handleMount: MonacoMountHandler = (mountedEditor, mountedMonaco) => {
+    if (!vimStatusLineRef.current) throw new Error("vimStatusLineRef.current is null");
     editorRef.current = mountedEditor;
 
     const compilerOptions = mountedMonaco.languages.typescript.typescriptDefaults.getCompilerOptions();
     compilerOptions.target = mountedMonaco.languages.typescript.ScriptTarget.Latest;
     compilerOptions.lib = ["esnext"];
     mountedMonaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
-    mountedEditor.layout();
+    mountedEditor.updateOptions({ tabSize: 2, cursorStyle: isVimMode ? "block" : "line" });
 
     if (isVimMode) {
-      vimModeRef.current = initVimMode(mountedEditor, document.createElement("div"));
+      vimModeRef.current = initVimMode(mountedEditor, vimStatusLineRef.current);
+      vimModeRef.current.on("vim-mode-change", ({ mode }) => {
+        if (!editorRef.current) return;
+        mountedEditor.updateOptions({ cursorStyle: mode.toString() === "insert" ? "line" : "block" });
+      });
     }
   };
 
@@ -56,15 +61,18 @@ export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProp
     if (isVimMode) {
       if (vimModeRef.current) return;
       if (!editorRef.current) return;
-      vimModeRef.current = initVimMode(editorRef.current, document.createElement("div"));
+      if (!vimStatusLineRef.current) return;
+      vimModeRef.current = initVimMode(editorRef.current, vimStatusLineRef.current);
+      editorRef.current.updateOptions({ cursorStyle: "block" });
     } else {
       vimModeRef.current?.dispose();
       vimModeRef.current = null;
+      editorRef.current?.updateOptions({ cursorStyle: "line" });
     }
   }, [isVimMode]);
 
   return (
-    <>
+    <div className="flex flex-col h-full">
       <MonacoEditor
         defaultLanguage="typescript"
         options={editorOptions}
@@ -72,7 +80,7 @@ export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProp
         onChange={onChange}
         onMount={handleMount}
       />
-      {isVimMode && <div ref={vimStatusLineRef} />}
-    </>
+      {isVimMode && <div ref={vimStatusLineRef} className="text-sm text-gray-900 bg-gray-100 vim-status" />}
+    </div>
   );
 });
