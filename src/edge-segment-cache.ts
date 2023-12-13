@@ -8,7 +8,7 @@ type CacheEntry = {
 };
 
 const cache = new Map<string, CacheEntry>();
-const pointSet = new Set<string>();
+// const pointSet = new Set<string>();
 
 const edgeSegmentCache = {
   get: (id: string) => cache.get(id),

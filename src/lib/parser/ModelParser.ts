@@ -5,6 +5,7 @@ import {
   PropertyDeclaration,
   PropertySignature,
   SetAccessorDeclaration,
+  Type,
   TypeReferenceNode,
   ts,
 } from "ts-morph";
@@ -221,9 +222,11 @@ export class ModelParser extends Parser {
       const dependencies = dependencyMap.get(item.name) ?? new Set<Model>();
 
       // helpers
-      const addFunctionProp = (prop: Prop) => {
-        const name = prop.getName();
-        const callSignatures = prop.getType().getCallSignatures();
+      const addFunctionProp = (prop: Prop, type?: Type) => {
+        const propName = prop.getName();
+        const propType = type ?? prop.getType();
+
+        const callSignatures = propType.getCallSignatures();
 
         if (callSignatures.length === 1) {
           const callSignature = callSignatures[0];
@@ -249,12 +252,12 @@ export class ModelParser extends Parser {
           if (returnTypeModel) dependencies.add(returnTypeModel);
 
           let optional = false;
-          if (prop.isKind(ts.SyntaxKind.PropertySignature)) {
+          if (prop.isKind?.(ts.SyntaxKind.PropertySignature)) {
             optional = prop.hasQuestionToken();
           }
 
           model.schema.push({
-            name,
+            name: propName,
             type: "function",
             arguments: functionArguments,
             returnType: isArray ? [returnTypeModel ?? returnTypeName] : returnTypeModel ?? returnTypeName,
@@ -266,10 +269,11 @@ export class ModelParser extends Parser {
         return false;
       };
 
-      const addArrayProp = (prop: Prop) => {
-        if (!prop.getType().isArray()) return false;
+      const addArrayProp = (prop: Prop, type?: Type) => {
+        const propName = prop.getName();
+        const propType = type ?? prop.getType();
 
-        const name = prop.getName();
+        if (!propType.isArray()) return false;
 
         const elementType = prop.getType().getArrayElementType();
         if (!elementType) return false;
@@ -282,7 +286,7 @@ export class ModelParser extends Parser {
         }
 
         model.schema.push({
-          name,
+          name: propName,
           type: "array",
           elementType: elementTypeModel ?? elementTypeName,
           optional,
@@ -292,14 +296,13 @@ export class ModelParser extends Parser {
         return true;
       };
 
-      const addGenericProp = (prop: Prop) => {
-        const name = prop.getName();
+      const addGenericProp = (prop: Prop, type?: Type) => {
+        const propName = prop.getName();
+        const propType = type ?? prop.getType();
 
-        const aliasSymbol = prop.getType().getAliasSymbol();
-        const symbol = aliasSymbol ?? prop.getType().getSymbol();
-        const typeArguments = aliasSymbol
-          ? prop.getType().getAliasTypeArguments()
-          : prop.getType().getTypeArguments();
+        const aliasSymbol = propType.getAliasSymbol();
+        const symbol = aliasSymbol ?? propType.getSymbol();
+        const typeArguments = aliasSymbol ? propType.getAliasTypeArguments() : propType.getTypeArguments();
         const typeNode =
           "getTypeNode" in prop ? (prop.getTypeNode() as TypeReferenceNode | undefined) : undefined;
         const typeNodeArguments = typeNode?.isKind(ts.SyntaxKind.TypeReference)
@@ -319,7 +322,7 @@ export class ModelParser extends Parser {
           }
 
           const schemaField: ReferenceSchemaField = {
-            name,
+            name: propName,
             type: "reference",
             referenceName: genericName,
             arguments: [],
@@ -345,12 +348,14 @@ export class ModelParser extends Parser {
         return false;
       };
 
-      const addDefaultProp = (prop: Prop) => {
-        const name = prop.getName();
-        let typeName = trimImport(prop.getType().getText());
+      // FIXME: type these functions, prop is Symbol when Type is provided
+      const addDefaultProp = (prop: Prop, type?: Type) => {
+        const propName = prop.getName();
+        const propType = type ?? prop.getType();
+        let typeName = trimImport(propType.getText());
 
-        const symbolDeclaration = prop.getSymbol()?.getDeclarations()[0];
-        if (symbolDeclaration && symbolDeclaration.isKind(ts.SyntaxKind.PropertySignature)) {
+        const symbolDeclaration = prop.getSymbol?.()?.getDeclarations()?.[0];
+        if (symbolDeclaration?.isKind(ts.SyntaxKind.PropertySignature)) {
           const declarationName = symbolDeclaration.getTypeNode()?.getText();
           if (declarationName) typeName = trimImport(declarationName);
         }
@@ -359,12 +364,12 @@ export class ModelParser extends Parser {
         if (typeModel) dependencies.add(typeModel);
 
         let optional = false;
-        if (prop.isKind(ts.SyntaxKind.PropertySignature)) {
+        if (prop.isKind?.(ts.SyntaxKind.PropertySignature)) {
           optional = prop.hasQuestionToken();
         }
 
         model.schema.push({
-          name,
+          name: propName,
           type: typeModel ?? typeName,
           optional,
         });
@@ -392,12 +397,27 @@ export class ModelParser extends Parser {
           continue;
         }
 
-        for (const prop of item.node.type.getProperties()) {
-          const valueDeclaration = prop.getValueDeclaration() as PropertySignature;
-          if (addFunctionProp(valueDeclaration)) continue;
-          if (addArrayProp(valueDeclaration)) continue;
-          if (addGenericProp(valueDeclaration)) continue;
-          addDefaultProp(valueDeclaration);
+        const typeAtLocation = this.checker.getTypeAtLocation(item.node.declaration);
+
+        for (const prop of typeAtLocation.getProperties()) {
+          const valueDeclaration = prop.getValueDeclaration() as PropertyDeclaration | undefined;
+
+          if (valueDeclaration) {
+            if (addFunctionProp(valueDeclaration)) continue;
+            if (addArrayProp(valueDeclaration)) continue;
+            if (addGenericProp(valueDeclaration)) continue;
+            addDefaultProp(valueDeclaration);
+          } else {
+            const propType = this.checker.getTypeOfSymbolAtLocation(prop, item.node.declaration);
+            // @ts-expect-error
+            if (addFunctionProp(prop as unknown, propType)) continue;
+            // @ts-expect-error
+            if (addArrayProp(prop as unknown, propType)) continue;
+            // @ts-expect-error
+            if (addGenericProp(prop as unknown, propType)) continue;
+            // @ts-expect-error
+            addDefaultProp(prop as unknown, propType);
+          }
         }
       }
 

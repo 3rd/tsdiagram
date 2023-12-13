@@ -1,7 +1,7 @@
 import { useNodes, BezierEdge, EdgeProps, XYPosition } from "reactflow";
 import { PathFindingFunction, SVGDrawFunction, getSmartEdge } from "@tisoap/react-flow-smart-edge";
 import { JumpPointFinder, DiagonalMovement } from "pathfinding";
-import { edgeSegmentCache } from "../../edge-segment-cache";
+// import { edgeSegmentCache } from "../../edge-segment-cache";
 import { Direction } from "../../types";
 
 const toPoint = ([x, y]: number[]): XYPosition => ({ x, y });
