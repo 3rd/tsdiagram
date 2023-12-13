@@ -1,6 +1,10 @@
-import { ComponentProps, memo, useEffect } from "react";
+import { ComponentProps, memo, useEffect, useRef } from "react";
 import MonacoEditor, { useMonaco } from "@monaco-editor/react";
+import { InitVimModeResult, initVimMode } from "monaco-vim";
 import { themes } from "../themes";
+
+type MonacoMountHandler = ComponentProps<typeof MonacoEditor>["onMount"];
+type IStandaloneCodeEditor = Parameters<Exclude<MonacoMountHandler, undefined>>[0];
 
 const editorOptions: ComponentProps<typeof MonacoEditor>["options"] = {
   minimap: { enabled: false },
@@ -16,26 +20,67 @@ export type EditorProps = {
   source: string;
   onChange: (source?: string) => void;
   theme?: keyof typeof themes;
+  editingMode?: "default" | "vim";
 };
 
-export const Editor = memo(({ source, onChange, theme }: EditorProps) => {
+export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProps) => {
   const monaco = useMonaco();
+  const editorRef = useRef<IStandaloneCodeEditor | null>(null);
+  const vimModeRef = useRef<InitVimModeResult | null>(null);
+  const vimStatusLineRef = useRef<HTMLDivElement>(null);
+
+  const isVimMode = editingMode === "vim";
 
   useEffect(() => {
     if (!monaco) return;
-    monaco.editor.defineTheme(
-      "theme",
-      themes[theme ?? "vsLight"] as Parameters<typeof monaco.editor.defineTheme>[1]
-    );
+    const themeConfig = themes[theme ?? "vsLight"] as Parameters<typeof monaco.editor.defineTheme>[1];
+    monaco.editor.defineTheme("theme", themeConfig);
     monaco.editor.setTheme("theme");
-
-    const options = monaco.languages.typescript.typescriptDefaults.getCompilerOptions();
-    options.target = monaco.languages.typescript.ScriptTarget.Latest;
-    options.lib = ["esnext"];
-    monaco.languages.typescript.typescriptDefaults.setCompilerOptions(options);
   }, [monaco, theme]);
 
+  const handleMount: MonacoMountHandler = (mountedEditor, mountedMonaco) => {
+    if (!vimStatusLineRef.current) throw new Error("vimStatusLineRef.current is null");
+    editorRef.current = mountedEditor;
+
+    const compilerOptions = mountedMonaco.languages.typescript.typescriptDefaults.getCompilerOptions();
+    compilerOptions.target = mountedMonaco.languages.typescript.ScriptTarget.Latest;
+    compilerOptions.lib = ["esnext"];
+    mountedMonaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
+    mountedEditor.updateOptions({ tabSize: 2, cursorStyle: isVimMode ? "block" : "line" });
+
+    if (isVimMode) {
+      vimModeRef.current = initVimMode(mountedEditor, vimStatusLineRef.current);
+      vimModeRef.current.on("vim-mode-change", ({ mode }) => {
+        if (!editorRef.current) return;
+        mountedEditor.updateOptions({ cursorStyle: mode.toString() === "insert" ? "line" : "block" });
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (isVimMode) {
+      if (vimModeRef.current) return;
+      if (!editorRef.current) return;
+      if (!vimStatusLineRef.current) return;
+      vimModeRef.current = initVimMode(editorRef.current, vimStatusLineRef.current);
+      editorRef.current.updateOptions({ cursorStyle: "block" });
+    } else {
+      vimModeRef.current?.dispose();
+      vimModeRef.current = null;
+      editorRef.current?.updateOptions({ cursorStyle: "line" });
+    }
+  }, [isVimMode]);
+
   return (
-    <MonacoEditor defaultLanguage="typescript" options={editorOptions} value={source} onChange={onChange} />
+    <div className="flex flex-col h-full">
+      <MonacoEditor
+        defaultLanguage="typescript"
+        options={editorOptions}
+        value={source}
+        onChange={onChange}
+        onMount={handleMount}
+      />
+      {isVimMode && <div ref={vimStatusLineRef} className="text-sm text-gray-900 bg-gray-100 vim-status" />}
+    </div>
   );
 });

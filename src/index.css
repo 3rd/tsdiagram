@@ -33,3 +33,7 @@ body {
     0 0,
     10px 10px;
 }
+
+.vim-status input {
+  @apply bg-gray-100;
+}
