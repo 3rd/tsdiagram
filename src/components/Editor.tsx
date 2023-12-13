@@ -39,7 +39,6 @@ export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProp
   }, [monaco, theme]);
 
   const handleMount: MonacoMountHandler = (mountedEditor, mountedMonaco) => {
-    if (!vimStatusLineRef.current) throw new Error("vimStatusLineRef.current is null");
     editorRef.current = mountedEditor;
 
     const compilerOptions = mountedMonaco.languages.typescript.typescriptDefaults.getCompilerOptions();
@@ -49,6 +48,7 @@ export const Editor = memo(({ source, onChange, theme, editingMode }: EditorProp
     mountedEditor.updateOptions({ tabSize: 2, cursorStyle: isVimMode ? "block" : "line" });
 
     if (isVimMode) {
+      if (!vimStatusLineRef.current) throw new Error("vimStatusLineRef.current is null");
       vimModeRef.current = initVimMode(mountedEditor, vimStatusLineRef.current);
       vimModeRef.current.on("vim-mode-change", ({ mode }) => {
         if (!editorRef.current) return;
