@@ -33,6 +33,7 @@ import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
 import { HeightIcon, TransformIcon, WidthIcon } from "@radix-ui/react-icons";
+import { edgeSegmentCache } from "../../edge-segment-cache";
 
 const AUTO_LAYOUT_THROTTLE_MS = 120;
 
@@ -509,6 +510,12 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     previousPanelDirection.current = options.panels.splitDirection;
     requestIdleCallback(() => fitView(fitViewOptions));
   }, [fitView, fitViewOptions, options.panels.splitDirection, options.renderer]);
+
+  // reset segment cache when nodes change
+  useEffect(() => {
+    edgeSegmentCache.clear();
+    // eslint-disable-next-line react-hooks-addons/no-unused-deps
+  }, [nodes]);
 
   // console.log("@render", { nodes, edges });
 
