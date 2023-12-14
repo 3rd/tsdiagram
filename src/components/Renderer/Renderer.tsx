@@ -33,9 +33,16 @@ import {
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
-import { HeightIcon, TransformIcon, WidthIcon } from "@radix-ui/react-icons";
+import {
+  HeightIcon,
+  TransformIcon,
+  WidthIcon,
+  EnterFullScreenIcon,
+  ExitFullScreenIcon,
+} from "@radix-ui/react-icons";
 import { edgeSegmentCache } from "../../edge-segment-cache";
 import { graphStore } from "../../stores/graph";
+import { useFullscreen } from "../../hooks/useFullscreen";
 
 const AUTO_LAYOUT_THROTTLE_MS = 120;
 
@@ -542,10 +549,15 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     // eslint-disable-next-line react-hooks-addons/no-unused-deps
   }, [nodes]);
 
+  // fullscreen
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { isFullscreen, toggleFullscreen } = useFullscreen(containerRef);
+
   // console.log("@render", { nodes, edges });
 
   return (
     <div
+      ref={containerRef}
       className={classNames("flex flex-1 w-full h-full", {
         "bg-gray-50": options.renderer.theme === "light",
         "bg-stone-800": options.renderer.theme === "dark",
@@ -575,14 +587,15 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
         onNodeMouseLeave={handleNodeMouseLeave}
         onNodesChange={onNodesChange}
       >
+        {/* main panel */}
         <Panel position="top-center">
           <div
             ref={panelRef}
             className={classNames(
-              "flex flex-nowrap bg-opacity-90 overflow-hidden rounded-md shadow-md text-gray-800 whitespace-nowrap",
+              "flex flex-nowrap bg-opacity-90 overflow-hidden rounded-md shadow-md text-gray-800 whitespace-nowrap mt-0.5",
               {
-                "bg-gray-100": options.renderer.theme === "light",
-                "bg-stone-100": options.renderer.theme === "dark",
+                "bg-gray-50": options.renderer.theme === "light",
+                "bg-stone-50": options.renderer.theme === "dark",
               }
             )}
           >
@@ -602,6 +615,28 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
             <button className="flex gap-1 items-center py-0.5 px-2 text-sm" onClick={handleDirectionToggle}>
               <span>Orientation:</span>{" "}
               {options.renderer.direction === "vertical" ? <HeightIcon /> : <WidthIcon />}
+            </button>
+          </div>
+        </Panel>
+
+        {/* top right panel */}
+        <Panel position="top-right">
+          <div
+            className={classNames("flex flex-nowrap overflow-hidden text-gray-800 whitespace-nowrap rounded")}
+          >
+            {/* fullscreen */}
+            <button
+              className={classNames("flex gap-1 items-center p-0.5 text-sm", {
+                "text-gray-600 hover:text-blue-600": options.renderer.theme === "light",
+                "text-gray-500 hover:text-white": options.renderer.theme === "dark",
+              })}
+              onClick={toggleFullscreen}
+            >
+              {isFullscreen ? (
+                <ExitFullScreenIcon height={18} width={18} />
+              ) : (
+                <EnterFullScreenIcon height={18} width={18} />
+              )}
             </button>
           </div>
         </Panel>
