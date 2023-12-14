@@ -1,8 +1,10 @@
+import { useMemo } from "react";
 import { useNodes, BezierEdge, EdgeProps, XYPosition } from "reactflow";
 import { PathFindingFunction, SVGDrawFunction, getSmartEdge } from "@tisoap/react-flow-smart-edge";
 import { JumpPointFinder, DiagonalMovement } from "pathfinding";
-// import { edgeSegmentCache } from "../../edge-segment-cache";
 import { Direction } from "../../types";
+import { useIsEdgeDecorated } from "../../stores/graph";
+// import { edgeSegmentCache } from "../../edge-segment-cache";
 
 const toPoint = ([x, y]: number[]): XYPosition => ({ x, y });
 // const toXYPosition = ({ x, y }: XYPosition): [number, number] => [x, y];
@@ -101,51 +103,62 @@ const drawEdge: SVGDrawFunction = (source, target, path) => {
   return svgPath;
 };
 
+const generatePath: PathFindingFunction = (grid, start, end) => {
+  try {
+    // @ts-ignore
+    const finder = new JumpPointFinder({ diagonalMovement: DiagonalMovement.Never });
+    const fullPath = finder.findPath(start.x, start.y, end.x, end.y, grid);
+    if (fullPath.length === 0) return null;
+    return { fullPath, smoothedPath: fullPath };
+  } catch {
+    return null;
+  }
+};
+
 export const CustomEdge = (edge: EdgeProps) => {
   const nodes = useNodes();
+  const { highlighted, faded } = useIsEdgeDecorated(edge);
 
-  const generatePath: PathFindingFunction = (grid, start, end) => {
-    try {
-      // @ts-ignore
-      const finder = new JumpPointFinder({ diagonalMovement: DiagonalMovement.Never });
-      const fullPath = finder.findPath(start.x, start.y, end.x, end.y, grid);
-      if (fullPath.length === 0) return null;
-      return { fullPath, smoothedPath: fullPath };
-    } catch {
-      return null;
-    }
-  };
+  const edgeStyle = useMemo(() => {
+    return {
+      ...edge.style,
+      strokeWidth: highlighted ? 2 : 1,
+      strokeOpacity: faded ? 0.5 : 1,
+    };
+  }, [edge.style, faded, highlighted]);
 
-  const getSmartEdgeResponse = getSmartEdge({
-    sourcePosition: edge.sourcePosition,
-    targetPosition: edge.targetPosition,
-    sourceX: edge.sourceX,
-    sourceY: edge.sourceY,
-    targetX: edge.targetX,
-    targetY: edge.targetY,
-    nodes,
-    options: {
-      drawEdge,
-      generatePath,
-      nodePadding: 10,
-      gridRatio: 8,
-    },
-  });
+  const getSmartEdgeResponse = useMemo(
+    () =>
+      getSmartEdge({
+        sourcePosition: edge.sourcePosition,
+        targetPosition: edge.targetPosition,
+        sourceX: edge.sourceX,
+        sourceY: edge.sourceY,
+        targetX: edge.targetX,
+        targetY: edge.targetY,
+        nodes,
+        options: {
+          drawEdge,
+          generatePath,
+          nodePadding: 2,
+          gridRatio: 13,
+        },
+      }),
+    [edge.sourcePosition, edge.targetPosition, edge.sourceX, edge.sourceY, edge.targetX, edge.targetY, nodes]
+  );
 
   if (getSmartEdgeResponse === null) {
-    return <BezierEdge {...edge} />;
+    return <BezierEdge {...edge} style={edgeStyle} />;
   }
-
-  const { svgPathString } = getSmartEdgeResponse;
 
   return (
     <>
       <path
         className="react-flow__edge-path"
-        d={svgPathString}
+        d={getSmartEdgeResponse.svgPathString}
         markerEnd={edge.markerEnd}
         markerStart={edge.markerStart}
-        style={edge.style}
+        style={edgeStyle}
       />
     </>
   );

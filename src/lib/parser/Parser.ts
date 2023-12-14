@@ -4,6 +4,7 @@ import {
   InterfaceDeclaration,
   MethodDeclaration,
   MethodSignature,
+  ModuleDeclaration,
   Project,
   PropertyDeclaration,
   PropertySignature,
@@ -89,11 +90,20 @@ export class Parser {
         methodNames: Set<string>;
       }
     >();
-    const declarations = this.source.getInterfaces();
+    const declarations: { declaration: InterfaceDeclaration; module: ModuleDeclaration | null }[] =
+      this.source.getInterfaces().map((declaration) => ({
+        declaration,
+        module: null,
+      }));
     const declarationMembersMap = new Map<string, Set<string>>();
 
-    for (const declaration of declarations) {
-      const name = declaration.getName();
+    for (const module of this.source.getModules()) {
+      const moduleDeclarations = module.getInterfaces();
+      declarations.push(...moduleDeclarations.map((declaration) => ({ declaration, module })));
+    }
+
+    for (const { module, declaration } of declarations) {
+      const name = module ? `${module.getName()}.${declaration.getName()}` : declaration.getName();
 
       const declarationMembers = declarationMembersMap.get(name) ?? new Set<string>();
       for (const member of declaration.getProperties()) {
@@ -171,10 +181,18 @@ export class Parser {
 
   get typeAliases(): ParsedTypeAlias[] {
     const result: ParsedTypeAlias[] = [];
-    const declarations = this.source.getTypeAliases();
+    const declarations: {
+      declaration: TypeAliasDeclaration;
+      module: ModuleDeclaration | null;
+    }[] = this.source.getTypeAliases().map((declaration) => ({ declaration, module: null }));
 
-    for (const declaration of declarations) {
-      const name = declaration.getName();
+    for (const module of this.source.getModules()) {
+      const moduleDeclarations = module.getTypeAliases();
+      declarations.push(...moduleDeclarations.map((declaration) => ({ declaration, module })));
+    }
+
+    for (const { declaration, module } of declarations) {
+      const name = module ? `${module.getName()}.${declaration.getName()}` : declaration.getName();
       const type = declaration.getType();
 
       result.push({ name, declaration, type });
@@ -192,10 +210,20 @@ export class Parser {
         methodNames: Set<string>;
       }
     >();
-    const declarations = this.source.getClasses();
+    const declarations: { declaration: ClassDeclaration; module: ModuleDeclaration | null }[] = this.source
+      .getClasses()
+      .map((declaration) => ({
+        declaration,
+        module: null,
+      }));
 
-    for (const declaration of declarations) {
-      const name = declaration.getName();
+    for (const module of this.source.getModules()) {
+      const moduleDeclarations = module.getClasses();
+      declarations.push(...moduleDeclarations.map((declaration) => ({ declaration, module })));
+    }
+
+    for (const { declaration, module } of declarations) {
+      const name = module ? `${module.getName()}.${declaration.getName()}` : declaration.getName();
       if (!name) continue;
 
       const item = result.get(name) ?? {

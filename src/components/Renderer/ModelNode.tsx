@@ -10,18 +10,17 @@ import {
 } from "../../lib/parser/ModelParser";
 import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
+import { useIsNodeHighlighted } from "../../stores/graph";
 
 export type ModelNodeProps = {
   id: string;
-  data: {
-    model: Model;
-    highlighted: boolean;
-  };
+  data: { model: Model };
 };
 
 export const ModelNode = ({ id, data }: ModelNodeProps) => {
-  const { model, highlighted } = data;
+  const { model } = data;
   const options = useUserOptions();
+  const highlighted = useIsNodeHighlighted(model);
 
   const hasSourceHandle = useMemo(() => {
     if (model.type === "interface") {

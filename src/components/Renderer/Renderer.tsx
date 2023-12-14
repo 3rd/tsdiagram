@@ -35,6 +35,7 @@ import { CustomEdge } from "./CustomEdge";
 import { useUserOptions, UserOptions } from "../../stores/user-options";
 import { HeightIcon, TransformIcon, WidthIcon } from "@radix-ui/react-icons";
 import { edgeSegmentCache } from "../../edge-segment-cache";
+import { graphStore } from "../../stores/graph";
 
 const AUTO_LAYOUT_THROTTLE_MS = 120;
 
@@ -66,7 +67,7 @@ const getLayoutedElements = async ({
     "elk.layered.nodePlacement.strategy": "LINEAR_SEGMENTS",
     "elk.layered.layering.strategy": "LONGEST_PATH",
     "elk.layered.spacing.edgeNodeBetweenLayers": "30",
-    "elk.layered.spacing.nodeNodeBetweenLayers": "40",
+    "elk.layered.spacing.nodeNodeBetweenLayers": "50",
     "elk.spacing.nodeNode": "50",
     "elk.spacing.componentComponent": "50",
     "elk.separateConnectedComponents": "false",
@@ -143,10 +144,7 @@ const extractModelNodes = (models: Model[]) => {
       id: model.id,
       type: "model",
       position: { x: -1, y: -1 },
-      data: {
-        model,
-        highlighted: false,
-      },
+      data: { model },
     };
   });
 };
@@ -342,7 +340,8 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
       AUTO_LAYOUT_THROTTLE_MS,
       { leading: true, trailing: true }
     );
-  }, [fitView, fitViewOptions, getEdges, getNodes, options, setEdges, setNodes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitView, fitViewOptions, getEdges, getNodes, options]);
   const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
 
   // parse source
@@ -392,7 +391,8 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
 
     setNodes(updatedNodes);
     setEdges(parsedEdges);
-  }, [parsedEdges, parsedNodes, setEdges, setNodes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedEdges, parsedNodes]);
 
   // cache computed nodes and trigger auto layout if their width or height changed
   const previousEdges = useRef<Edge[]>(edges);
@@ -516,47 +516,12 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
   const handleNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
     manuallyMovedNodesSet.current.add(node.id);
   }, []);
-  const handleNodeMouseEnter = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
-      let hasAnyHighlight = false;
-      const updatedNodes = nodes.map((curr) => {
-        let highlight = false;
-        if (curr.id === node.id) highlight = true;
-        if (curr.data.model.dependencies.some((dependency) => dependency.id === node.id)) highlight = true;
-        if (curr.data.model.dependants.some((dependant) => dependant.id === node.id)) highlight = true;
-        if (highlight) {
-          hasAnyHighlight = true;
-          return { ...curr, data: { ...curr.data, highlighted: true } };
-        }
-        return curr;
-      });
-      setNodes(updatedNodes);
-
-      if (!hasAnyHighlight) return;
-      const updatedEdges = edges.map((curr) => {
-        let highlight = false;
-        if (curr.source === node.id) highlight = true;
-        if (curr.target === node.id) highlight = true;
-        if (highlight) {
-          return { ...curr, animated: true };
-        }
-        return { ...curr, style: { ...curr.style, opacity: "0.35" } };
-      });
-      setEdges(updatedEdges);
-    },
-    [edges, nodes, setEdges, setNodes]
-  );
+  const handleNodeMouseEnter = useCallback((_event: React.MouseEvent, node: Node) => {
+    graphStore.state.hoveredNode = node;
+  }, []);
   const handleNodeMouseLeave = useCallback(() => {
-    const updatedNodes = nodes.map((curr) => {
-      return { ...curr, data: { ...curr.data, highlighted: false } };
-    });
-    setNodes(updatedNodes);
-
-    const updatedEdges = edges.map((curr) => {
-      return { ...curr, animated: false, style: { ...curr.style, opacity: "1" } };
-    });
-    setEdges(updatedEdges);
-  }, [edges, nodes, setEdges, setNodes]);
+    graphStore.state.hoveredNode = null;
+  }, []);
 
   // enable animation after the initial render
   useEffect(() => {
@@ -593,7 +558,7 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
         edges={edges}
         fitViewOptions={fitViewOptions}
         maxZoom={2}
-        minZoom={0.2}
+        minZoom={0.1}
         nodeTypes={nodeTypes}
         nodes={nodes}
         nodesConnectable={false}
