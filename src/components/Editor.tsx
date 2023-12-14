@@ -53,7 +53,8 @@ export const Editor = memo(({ theme, editingMode }: EditorProps) => {
     compilerOptions.target = mountedMonaco.languages.typescript.ScriptTarget.Latest;
     compilerOptions.lib = ["esnext"];
     mountedMonaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
-    mountedEditor.updateOptions({ tabSize: 2, cursorStyle: isVimMode ? "block" : "line" });
+    mountedEditor.updateOptions({ cursorStyle: isVimMode ? "block" : "line" });
+    mountedEditor.getModel()?.updateOptions({ tabSize: 2, indentSize: 2 });
 
     if (isVimMode) {
       if (!vimStatusLineRef.current) throw new Error("vimStatusLineRef.current is null");
