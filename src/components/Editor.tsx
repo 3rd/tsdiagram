@@ -55,6 +55,7 @@ export const Editor = memo(({ theme, editingMode }: EditorProps) => {
     mountedMonaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
     mountedEditor.updateOptions({ cursorStyle: isVimMode ? "block" : "line" });
     mountedEditor.getModel()?.updateOptions({ tabSize: 2, indentSize: 2 });
+    mountedEditor.focus();
 
     if (isVimMode) {
       if (!vimStatusLineRef.current) throw new Error("vimStatusLineRef.current is null");
