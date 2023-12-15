@@ -141,16 +141,15 @@ export const documentsStore = createStore<DocumentsStore>({
     this.save();
   },
   delete(id: string) {
-    const isCurrentDocument = this.currentDocumentId === id;
-    if (isCurrentDocument && this.documents.length === 1) {
+    if (this.documents.length === 1) {
       this.documents.push({
         id: nanoid(),
         title: "Untitled",
         source: "",
         lastModified: Date.now(),
       });
-      return;
     }
+    const isCurrentDocument = this.currentDocumentId === id;
     this.documents = this.documents.filter((d) => d.id !== id);
     if (isCurrentDocument) this.currentDocumentId = this.documents[0].id;
     this.save();
