@@ -3,6 +3,9 @@ import { z } from "zod";
 import { themes } from "../themes";
 
 const userOptionsSchema = z.object({
+  general: z.object({
+    sidebarOpen: z.boolean().default(true),
+  }),
   panels: z.object({
     splitDirection: z.enum(["horizontal", "vertical"]).default("horizontal"),
   }),
@@ -23,6 +26,9 @@ export type UserOptions = z.infer<typeof userOptionsSchema> & {
   save: () => void;
 };
 export const optionsStore = createStore<UserOptions>({
+  general: {
+    sidebarOpen: false,
+  },
   panels: {
     splitDirection: "horizontal",
   },
@@ -41,15 +47,14 @@ export const optionsStore = createStore<UserOptions>({
       const data = JSON.parse(localStorage.getItem("options") ?? "");
       const parsedData = userOptionsSchema.parse(data);
       parsedData.renderer.autoFitView = true;
-      this.panels = parsedData.panels;
-      this.editor = parsedData.editor;
-      this.renderer = parsedData.renderer;
+      Object.assign(this, parsedData);
     } catch {}
   },
   save() {
     localStorage.setItem(
       "options",
       JSON.stringify({
+        general: this.general,
         panels: this.panels,
         editor: this.editor,
         renderer: this.renderer,

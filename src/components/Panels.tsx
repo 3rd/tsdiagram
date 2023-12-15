@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import classNames from "classnames";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { UserOptions } from "../stores/user-options";
+import { useUserOptions } from "../stores/user-options";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 const defaultCodePanelSizePercentage = 50;
@@ -10,10 +10,10 @@ const mobileCodePanelSizePercentage = 60;
 type PanelsProps = {
   editorChildren: React.ReactNode;
   rendererChildren: React.ReactNode;
-  options: UserOptions;
 };
 
-export const Panels = ({ editorChildren, rendererChildren, options }: PanelsProps) => {
+export const Panels = ({ editorChildren, rendererChildren }: PanelsProps) => {
+  const options = useUserOptions();
   const isMobile = useIsMobile();
 
   const direction = isMobile ? "vertical" : options.panels.splitDirection;

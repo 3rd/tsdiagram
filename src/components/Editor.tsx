@@ -3,6 +3,7 @@ import MonacoEditor, { useMonaco } from "@monaco-editor/react";
 import { InitVimModeResult, initVimMode } from "monaco-vim";
 import { themes } from "../themes";
 import { useDocuments } from "../stores/documents";
+import { useUserOptions } from "../stores/user-options";
 
 type MonacoMountHandler = ComponentProps<typeof MonacoEditor>["onMount"];
 type IStandaloneCodeEditor = Parameters<Exclude<MonacoMountHandler, undefined>>[0];
@@ -17,23 +18,20 @@ const editorOptions: ComponentProps<typeof MonacoEditor>["options"] = {
   },
 };
 
-export type EditorProps = {
-  theme?: keyof typeof themes;
-  editingMode?: "default" | "vim";
-};
-
-export const Editor = memo(({ theme, editingMode }: EditorProps) => {
+export const Editor = memo(() => {
+  const options = useUserOptions();
   const documents = useDocuments();
+
   const monaco = useMonaco();
   const editorRef = useRef<IStandaloneCodeEditor | null>(null);
   const vimModeRef = useRef<InitVimModeResult | null>(null);
   const vimStatusLineRef = useRef<HTMLDivElement>(null);
 
-  const isVimMode = editingMode === "vim";
+  const isVimMode = options.editor.editingMode === "vim";
 
   const handleSourceChange = useCallback(
     (value: string | undefined) => {
-      documents.currentDocument.source = value ?? "";
+      documents.setCurrentDocumentSource(value ?? "");
       documents.save();
     },
     [documents]
@@ -41,10 +39,12 @@ export const Editor = memo(({ theme, editingMode }: EditorProps) => {
 
   useEffect(() => {
     if (!monaco) return;
-    const themeConfig = themes[theme ?? "vsLight"] as Parameters<typeof monaco.editor.defineTheme>[1];
+    const themeConfig = themes[(options.editor.theme as keyof typeof themes) ?? "vsLight"] as Parameters<
+      typeof monaco.editor.defineTheme
+    >[1];
     monaco.editor.defineTheme("theme", themeConfig);
     monaco.editor.setTheme("theme");
-  }, [monaco, theme]);
+  }, [monaco, options.editor.theme]);
 
   const handleMount: MonacoMountHandler = (mountedEditor, mountedMonaco) => {
     editorRef.current = mountedEditor;

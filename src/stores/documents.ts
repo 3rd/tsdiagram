@@ -1,14 +1,17 @@
 import { createStore, useStore } from "statelift";
 import { z } from "zod";
 import { decompressFromEncodedURIComponent, compressToEncodedURIComponent } from "lz-string";
+import { nanoid } from "nanoid";
+import isEqual from "lodash/isEqual";
 import * as examples from "../examples";
 
 const documentSchema = z.object({
   id: z.string(),
   title: z.string(),
   source: z.string(),
+  lastModified: z.number().default(Date.now()),
 });
-type Document = z.infer<typeof documentSchema>;
+export type Document = z.infer<typeof documentSchema>;
 
 const documentStateSchema = z.object({
   documents: z.array(documentSchema),
@@ -18,10 +21,23 @@ export type DocumentsState = z.infer<typeof documentStateSchema>;
 export type DocumentsStore = DocumentsState & {
   readonly currentDocument: Document;
   save: () => void;
+  create: () => void;
+  delete: (id: string) => void;
+  setCurrentDocumentId: (id: string) => void;
+  setCurrentDocumentTitle: (title: string) => void;
+  setCurrentDocumentSource: (source: string) => void;
+  sortByLastModified: () => void;
 };
 
 const defaultState: DocumentsState = {
-  documents: [{ id: "default", title: "Default", source: examples.taskManagement }],
+  documents: [
+    {
+      id: "default",
+      title: "Welcome",
+      source: examples.taskManagement,
+      lastModified: Date.now(),
+    },
+  ],
   currentDocumentId: "default",
 };
 
@@ -37,11 +53,14 @@ const saveLocalStorageState = (state: DocumentsState) => {
 };
 
 const saveURLState = (state: DocumentsState) => {
-  const compressed = compressToEncodedURIComponent(serializeState(state));
+  const monoState = {
+    documents: state.documents.filter((d) => d.id === state.currentDocumentId),
+    currentDocumentId: state.currentDocumentId,
+  };
+  const compressed = compressToEncodedURIComponent(serializeState(monoState));
   location.hash = `#/${compressed}`;
 };
 
-const localStorageStateString = localStorage.getItem("documents");
 const localStorageState = (() => {
   try {
     const data = JSON.parse(localStorage.getItem("documents") ?? "");
@@ -62,24 +81,104 @@ const urlState = (() => {
   return null;
 })();
 
+if (urlState && urlState.state.currentDocumentId === "default") {
+  urlState.state.currentDocumentId = nanoid();
+  urlState.state.documents[0].id = urlState.state.currentDocumentId;
+}
+
+const combinedState = localStorageState ?? urlState?.state ?? defaultState;
+
 if (localStorageState && !urlState) {
   saveURLState(localStorageState);
 }
 
-const hasLoadedForeignUrlState = Boolean(
-  urlState && localStorageStateString && urlState.string !== localStorageStateString
-);
+// merge url state into local state
+let hasIngestedForeignState = false;
+if (localStorageState && urlState) {
+  const urlDocumentId = urlState.state.currentDocumentId;
+  const urlDocument = urlState.state.documents.find((d) => d.id === urlDocumentId);
+  const localStorageDocument = localStorageState?.documents.find((d) => d.id === urlDocumentId);
+
+  // if we've seen this document before, update it
+  if (urlDocument && localStorageDocument) {
+    if (!isEqual(urlDocument, localStorageDocument)) {
+      localStorageDocument.title = urlDocument.title;
+      localStorageDocument.source = urlDocument.source;
+      hasIngestedForeignState = true;
+    }
+    combinedState.currentDocumentId = urlDocumentId;
+  }
+
+  // if it's a new document, ingest it
+  if (urlDocument && !localStorageDocument) {
+    combinedState.documents.unshift(urlDocument);
+    combinedState.currentDocumentId = urlDocumentId;
+    hasIngestedForeignState = true;
+  }
+}
 
 export const documentsStore = createStore<DocumentsStore>({
-  ...(urlState?.state ?? localStorageState ?? defaultState),
+  ...combinedState,
   get currentDocument() {
     const document = this.documents.find((doc: Document) => doc.id === this.currentDocumentId);
     if (!document) throw new Error("Document not found");
     return document;
   },
   save() {
-    if (!hasLoadedForeignUrlState) saveLocalStorageState(this);
+    saveLocalStorageState(this);
     saveURLState(this);
   },
+  create() {
+    const id = nanoid();
+    this.documents.unshift({
+      id,
+      title: "Untitled",
+      source: "",
+      lastModified: Date.now(),
+    });
+    this.currentDocumentId = id;
+    this.sortByLastModified();
+    this.save();
+  },
+  delete(id: string) {
+    const isCurrentDocument = this.currentDocumentId === id;
+    if (isCurrentDocument && this.documents.length === 1) {
+      this.documents.push({
+        id: nanoid(),
+        title: "Untitled",
+        source: "",
+        lastModified: Date.now(),
+      });
+      return;
+    }
+    this.documents = this.documents.filter((d) => d.id !== id);
+    if (isCurrentDocument) this.currentDocumentId = this.documents[0].id;
+    this.save();
+  },
+  setCurrentDocumentId(id: string) {
+    this.currentDocumentId = id;
+    this.save();
+  },
+  setCurrentDocumentTitle(title: string) {
+    this.currentDocument.title = title;
+    this.currentDocument.lastModified = Date.now();
+    this.sortByLastModified();
+    this.save();
+  },
+  setCurrentDocumentSource(source: string) {
+    this.currentDocument.source = source;
+    this.currentDocument.lastModified = Date.now();
+    this.sortByLastModified();
+    this.save();
+  },
+  sortByLastModified() {
+    this.documents.sort((a, b) => b.lastModified - a.lastModified);
+  },
 });
+
+if (hasIngestedForeignState) {
+  documentsStore.state.sortByLastModified();
+  documentsStore.state.save();
+}
+
 export const useDocuments = () => useStore(documentsStore);
