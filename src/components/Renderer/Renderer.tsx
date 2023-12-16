@@ -32,7 +32,7 @@ import {
 } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
-import { useUserOptions, UserOptions } from "../../stores/user-options";
+import { useUserOptions, UserOptions, optionsStore } from "../../stores/user-options";
 import {
   HeightIcon,
   TransformIcon,
@@ -493,33 +493,28 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
 
   // option handlers
   const handleAutoFitToggle = useCallback(() => {
-    options.renderer.autoFitView = !options.renderer.autoFitView;
+    optionsStore.renderer.autoFitView = !optionsStore.renderer.autoFitView;
     handleAutoLayout();
-  }, [handleAutoLayout, options.renderer]);
+  }, [handleAutoLayout]);
 
   const handleDirectionToggle = useCallback(() => {
-    options.renderer.direction = options.renderer.direction === "horizontal" ? "vertical" : "horizontal";
-    options.renderer.autoFitView = true;
-    options.save();
+    optionsStore.renderer.direction =
+      optionsStore.renderer.direction === "horizontal" ? "vertical" : "horizontal";
+    optionsStore.renderer.autoFitView = true;
+    optionsStore.save();
     handleAutoLayout();
-  }, [handleAutoLayout, options]);
+  }, [handleAutoLayout]);
 
   // interaction handlers
-  const handleMouseDown = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (event.target && panelRef.current?.contains(event.target as HTMLElement)) return;
-      options.renderer.autoFitView = false;
-    },
-    [options.renderer]
-  );
-  const handleMove = useCallback(
-    (event: MouseEvent | TouchEvent) => {
-      if (event instanceof WheelEvent) {
-        options.renderer.autoFitView = false;
-      }
-    },
-    [options.renderer]
-  );
+  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target && panelRef.current?.contains(event.target as HTMLElement)) return;
+    optionsStore.renderer.autoFitView = false;
+  }, []);
+  const handleMove = useCallback((event: MouseEvent | TouchEvent) => {
+    if (event instanceof WheelEvent) {
+      optionsStore.renderer.autoFitView = false;
+    }
+  }, []);
   const handleNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
     manuallyMovedNodesSet.current.add(node.id);
   }, []);

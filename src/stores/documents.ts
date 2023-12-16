@@ -1,8 +1,9 @@
-import { createStore, useStore } from "statelift";
+// import { createStore, useStore } from "statelift";
 import { z } from "zod";
 import { decompressFromEncodedURIComponent, compressToEncodedURIComponent } from "lz-string";
 import { nanoid } from "nanoid";
 import isEqual from "lodash/isEqual";
+import { proxy, useSnapshot } from "valtio";
 import * as examples from "../examples";
 
 const documentSchema = z.object({
@@ -117,7 +118,7 @@ if (localStorageState && urlState) {
   }
 }
 
-export const documentsStore = createStore<DocumentsStore>({
+export const documentsStore = proxy<DocumentsStore>({
   ...combinedState,
   get currentDocument() {
     const document = this.documents.find((doc: Document) => doc.id === this.currentDocumentId);
@@ -130,54 +131,54 @@ export const documentsStore = createStore<DocumentsStore>({
   },
   create() {
     const id = nanoid();
-    this.documents.unshift({
+    documentsStore.documents.unshift({
       id,
       title: "Untitled",
       source: "",
       lastModified: Date.now(),
     });
-    this.currentDocumentId = id;
-    this.sortByLastModified();
-    this.save();
+    documentsStore.currentDocumentId = id;
+    documentsStore.sortByLastModified();
+    documentsStore.save();
   },
   delete(id: string) {
-    if (this.documents.length === 1) {
-      this.documents.push({
+    if (documentsStore.documents.length === 1) {
+      documentsStore.documents.push({
         id: nanoid(),
         title: "Untitled",
         source: "",
         lastModified: Date.now(),
       });
     }
-    const isCurrentDocument = this.currentDocumentId === id;
-    this.documents = this.documents.filter((d) => d.id !== id);
-    if (isCurrentDocument) this.currentDocumentId = this.documents[0].id;
-    this.save();
+    const isCurrentDocument = documentsStore.currentDocumentId === id;
+    documentsStore.documents = documentsStore.documents.filter((d) => d.id !== id);
+    if (isCurrentDocument) documentsStore.currentDocumentId = documentsStore.documents[0].id;
+    documentsStore.save();
   },
   setCurrentDocumentId(id: string) {
-    this.currentDocumentId = id;
-    this.save();
+    documentsStore.currentDocumentId = id;
+    documentsStore.save();
   },
   setCurrentDocumentTitle(title: string) {
-    this.currentDocument.title = title;
-    this.currentDocument.lastModified = Date.now();
-    this.sortByLastModified();
-    this.save();
+    documentsStore.currentDocument.title = title;
+    documentsStore.currentDocument.lastModified = Date.now();
+    documentsStore.sortByLastModified();
+    documentsStore.save();
   },
   setCurrentDocumentSource(source: string) {
-    this.currentDocument.source = source;
-    this.currentDocument.lastModified = Date.now();
-    this.sortByLastModified();
-    this.save();
+    documentsStore.currentDocument.source = source;
+    documentsStore.currentDocument.lastModified = Date.now();
+    documentsStore.sortByLastModified();
+    documentsStore.save();
   },
   sortByLastModified() {
-    this.documents.sort((a, b) => b.lastModified - a.lastModified);
+    documentsStore.documents.sort((a, b) => b.lastModified - a.lastModified);
   },
 });
 
 if (hasIngestedForeignState) {
-  documentsStore.state.sortByLastModified();
-  documentsStore.state.save();
+  documentsStore.sortByLastModified();
+  documentsStore.save();
 }
 
-export const useDocuments = () => useStore(documentsStore);
+export const useDocuments = () => useSnapshot(documentsStore);
