@@ -115,6 +115,20 @@ const generatePath: PathFindingFunction = (grid, start, end) => {
   }
 };
 
+const styles = {
+  selfLoop: {
+    strokeDasharray: "5, 5",
+    stroke: "#a9b2bc",
+  },
+  highlighted: {
+    strokeWidth: 1,
+  },
+  faded: {
+    stroke: "#cad0d6",
+    strokeOpacity: 0.5,
+  },
+};
+
 export const CustomEdge = (edge: EdgeProps) => {
   const nodes = useNodes();
   const { highlighted, faded } = useIsEdgeDecorated(edge);
@@ -122,10 +136,11 @@ export const CustomEdge = (edge: EdgeProps) => {
   const edgeStyle = useMemo(() => {
     return {
       ...edge.style,
-      strokeWidth: highlighted ? 2 : 1,
-      strokeOpacity: faded ? 0.5 : 1,
+      ...(edge.source === edge.target ? styles.selfLoop : {}),
+      ...(highlighted ? styles.highlighted : {}),
+      ...(faded ? styles.faded : {}),
     };
-  }, [edge.style, faded, highlighted]);
+  }, [edge.source, edge.style, edge.target, faded, highlighted]);
 
   const getSmartEdgeResponse = useMemo(
     () =>
