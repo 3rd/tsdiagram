@@ -70,7 +70,7 @@ const getLayoutedElements = async ({
     "elk.insideSelfLoops.activate": "false",
     "elk.interactiveLayout": "true",
     "elk.layered.crossingMinimization.semiInteractive": "true",
-    "elk.layered.cycleBreaking.strategy": "GREEDY_MODEL_ORDER",
+    "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
     "elk.layered.nodePlacement.strategy": "LINEAR_SEGMENTS",
     "elk.layered.layering.strategy": "LONGEST_PATH",
     "elk.layered.spacing.edgeNodeBetweenLayers": "20", // default 10
