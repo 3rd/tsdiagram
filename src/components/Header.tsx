@@ -1,9 +1,9 @@
 import { memo } from "react";
 import { Share1Icon, GearIcon, ArrowRightIcon, ArrowLeftIcon, FilePlusIcon } from "@radix-ui/react-icons";
+import { useUserOptions } from "../stores/user-options";
+import { documentsStore } from "../stores/documents";
 import classNames from "classnames";
-// import { useStore } from "statelift";
-import { optionsStore, useUserOptions } from "../stores/user-options";
-import { documentsStore, useDocuments } from "../stores/documents";
+import { useStore } from "statelift";
 
 type HeaderProps = {
   onPreferencesClick?: () => void;
@@ -12,20 +12,20 @@ type HeaderProps = {
 
 export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) => {
   const options = useUserOptions();
-  const documents = useDocuments();
+  const documentTitle = useStore(documentsStore, (state) => state.currentDocument.title);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    documentsStore.setCurrentDocumentTitle(e.target.value);
-    documentsStore.save();
+    documentsStore.state.setCurrentDocumentTitle(e.target.value);
+    documentsStore.state.save();
   };
 
   const handleSidebarButtonClick = () => {
-    optionsStore.general.sidebarOpen = !optionsStore.general.sidebarOpen;
-    optionsStore.save();
+    options.general.sidebarOpen = !options.general.sidebarOpen;
+    options.save();
   };
 
   const handleNewDocumentClick = () => {
-    documentsStore.create();
+    documentsStore.state.create();
   };
 
   return (
@@ -84,7 +84,7 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
           className="w-full text-sm text-left bg-transparent rounded ring-0 outline-none sm:text-lg sm:text-center hover:text-blue-200 focus:text-white overflow-ellipsis"
           placeholder="Untitled"
           type="text"
-          value={documents.currentDocument.title}
+          value={documentTitle}
           onChange={handleTitleChange}
         />
 

@@ -1,6 +1,5 @@
-// import { createStore, useStore } from "statelift";
+import { createStore, useStore } from "statelift";
 import { z } from "zod";
-import { proxy, useSnapshot } from "valtio";
 import { themes } from "../themes";
 
 const userOptionsSchema = z.object({
@@ -26,7 +25,7 @@ export type UserOptions = z.infer<typeof userOptionsSchema> & {
   load: () => void;
   save: () => void;
 };
-export const optionsStore = proxy<UserOptions>({
+export const optionsStore = createStore<UserOptions>({
   general: {
     sidebarOpen: false,
   },
@@ -48,21 +47,20 @@ export const optionsStore = proxy<UserOptions>({
       const data = JSON.parse(localStorage.getItem("options") ?? "");
       const parsedData = userOptionsSchema.parse(data);
       parsedData.renderer.autoFitView = true;
-      Object.assign(optionsStore, parsedData);
+      Object.assign(this, parsedData);
     } catch {}
   },
   save() {
     localStorage.setItem(
       "options",
       JSON.stringify({
-        general: optionsStore.general,
-        panels: optionsStore.panels,
-        editor: optionsStore.editor,
-        renderer: optionsStore.renderer,
+        general: this.general,
+        panels: this.panels,
+        editor: this.editor,
+        renderer: this.renderer,
       })
     );
   },
 });
-optionsStore.load();
-
-export const useUserOptions = () => useSnapshot(optionsStore);
+optionsStore.state.load();
+export const useUserOptions = () => useStore(optionsStore);

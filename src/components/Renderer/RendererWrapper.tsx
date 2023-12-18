@@ -1,16 +1,16 @@
 import { useMemo } from "react";
-// import { useStore } from "statelift";
 import { Renderer } from "./Renderer";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { ModelParser } from "../../lib/parser/ModelParser";
-import { useDocuments } from "../../stores/documents";
+import { documentsStore } from "../../stores/documents";
 import { useDebounced } from "../../hooks/useDebounced";
+import { useStore } from "statelift";
 
 export const RendererWrapper = () => {
-  const documents = useDocuments();
+  const documentSource = useStore(documentsStore, (state) => state.currentDocument.source);
   const isMobile = useIsMobile();
 
-  const debouncedSource = useDebounced(documents.currentDocument.source, 16);
+  const debouncedSource = useDebounced(documentSource, 16);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const parser = useMemo(() => new ModelParser(debouncedSource), []);
