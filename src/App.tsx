@@ -7,11 +7,13 @@ import { RendererWrapper } from "./components/Renderer";
 import { Preferences } from "./components/Preferences";
 import { Share } from "./components/Share";
 import { Sidebar } from "./components/Sidebar";
+import { useUserOptions } from "./stores/user-options";
 import "./App.css";
 
 function App() {
   const [showPreferences, setShowPreferences] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const options = useUserOptions();
 
   const handlePreferencesClick = useCallback(() => {
     setShowPreferences((value) => !value);
@@ -26,7 +28,7 @@ function App() {
       <div className="flex overflow-hidden flex-col w-full h-full">
         <Header onPreferencesClick={handlePreferencesClick} onShareClick={handleShareClick} />
         <main className="flex flex-1">
-          <Sidebar />
+          {options.general.sidebarOpen && <Sidebar />}
           <Panels editorChildren={<Editor />} rendererChildren={<RendererWrapper />} />
         </main>
         <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />

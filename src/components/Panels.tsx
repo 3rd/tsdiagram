@@ -23,7 +23,7 @@ export const Panels = ({ editorChildren, rendererChildren }: PanelsProps) => {
     const members = [
       <Panel
         key="panel-editor"
-        defaultSizePercentage={isMobile ? mobileCodePanelSizePercentage : defaultCodePanelSizePercentage}
+        defaultSize={isMobile ? mobileCodePanelSizePercentage : defaultCodePanelSizePercentage}
         id="editor"
         order={isVertical ? 1 : 0}
       >
