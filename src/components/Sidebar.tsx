@@ -1,24 +1,27 @@
 import { Cross2Icon } from "@radix-ui/react-icons";
 import { useUserOptions } from "../stores/user-options";
-import { useDocuments, Document } from "../stores/documents";
-import { memo, useState } from "react";
+import { documentsStore, useDocuments } from "../stores/documents";
+import { memo, useCallback, useState } from "react";
 import classNames from "classnames";
 
 type SidebarItemProps = {
-  document: Document;
+  id: string;
+  title: string;
   isActive: boolean;
-  onClick: () => void;
-  onDelete: () => void;
+  onClick: (id: string) => void;
+  onDelete: (id: string) => void;
 };
-const SidebarItem = ({ document, onClick, onDelete, isActive }: SidebarItemProps) => {
+const SidebarItem = memo(({ id, title, onClick, onDelete, isActive }: SidebarItemProps) => {
   const [deleteConfirmationState, setDeleteConfirmationState] = useState<"confirm" | "default">("default");
+
+  const handleClick = () => onClick(id);
 
   const handleDeleteClick = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     e.stopPropagation();
     if (deleteConfirmationState === "default") {
       setDeleteConfirmationState("confirm");
     } else {
-      onDelete();
+      onDelete(id);
     }
   };
 
@@ -28,15 +31,15 @@ const SidebarItem = ({ document, onClick, onDelete, isActive }: SidebarItemProps
 
   return (
     <li
-      key={document.id}
+      key={id}
       className={classNames(
         "flex justify-between items-center py-1 px-2 rounded focus:outline-none hover:bg-gray-900/20",
         { "bg-gray-500/20": isActive }
       )}
       role="button"
-      onClick={onClick}
+      onClick={handleClick}
     >
-      <span className="truncate">{document.title || "Untitled"}</span>
+      <span className="truncate">{title || "Untitled"}</span>
       <button
         className="flex justify-center items-center px-1.5 h-7 leading-none rounded focus:outline-none hover:bg-gray-900/20"
         onClick={handleDeleteClick}
@@ -47,35 +50,34 @@ const SidebarItem = ({ document, onClick, onDelete, isActive }: SidebarItemProps
       </button>
     </li>
   );
-};
+});
 
 export const Sidebar = memo(() => {
   const options = useUserOptions();
   const documents = useDocuments();
 
+  const handleItemClick = useCallback((id: string) => {
+    documentsStore.state.setCurrentDocumentId(id);
+  }, []);
+
+  const handleItemDelete = useCallback((id: string) => {
+    documentsStore.state.delete(id);
+  }, []);
+
   const sidebarItems = documents.documents.map((doc) => {
     const isCurrentDocument = documents.currentDocumentId === doc.id;
-
-    const handleClick = () => {
-      documents.setCurrentDocumentId(doc.id);
-    };
-
-    const handleDelete = () => {
-      documents.delete(doc.id);
-    };
 
     return (
       <SidebarItem
         key={doc.id}
-        document={doc}
+        id={doc.id}
         isActive={isCurrentDocument}
-        onClick={handleClick}
-        onDelete={handleDelete}
+        title={doc.title}
+        onClick={handleItemClick}
+        onDelete={handleItemDelete}
       />
     );
   });
-
-  if (!options.general.sidebarOpen) return null;
 
   return (
     <div
