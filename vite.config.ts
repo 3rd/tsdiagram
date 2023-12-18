@@ -9,6 +9,7 @@ export default defineConfig({
   plugins: [react(), visualizer()],
   test: {},
   build: {
+    sourcemap: true,
     rollupOptions: {
       external: ["perf_hooks"],
       output: {
