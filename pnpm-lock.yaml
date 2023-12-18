@@ -66,8 +66,8 @@ dependencies:
     specifier: ^1.0.2
     version: 1.0.2
   statelift:
-    specifier: ^1.0.14
-    version: 1.0.14(react-dom@18.2.0)(react@18.2.0)
+    specifier: ^1.0.15
+    version: 1.0.15(react-dom@18.2.0)(react@18.2.0)
   ts-morph:
     specifier: ^21.0.1
     version: 21.0.1
@@ -2648,8 +2648,8 @@ packages:
     resolution: {integrity: sha512-HTEHMNieakEnoe33shBYcZ7NX83ACUjCu8c40iOGEZsngj9zRnkqS9j1pqQPXwobB0ZcVTk27REb7COQ0UR59w==}
     dev: false
 
-  /statelift@1.0.14(react-dom@18.2.0)(react@18.2.0):
-    resolution: {integrity: sha512-7YVcdpKY+7blKjMjZoPN/OOj5AuzjHqyvbBZPF3Qv8N2FEJHAnfgKo5wDRSP2bfMMOEJnkR81sd4kyHrXYLFrA==}
+  /statelift@1.0.15(react-dom@18.2.0)(react@18.2.0):
+    resolution: {integrity: sha512-sL3gC0fZamXqaJQZrKxpL0OxLoIf4Eg41dVhYN8OX7P5EaQzp044svFwtjwoL+T9QXWzSiPJB28O7Lp5iHCzuA==}
     peerDependencies:
       react: ^18.0.0
       react-dom: ^18.0.0
