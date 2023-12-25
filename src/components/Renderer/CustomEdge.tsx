@@ -155,7 +155,7 @@ export const CustomEdge = (edge: EdgeProps) => {
         options: {
           drawEdge,
           generatePath,
-          nodePadding: 15,
+          nodePadding: 6,
           gridRatio: 10,
         },
       }),

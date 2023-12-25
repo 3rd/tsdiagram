@@ -72,12 +72,12 @@ const getLayoutedElements = async ({
     "elk.layered.crossingMinimization.semiInteractive": "true",
     "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
     "elk.layered.nodePlacement.strategy": "LINEAR_SEGMENTS",
-    "elk.layered.layering.strategy": "LONGEST_PATH",
-    "elk.layered.spacing.edgeNodeBetweenLayers": "20", // default 10
+    // "elk.layered.layering.strategy": "LONGEST_PATH",
+    "elk.layered.spacing.edgeNodeBetweenLayers": "25", // default 10
     "elk.layered.spacing.nodeNodeBetweenLayers": "50", // default 20
-    "elk.spacing.nodeNode": "10", // default 20
-    // "elk.spacing.componentComponent": "1000", // default 20
-    // "elk.separateConnectedComponents": "false",
+    "elk.spacing.nodeNode": "50", // default 20
+    "elk.spacing.componentComponent": "1000", // default 20
+    "elk.separateConnectedComponents": "true",
   };
 
   const elk = new Elk({
