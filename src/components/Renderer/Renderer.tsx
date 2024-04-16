@@ -553,8 +553,6 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggleFullscreen } = useFullscreen(containerRef);
 
-  // console.log("@render", { nodes, edges });
-
   return (
     <div
       ref={containerRef}

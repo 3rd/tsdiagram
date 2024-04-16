@@ -162,24 +162,37 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
           </span>
         );
 
+        const argumentFragments: JSX.Element[] = [];
         for (const argument of field.arguments) {
           const argumentKey = `${model.id}-${field.name}-${argument.name}`;
           if (argument.type instanceof Object) {
             hasFieldSourceHandle = true;
 
-            keyFragments.push(
+            argumentFragments.push(
               <span key={argumentKey}>
                 {argument.name}:<span className={classes.field.modelTypeColor}> {argument.type.name}</span>
               </span>
             );
           } else {
-            keyFragments.push(
+            argumentFragments.push(
               <span key={argumentKey}>
                 {argument.name}:<span className={classes.field.defaultTypeColor}> {argument.type}</span>
               </span>
             );
           }
         }
+
+        keyFragments.push(
+          <span key={`${model.id}-${field.name}-arguments`}>
+            {argumentFragments.map((fragment, index) => (
+              <span key={fragment.key}>
+                {fragment}
+                {index < argumentFragments.length - 1 && ", "}
+              </span>
+            ))}
+          </span>
+        );
+
         keyFragments.push(
           <span key={`${model.id}-${field.name}-arguments-end`} className={classes.field.defaultTypeColor}>
             )
