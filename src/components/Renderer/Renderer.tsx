@@ -76,7 +76,7 @@ const getLayoutedElements = async ({
     "elk.layered.spacing.edgeNodeBetweenLayers": "25", // default 10
     "elk.layered.spacing.nodeNodeBetweenLayers": "50", // default 20
     "elk.spacing.nodeNode": "50", // default 20
-    "elk.spacing.componentComponent": "1000", // default 20
+    "elk.spacing.componentComponent": "100", // default 20
     "elk.separateConnectedComponents": "true",
   };
 
