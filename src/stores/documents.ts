@@ -150,8 +150,15 @@ export const documentsStore = createStore<DocumentsStore>({
       });
     }
     const isCurrentDocument = this.currentDocumentId === id;
+    if (isCurrentDocument) {
+      for (const document of this.documents) {
+        if (document.id !== id) {
+          this.currentDocumentId = document.id;
+          break;
+        }
+      }
+    }
     this.documents = this.documents.filter((d) => d.id !== id);
-    if (isCurrentDocument) this.currentDocumentId = this.documents[0].id;
     this.save();
   },
   setCurrentDocumentId(id: string) {

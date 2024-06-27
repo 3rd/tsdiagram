@@ -18,6 +18,7 @@ const edgeSegmentCache = {
         return entry;
       }
     }
+    return null;
   },
   set: (id: string, entry: CacheEntry) => {
     return cache.set(id, entry);
