@@ -374,7 +374,10 @@ export class ModelParser extends Parser {
         if (typeModel) dependencies.add(typeModel);
 
         let optional = false;
-        if (prop.isKind?.(ts.SyntaxKind.PropertySignature)) {
+        if (
+          prop.isKind?.(ts.SyntaxKind.PropertySignature) ||
+          prop.isKind?.(ts.SyntaxKind.PropertyDeclaration)
+        ) {
           optional = prop.hasQuestionToken();
         }
 

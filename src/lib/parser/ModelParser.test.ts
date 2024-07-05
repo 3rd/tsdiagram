@@ -412,3 +412,28 @@ it("parses optional properties", () => {
     arguments: [],
   });
 });
+
+it("parses optional properties in classes", () => {
+  const parser = new ModelParser(`
+    class A {
+      requiredProp: string;
+      optionalProp?: number;
+    }
+  `);
+  const models = parser.getModels();
+
+  expect(models.length).toBe(1);
+  expect(models[0]).toEqual({
+    id: "A",
+    name: "A",
+    schema: [
+      { name: "requiredProp", type: "string", optional: false },
+      { name: "optionalProp", type: "number", optional: true },
+    ],
+    dependencies: [],
+    dependants: [],
+    type: "class",
+    arguments: [],
+    implements: [],
+  });
+});
