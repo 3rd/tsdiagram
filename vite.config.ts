@@ -4,14 +4,9 @@ import { defineConfig } from "vite";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
-// import million from "million/compiler";
 
 export default defineConfig({
-  plugins: [
-    // million.vite({ auto: true }),
-    react(),
-    visualizer(),
-  ],
+  plugins: [react(), visualizer()],
   test: {},
   build: {
     sourcemap: true,

@@ -1,4 +1,4 @@
-import { EdgeProps } from "reactflow";
+import { EdgeProps } from "@xyflow/react";
 import { PathSegment } from "./types";
 
 type CacheEntry = {

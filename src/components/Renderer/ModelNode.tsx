@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Position } from "reactflow";
+import { Position } from "@xyflow/react";
 import classNames from "classnames";
 import {
   Model,

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Share1Icon, GearIcon, ArrowRightIcon, ArrowLeftIcon, FilePlusIcon } from "@radix-ui/react-icons";
+import { ArrowLeftIcon, ArrowRightIcon, FilePlusIcon, GearIcon, Share1Icon } from "@radix-ui/react-icons";
 import { useUserOptions } from "../stores/user-options";
 import { documentsStore } from "../stores/documents";
 import classNames from "classnames";

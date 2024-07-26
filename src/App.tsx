@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ReactFlowProvider } from "reactflow";
+import { ReactFlowProvider } from "@xyflow/react";
 import { Header } from "./components/Header";
 import { Panels } from "./components/Panels";
 import { Editor } from "./components/Editor";

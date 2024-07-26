@@ -1,21 +1,22 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import ReactFlow, {
+import {
   Background,
   BackgroundVariant,
   Controls,
   Edge,
-  Node,
+  FitViewOptions,
   MarkerType,
   MiniMap,
+  Node,
+  Panel,
+  ReactFlow,
   useEdgesState,
+  useNodesInitialized,
   useNodesState,
   useReactFlow,
-  Panel,
-  FitViewOptions,
   useUpdateNodeInternals,
-  useNodesInitialized,
-} from "reactflow";
+} from "@xyflow/react";
 import classNames from "classnames";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
 import Elk, { ElkNode, LayoutOptions } from "elkjs";
@@ -32,13 +33,13 @@ import {
 } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
-import { useUserOptions, UserOptions } from "../../stores/user-options";
+import { UserOptions, useUserOptions } from "../../stores/user-options";
 import {
+  EnterFullScreenIcon,
+  ExitFullScreenIcon,
   HeightIcon,
   TransformIcon,
   WidthIcon,
-  EnterFullScreenIcon,
-  ExitFullScreenIcon,
 } from "@radix-ui/react-icons";
 import { edgeSegmentCache } from "../../edge-segment-cache";
 import { graphStore } from "../../stores/graph";
@@ -51,7 +52,7 @@ const edgeTypes = { smart: SmartStepEdge, custom: CustomEdge };
 const proOptions = { hideAttribution: true };
 
 type GetLayoutedElementsArgs = {
-  nodes: Node[];
+  nodes: Node<{ model: Model }>[];
   edges: Edge[];
   options: UserOptions;
   manuallyMovedNodesSet: Set<string>;
@@ -92,9 +93,9 @@ const getLayoutedElements = async ({
 
       return {
         ...node,
-        width: node.width ?? 0,
-        height: node.height ?? 0,
-        ports: node.data?.model?.schema.map((field: Model["schema"][0], index: number) => {
+        width: node.measured?.width ?? node.width ?? 0,
+        height: node.height ?? node.measured?.height ?? 0,
+        ports: (node.data?.model as any)?.schema.map((field: Model["schema"][0], index: number) => {
           return {
             id: `${node.id}-source-${field.name}`,
             order: index,
@@ -131,8 +132,8 @@ const getLayoutedElements = async ({
         type: node.type,
         data: node.data,
         position: {
-          x: hasManuallyMoved ? node.position.x : layoutedNode.x ?? clone.position.x,
-          y: hasManuallyMoved ? node.position.y : layoutedNode.y ?? clone.position.y,
+          x: hasManuallyMoved ? node.position.x : (layoutedNode.x ?? clone.position.x),
+          y: hasManuallyMoved ? node.position.y : (layoutedNode.y ?? clone.position.y),
         },
         ...(layoutedNode.width &&
           layoutedNode.height && {
@@ -287,8 +288,8 @@ export type RendererProps = {
 export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
   const { fitView, getNodes, getEdges } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
-  const [nodes, setNodes, onNodesChange] = useNodesState<{ model: Model }>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<{ model: Model }>>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const cachedNodesMap = useRef<Map<string, Node<{ model: Model }>>>(new Map());
   const manuallyMovedNodesSet = useRef<Set<string>>(new Set());
   const options = useUserOptions();
@@ -327,8 +328,10 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
   const handleAutoLayout = useMemo(() => {
     return throttle(
       () => {
-        const currentNodes = getNodes();
-        const hasSizeForAllNodes = currentNodes.every((node) => node.width && node.height);
+        const currentNodes = getNodes() as Node<{ model: Model }>[];
+        const hasSizeForAllNodes = currentNodes.every(
+          (node) => node.measured?.width && node.measured?.height
+        );
         if (!hasSizeForAllNodes) return;
 
         getLayoutedElements({
@@ -368,15 +371,6 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
       const cachedNode = cachedNodesMap.current.get(node.id);
       if (cachedNode) {
         hitCachedNodeSet.add(cachedNode);
-        // console.log({ node, cachedNode });
-        if (cachedNode.width && cachedNode.height) {
-          return {
-            ...node,
-            width: cachedNode.width,
-            height: cachedNode.height,
-            position: cachedNode.position,
-          };
-        }
         return { ...node, position: cachedNode.position };
       }
       nodesThatMissedCache.push(node);
@@ -412,10 +406,15 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     } else if (nodes.length === cachedNodesMap.current.size) {
       for (const node of nodes) {
         const previousNode = cachedNodesMap.current.get(node.id);
+        const previousWidth = node.measured?.width ?? node.width;
+        const previousHeight = node.height ?? node.measured?.height;
+        const currentWidth = node.measured?.width ?? node.width;
+        const currentHeight = node.height ?? node.measured?.height;
+
         if (
           !previousNode ||
-          (previousNode?.width && node.width !== previousNode.width) ||
-          (previousNode?.height && node.height !== previousNode.height)
+          (previousWidth && currentWidth !== previousWidth) ||
+          (previousHeight && currentHeight !== previousHeight)
         ) {
           // console.log("needsAutoLayout 2", { node, previousNode });
           needsAutoLayout = true;
@@ -513,7 +512,7 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     [options.renderer]
   );
   const handleMove = useCallback(
-    (event: MouseEvent | TouchEvent) => {
+    (event: MouseEvent | TouchEvent | null) => {
       if (event instanceof WheelEvent) {
         options.renderer.autoFitView = false;
       }
@@ -524,7 +523,7 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     manuallyMovedNodesSet.current.add(node.id);
   }, []);
   const handleNodeMouseEnter = useCallback((_event: React.MouseEvent, node: Node) => {
-    graphStore.state.hoveredNode = node;
+    graphStore.state.hoveredNode = node as Node<{ model: Model }>;
   }, []);
   const handleNodeMouseLeave = useCallback(() => {
     graphStore.state.hoveredNode = null;
