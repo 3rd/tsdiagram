@@ -1,4 +1,4 @@
-import { XYPosition } from "reactflow";
+import { XYPosition } from "@xyflow/react";
 
 export enum Direction {
   None = 0,

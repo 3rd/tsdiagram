@@ -1,7 +1,7 @@
 import { Fragment, useRef, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { copySVG, downloadSVG, exportReactFlowToSVG } from "../utils/svg-export";
-import { getNodesBounds, getTransformForBounds, useReactFlow } from "reactflow";
+import { getNodesBounds, getViewportForBounds, useReactFlow } from "@xyflow/react";
 import { CopyIcon, DownloadIcon, Link2Icon } from "@radix-ui/react-icons";
 import { useEffect } from "react";
 import { useCallback } from "react";
@@ -23,8 +23,8 @@ export const Share = ({ isOpen, onClose }: ShareProps) => {
     const nodesBounds = getNodesBounds(getNodes());
     const width = nodesBounds.width;
     const height = nodesBounds.height;
-    const transform = getTransformForBounds(nodesBounds, width, height, 0.5, 2);
-    const cssTransform = `translate(${transform[0]}px, ${transform[1]}px) scale(${transform[2]})`;
+    const transform = getViewportForBounds(nodesBounds, width, height, 0.5, 2, 0.1);
+    const cssTransform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.zoom})`;
     return exportReactFlowToSVG(width, height, cssTransform);
   }, [getNodes]);
 

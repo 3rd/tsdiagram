@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { useNodes, BezierEdge, EdgeProps, XYPosition } from "reactflow";
+import { BezierEdge, EdgeProps, XYPosition, useNodes } from "@xyflow/react";
 import { PathFindingFunction, SVGDrawFunction, getSmartEdge } from "@tisoap/react-flow-smart-edge";
-import { JumpPointFinder, DiagonalMovement } from "pathfinding";
+import { DiagonalMovement, JumpPointFinder } from "pathfinding";
 import { Direction } from "../../types";
 import { useIsEdgeDecorated } from "../../stores/graph";
 // import { edgeSegmentCache } from "../../edge-segment-cache";

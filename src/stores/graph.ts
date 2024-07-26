@@ -1,5 +1,5 @@
 import { createStore, useStore } from "statelift";
-import { Node, EdgeProps } from "reactflow";
+import { EdgeProps, Node } from "@xyflow/react";
 import { Model } from "../lib/parser/ModelParser";
 
 type GraphState = {

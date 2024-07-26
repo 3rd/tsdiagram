@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Handle, HandleProps, useUpdateNodeInternals } from "reactflow";
+import { Handle, HandleProps, useUpdateNodeInternals } from "@xyflow/react";
 
 export const CustomHandle = (props: HandleProps & Omit<React.HTMLAttributes<HTMLDivElement>, "id">) => {
   const updateNodeInternals = useUpdateNodeInternals();
