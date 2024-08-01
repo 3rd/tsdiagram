@@ -3,7 +3,6 @@ import { z } from "zod";
 import { decompressFromEncodedURIComponent, compressToEncodedURIComponent } from "lz-string";
 import { nanoid } from "nanoid";
 import isEqual from "lodash/isEqual";
-import * as examples from "../examples";
 
 const documentSchema = z.object({
   id: z.string(),
@@ -14,12 +13,15 @@ const documentSchema = z.object({
 export type Document = z.infer<typeof documentSchema>;
 
 const documentStateSchema = z.object({
+  isLoading: z.boolean().default(true),
   documents: z.array(documentSchema),
   currentDocumentId: z.string(),
 });
 export type DocumentsState = z.infer<typeof documentStateSchema>;
 export type DocumentsStore = DocumentsState & {
   readonly currentDocument: Document;
+  load: () => void;
+  loadTsDocumentForApi: (api: string) => void;
   save: () => void;
   create: () => void;
   delete: (id: string) => void;
@@ -29,16 +31,17 @@ export type DocumentsStore = DocumentsState & {
   sortByLastModified: () => void;
 };
 
-const defaultState: DocumentsState = {
+const defaultState = {
   documents: [
     {
       id: "default",
-      title: "Welcome",
-      source: examples.taskManagement,
+      title: "Untitled",
+      source: "",
       lastModified: Date.now(),
     },
   ],
   currentDocumentId: "default",
+  isLoading: false,
 };
 
 const serializeState = (state: DocumentsState) => {
@@ -50,6 +53,12 @@ const serializeState = (state: DocumentsState) => {
 
 const saveLocalStorageState = (state: DocumentsState) => {
   localStorage.setItem("documents", serializeState(state));
+};
+
+const loadTsDocument = async (url: string): Promise<string> => {
+  const response = await fetch(url);
+  const text = await response.text();
+  return text;
 };
 
 const saveURLState = (state: DocumentsState) => {
@@ -94,6 +103,7 @@ if (localStorageState && !urlState) {
 
 // merge url state into local state
 let hasIngestedForeignState = false;
+let loadDefaultDocumentsFromPublic = false;
 if (localStorageState && urlState) {
   const urlDocumentId = urlState.state.currentDocumentId;
   const urlDocument = urlState.state.documents.find((d) => d.id === urlDocumentId);
@@ -115,6 +125,8 @@ if (localStorageState && urlState) {
     combinedState.currentDocumentId = urlDocumentId;
     hasIngestedForeignState = true;
   }
+} else {
+  loadDefaultDocumentsFromPublic = true;
 }
 
 export const documentsStore = createStore<DocumentsStore>({
@@ -123,6 +135,27 @@ export const documentsStore = createStore<DocumentsStore>({
     const document = this.documents.find((doc: Document) => doc.id === this.currentDocumentId);
     if (!document) throw new Error("Document not found");
     return document;
+  },
+  loadTsDocumentForApi(api: string) {
+    loadTsDocument("/schemas/" + api + ".ts").then((source) => {
+      const id = api;
+      this.documents.unshift({
+        id,
+        title: api,
+        source: source,
+        lastModified: Date.now(),
+      });
+      this.currentDocumentId = id;
+      this.isLoading = false;
+      this.delete("default");
+      this.save();
+    });
+  },
+  load() {
+    this.loadTsDocumentForApi("api-venues");
+    this.loadTsDocumentForApi("api-clients");
+    this.loadTsDocumentForApi("api-bookings");
+    this.loadTsDocumentForApi("api-buyers");
   },
   save() {
     saveLocalStorageState(this);
@@ -185,6 +218,8 @@ export const documentsStore = createStore<DocumentsStore>({
 if (hasIngestedForeignState) {
   documentsStore.state.sortByLastModified();
   documentsStore.state.save();
+} else if (loadDefaultDocumentsFromPublic) {
+  documentsStore.state.load();
 }
 
 export const useDocuments = () => useStore(documentsStore);
