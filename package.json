@@ -11,7 +11,7 @@
     "test": "vitest",
     "coverage": "vitest run --coverage",
     "format": "prettier --write .",
-    "prepare": "husky install"
+    "prepare": "husky"
   },
   "lint-staged": {
     "*.{json,js,ts,jsx,tsx,html}": [
