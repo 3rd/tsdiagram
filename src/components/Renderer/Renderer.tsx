@@ -5,16 +5,16 @@ import ReactFlow, {
   BackgroundVariant,
   Controls,
   Edge,
-  Node,
+  FitViewOptions,
   MarkerType,
   MiniMap,
+  Node,
+  Panel,
   useEdgesState,
+  useNodesInitialized,
   useNodesState,
   useReactFlow,
-  Panel,
-  FitViewOptions,
   useUpdateNodeInternals,
-  useNodesInitialized,
 } from "reactflow";
 import classNames from "classnames";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
@@ -32,13 +32,13 @@ import {
 } from "../../lib/parser/ModelParser";
 import { ModelNode } from "./ModelNode";
 import { CustomEdge } from "./CustomEdge";
-import { useUserOptions, UserOptions } from "../../stores/user-options";
+import { UserOptions, useUserOptions } from "../../stores/user-options";
 import {
+  EnterFullScreenIcon,
+  ExitFullScreenIcon,
   HeightIcon,
   TransformIcon,
   WidthIcon,
-  EnterFullScreenIcon,
-  ExitFullScreenIcon,
 } from "@radix-ui/react-icons";
 import { edgeSegmentCache } from "../../edge-segment-cache";
 import { graphStore } from "../../stores/graph";
@@ -390,6 +390,7 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
       const updatedNode = nodesThatMissedCache.values().next().value;
 
       if (!missedCachedNode) throw new Error("missedCachedNode not found");
+      if (!updatedNode) throw new Error("updatedNode not found");
 
       // updatedNode.width = missedCachedNode.width;
       // updatedNode.height = missedCachedNode.height;

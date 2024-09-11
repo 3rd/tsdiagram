@@ -97,7 +97,7 @@ export class ModelParser extends Parser {
     ))[] = [];
 
     for (const _interface of this.interfaces) {
-      const name = _interface.name;
+      const name = _interface.name.replace(/"/g, "'");
       const compilerType = _interface.declaration.getType().compilerType;
 
       const model: InterfaceModel = {
@@ -112,7 +112,7 @@ export class ModelParser extends Parser {
       };
 
       for (const parameter of _interface.declaration.getTypeParameters()) {
-        const parameterName = parameter.getName();
+        const parameterName = parameter.getName().replace(/"/g, "'");
         const parameterType = parameter.getType();
         const parameterExtends = parameterType.getConstraint()?.getText();
         model.arguments.push({ name: parameterName, extends: parameterExtends });
@@ -140,7 +140,7 @@ export class ModelParser extends Parser {
     }
 
     for (const typeAlias of this.typeAliases) {
-      const name = typeAlias.name;
+      const name = typeAlias.name.replace(/"/g, "'");
       const type = typeAlias.declaration.getType().compilerType;
 
       const model: TypeAliasModel = {
@@ -154,7 +154,7 @@ export class ModelParser extends Parser {
       };
 
       for (const parameter of typeAlias.declaration.getTypeParameters()) {
-        const parameterName = parameter.getName();
+        const parameterName = parameter.getName().replace(/"/g, "'");
         const parameterType = parameter.getType();
         const parameterExtends = parameterType.getConstraint()?.getText();
         model.arguments.push({ name: parameterName, extends: parameterExtends });
@@ -174,7 +174,7 @@ export class ModelParser extends Parser {
     }
 
     for (const currentClass of this.classes) {
-      const name = currentClass.name;
+      const name = currentClass.name.replace(/"/g, "'");
       const type = currentClass.declaration.getType().compilerType;
 
       const model: ClassModel = {
@@ -189,14 +189,14 @@ export class ModelParser extends Parser {
       };
 
       for (const parameter of currentClass.declaration.getTypeParameters()) {
-        const parameterName = parameter.getName();
+        const parameterName = parameter.getName().replace(/"/g, "'");
         const parameterType = parameter.getType();
         const parameterExtends = parameterType.getConstraint()?.getText();
         model.arguments.push({ name: parameterName, extends: parameterExtends });
       }
 
       if (currentClass.extends) {
-        const extendsName = trimImport(currentClass.extends.getText());
+        const extendsName = trimImport(currentClass.extends.getText()).replace(/"/g, "'");
         const extendsModel = modelNameToModelMap.get(extendsName);
         if (extendsModel) {
           model.extends = extendsModel;
@@ -205,7 +205,7 @@ export class ModelParser extends Parser {
 
       if (currentClass.implements.length > 0) {
         for (const implementsExpression of currentClass.implements) {
-          const implementsName = trimImport(implementsExpression.getText());
+          const implementsName = trimImport(implementsExpression.getText()).replace(/"/g, "'");
           const implementsModel = modelNameToModelMap.get(implementsName);
           model.implements.push(implementsModel ?? implementsName);
         }
@@ -233,7 +233,7 @@ export class ModelParser extends Parser {
 
       // helpers
       const addFunctionProp = (prop: Prop, type?: Type) => {
-        const propName = prop.getName();
+        const propName = prop.getName().replace(/"/g, "'");
         const propType = type ?? prop.getType();
 
         const callSignatures = propType.getCallSignatures();
@@ -243,7 +243,7 @@ export class ModelParser extends Parser {
           const functionArguments: { name: string; type: Model | string }[] = [];
 
           for (const parameter of callSignature.getParameters()) {
-            const parameterName = parameter.getName();
+            const parameterName = parameter.getName().replace(/"/g, "'");
             const parameterTypeName = trimImport(parameter.getTypeAtLocation(prop).getText());
             const parameterTypeModel = modelNameToModelMap.get(parameterTypeName);
             if (parameterTypeModel) dependencies.add(parameterTypeModel);
@@ -307,7 +307,7 @@ export class ModelParser extends Parser {
       };
 
       const addGenericProp = (prop: Prop, type?: Type) => {
-        const propName = prop.getName();
+        const propName = prop.getName().replace(/"/g, "'");
         const propType = type ?? prop.getType();
 
         const aliasSymbol = propType.getAliasSymbol();
@@ -360,7 +360,7 @@ export class ModelParser extends Parser {
 
       // FIXME: type these functions, prop is Symbol when Type is provided
       const addDefaultProp = (prop: Prop, type?: Type) => {
-        const propName = prop.getName();
+        const propName = prop.getName().replace(/"/g, "'");
         const propType = type ?? prop.getType();
         let typeName = trimImport(propType.getText());
 
