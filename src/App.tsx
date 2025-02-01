@@ -9,6 +9,7 @@ import { Share } from "./components/Share";
 import { Sidebar } from "./components/Sidebar";
 import { useUserOptions } from "./stores/user-options";
 import "./App.css";
+import { Toaster } from "react-hot-toast";
 
 function App() {
   const [showPreferences, setShowPreferences] = useState(false);
@@ -31,6 +32,18 @@ function App() {
           {options.general.sidebarOpen && <Sidebar />}
           <Panels editorChildren={<Editor />} rendererChildren={<RendererWrapper />} />
         </main>
+        <Toaster
+          position="bottom-left"
+          reverseOrder={false}
+          gutter={8}
+          toastOptions={{
+            duration: 3000,
+            style: {
+              background: "#1e3a8a",
+              color: "#fff",
+            },
+          }}
+        />
         <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />
         <Share isOpen={showShare} onClose={handleShareClick} />
       </div>

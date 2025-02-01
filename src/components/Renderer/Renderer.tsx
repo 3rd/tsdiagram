@@ -131,8 +131,8 @@ const getLayoutedElements = async ({
         type: node.type,
         data: node.data,
         position: {
-          x: hasManuallyMoved ? node.position.x : layoutedNode.x ?? clone.position.x,
-          y: hasManuallyMoved ? node.position.y : layoutedNode.y ?? clone.position.y,
+          x: hasManuallyMoved ? node.position.x : (layoutedNode.x ?? clone.position.x),
+          y: hasManuallyMoved ? node.position.y : (layoutedNode.y ?? clone.position.y),
         },
         ...(layoutedNode.width &&
           layoutedNode.height && {

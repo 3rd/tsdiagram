@@ -276,7 +276,7 @@ export class ModelParser extends Parser {
             name: propName,
             type: "function",
             arguments: functionArguments,
-            returnType: isArray ? [returnTypeModel ?? returnTypeName] : returnTypeModel ?? returnTypeName,
+            returnType: isArray ? [returnTypeModel ?? returnTypeName] : (returnTypeModel ?? returnTypeName),
             optional,
           });
           return true;

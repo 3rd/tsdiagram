@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Position } from "reactflow";
 import classNames from "classnames";
 import {
@@ -11,6 +11,7 @@ import {
 import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
 import { useIsNodeHighlighted } from "../../stores/graph";
+import { useNotify } from "../../hooks/useNotify";
 
 export type ModelNodeProps = {
   id: string;
@@ -21,6 +22,9 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
   const { model } = data;
   const options = useUserOptions();
   const highlighted = useIsNodeHighlighted(model);
+  const [error, setError] = useState("");
+
+  useNotify({ message: error, type: "error" });
 
   const hasSourceHandle = useMemo(() => {
     if (model.type === "interface") {
@@ -70,6 +74,17 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
   // eslint-disable-next-line sonarjs/cognitive-complexity
   const fieldRows = useMemo(() => {
     return model.schema.map((field) => {
+      let unstableSelector = `${model.id}-source-${field.name}`;
+      if (field.name.includes(":")) {
+        const fieldName = field.name.split(":");
+        try {
+          document.querySelector(unstableSelector);
+        } catch (error) {
+          setError(`Field name: ${field.name} is not valid.`);
+          unstableSelector = `${model.id}-source-${fieldName[0].replace(/'/g, "").replace(/"/g, "")}`;
+        }
+      }
+
       const keyFragments: JSX.Element[] = [<span key={`${model.id}-${field.name}`}>{field.name}</span>];
       const typeFragments: JSX.Element[] = [];
 
@@ -287,7 +302,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
               className={classNames(classes.handles.source, {
                 hidden: !hasFieldSourceHandle,
               })}
-              id={`${model.id}-source-${field.name}`}
+              id={unstableSelector}
               position={Position.Right}
               type="source"
             />
