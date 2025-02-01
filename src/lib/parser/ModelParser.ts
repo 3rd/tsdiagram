@@ -82,10 +82,8 @@ export type Model = ClassModel | InterfaceModel | TypeAliasModel;
 
 const trimImport = (str: string) => str.replace(`import("/source").`, "");
 
-const unwrapPropertyName = (name: string) => {
-  if (name.startsWith("'") && name.endsWith("'")) return name.slice(1, -1);
-  if (name.startsWith('"') && name.endsWith('"')) return name.slice(1, -1);
-  return name;
+const sanitizePropertyName = (name: string) => {
+  return name.replace(/'/g, "").replace(/"/g, "");
 };
 
 export class ModelParser extends Parser {
@@ -103,7 +101,7 @@ export class ModelParser extends Parser {
     ) & { id: string; name: string; compilerType: ts.Type })[] = [];
 
     for (const _interface of this.interfaces) {
-      const name = unwrapPropertyName(_interface.name);
+      const name = sanitizePropertyName(_interface.name);
       const compilerType = _interface.declaration.getType().compilerType;
 
       const model: InterfaceModel = {
@@ -118,7 +116,7 @@ export class ModelParser extends Parser {
       };
 
       for (const parameter of _interface.declaration.getTypeParameters()) {
-        const parameterName = unwrapPropertyName(parameter.getName());
+        const parameterName = sanitizePropertyName(parameter.getName());
         const parameterType = parameter.getType();
         const parameterExtends = parameterType.getConstraint()?.getText();
         model.arguments.push({ name: parameterName, extends: parameterExtends });
@@ -146,7 +144,7 @@ export class ModelParser extends Parser {
     }
 
     for (const typeAlias of this.typeAliases) {
-      const name = unwrapPropertyName(typeAlias.name);
+      const name = sanitizePropertyName(typeAlias.name);
       const type = typeAlias.declaration.getType().compilerType;
 
       const model: TypeAliasModel = {
@@ -160,7 +158,7 @@ export class ModelParser extends Parser {
       };
 
       for (const parameter of typeAlias.declaration.getTypeParameters()) {
-        const parameterName = unwrapPropertyName(parameter.getName());
+        const parameterName = sanitizePropertyName(parameter.getName());
         const parameterType = parameter.getType();
         const parameterExtends = parameterType.getConstraint()?.getText();
         model.arguments.push({ name: parameterName, extends: parameterExtends });
@@ -180,7 +178,7 @@ export class ModelParser extends Parser {
     }
 
     for (const currentClass of this.classes) {
-      const name = unwrapPropertyName(currentClass.name);
+      const name = sanitizePropertyName(currentClass.name);
       const type = currentClass.declaration.getType().compilerType;
 
       const model: ClassModel = {
@@ -195,14 +193,14 @@ export class ModelParser extends Parser {
       };
 
       for (const parameter of currentClass.declaration.getTypeParameters()) {
-        const parameterName = unwrapPropertyName(parameter.getName());
+        const parameterName = sanitizePropertyName(parameter.getName());
         const parameterType = parameter.getType();
         const parameterExtends = parameterType.getConstraint()?.getText();
         model.arguments.push({ name: parameterName, extends: parameterExtends });
       }
 
       if (currentClass.extends) {
-        const extendsName = unwrapPropertyName(trimImport(currentClass.extends.getText()));
+        const extendsName = sanitizePropertyName(trimImport(currentClass.extends.getText()));
         const extendsModel = modelNameToModelMap.get(extendsName);
         if (extendsModel) {
           model.extends = extendsModel;
@@ -211,7 +209,7 @@ export class ModelParser extends Parser {
 
       if (currentClass.implements.length > 0) {
         for (const implementsExpression of currentClass.implements) {
-          const implementsName = unwrapPropertyName(trimImport(implementsExpression.getText()));
+          const implementsName = sanitizePropertyName(trimImport(implementsExpression.getText()));
           const implementsModel = modelNameToModelMap.get(implementsName);
           model.implements.push(implementsModel ?? implementsName);
         }
@@ -239,7 +237,7 @@ export class ModelParser extends Parser {
 
       // helpers
       const addFunctionProp = (prop: Prop, type?: Type) => {
-        const propName = unwrapPropertyName(prop.getName());
+        const propName = sanitizePropertyName(prop.getName());
         const propType = type ?? prop.getType();
 
         const callSignatures = propType.getCallSignatures();
@@ -249,7 +247,7 @@ export class ModelParser extends Parser {
           const functionArguments: { name: string; type: Model | string }[] = [];
 
           for (const parameter of callSignature.getParameters()) {
-            const parameterName = unwrapPropertyName(parameter.getName());
+            const parameterName = sanitizePropertyName(parameter.getName());
             const parameterTypeName = trimImport(parameter.getTypeAtLocation(prop).getText());
             const parameterTypeModel = modelNameToModelMap.get(parameterTypeName);
             if (parameterTypeModel) dependencies.add(parameterTypeModel);
@@ -286,7 +284,7 @@ export class ModelParser extends Parser {
       };
 
       const addArrayProp = (prop: Prop, type?: Type) => {
-        const propName = unwrapPropertyName(prop.getName());
+        const propName = sanitizePropertyName(prop.getName());
         const propType = type ?? prop.getType();
 
         if (!propType.isArray()) return false;
@@ -313,7 +311,7 @@ export class ModelParser extends Parser {
       };
 
       const addGenericProp = (prop: Prop, type?: Type) => {
-        const propName = unwrapPropertyName(prop.getName());
+        const propName = sanitizePropertyName(prop.getName());
         const propType = type ?? prop.getType();
 
         const aliasSymbol = propType.getAliasSymbol();
@@ -366,7 +364,7 @@ export class ModelParser extends Parser {
 
       // FIXME: type these functions, prop is Symbol when Type is provided
       const addDefaultProp = (prop: Prop, type?: Type) => {
-        const propName = unwrapPropertyName(prop.getName());
+        const propName = sanitizePropertyName(prop.getName());
         const propType = type ?? prop.getType();
         let typeName = trimImport(propType.getText());
 
