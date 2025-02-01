@@ -5,9 +5,9 @@ import {
   PropertyDeclaration,
   PropertySignature,
   SetAccessorDeclaration,
+  ts,
   Type,
   TypeReferenceNode,
-  ts,
 } from "ts-morph";
 import { ParsedClass, ParsedInterface, ParsedTypeAlias, Parser } from "./Parser";
 
@@ -22,7 +22,7 @@ type GenericSchemaField = SharedSchemaField & {
 type FunctionSchemaField = SharedSchemaField & {
   type: "function";
   arguments: { name: string; type: Model | string }[];
-  returnType: Model | string | [Model | string];
+  returnType: Model | [Model | string] | string;
 };
 type UnionSchemaField = SharedSchemaField & { type: "union"; types: (Model | string)[] };
 type SchemaField =
@@ -67,7 +67,7 @@ type ModelBase = {
 
 type InterfaceModel = ModelBase & {
   type: "interface";
-  extends: (Model | (string & {}))[];
+  extends: (Model | ({} & string))[];
 };
 type TypeAliasModel = ModelBase & {
   type: "typeAlias";
@@ -75,12 +75,18 @@ type TypeAliasModel = ModelBase & {
 type ClassModel = ModelBase & {
   type: "class";
   extends?: Model | string;
-  implements: (Model | (string & {}))[];
+  implements: (Model | ({} & string))[];
 };
 
 export type Model = ClassModel | InterfaceModel | TypeAliasModel;
 
 const trimImport = (str: string) => str.replace(`import("/source").`, "");
+
+const unwrapPropertyName = (name: string) => {
+  if (name.startsWith("'") && name.endsWith("'")) return name.slice(1, -1);
+  if (name.startsWith('"') && name.endsWith('"')) return name.slice(1, -1);
+  return name;
+};
 
 export class ModelParser extends Parser {
   // eslint-disable-next-line sonarjs/cognitive-complexity
@@ -90,14 +96,14 @@ export class ModelParser extends Parser {
     const dependencyMap = new Map<string, Set<Model>>();
 
     // first pass: build nodes and models
-    const items: ({ id: string; name: string; compilerType: ts.Type } & (
+    const items: ((
       | { type: "class"; model: ClassModel; node: ParsedClass }
       | { type: "interface"; model: InterfaceModel; node: ParsedInterface }
       | { type: "typeAlias"; model: TypeAliasModel; node: ParsedTypeAlias }
-    ))[] = [];
+    ) & { id: string; name: string; compilerType: ts.Type })[] = [];
 
     for (const _interface of this.interfaces) {
-      const name = _interface.name.replace(/"/g, "'");
+      const name = unwrapPropertyName(_interface.name);
       const compilerType = _interface.declaration.getType().compilerType;
 
       const model: InterfaceModel = {
@@ -112,7 +118,7 @@ export class ModelParser extends Parser {
       };
 
       for (const parameter of _interface.declaration.getTypeParameters()) {
-        const parameterName = parameter.getName().replace(/"/g, "'");
+        const parameterName = unwrapPropertyName(parameter.getName());
         const parameterType = parameter.getType();
         const parameterExtends = parameterType.getConstraint()?.getText();
         model.arguments.push({ name: parameterName, extends: parameterExtends });
@@ -140,7 +146,7 @@ export class ModelParser extends Parser {
     }
 
     for (const typeAlias of this.typeAliases) {
-      const name = typeAlias.name.replace(/"/g, "'");
+      const name = unwrapPropertyName(typeAlias.name);
       const type = typeAlias.declaration.getType().compilerType;
 
       const model: TypeAliasModel = {
@@ -154,7 +160,7 @@ export class ModelParser extends Parser {
       };
 
       for (const parameter of typeAlias.declaration.getTypeParameters()) {
-        const parameterName = parameter.getName().replace(/"/g, "'");
+        const parameterName = unwrapPropertyName(parameter.getName());
         const parameterType = parameter.getType();
         const parameterExtends = parameterType.getConstraint()?.getText();
         model.arguments.push({ name: parameterName, extends: parameterExtends });
@@ -174,7 +180,7 @@ export class ModelParser extends Parser {
     }
 
     for (const currentClass of this.classes) {
-      const name = currentClass.name.replace(/"/g, "'");
+      const name = unwrapPropertyName(currentClass.name);
       const type = currentClass.declaration.getType().compilerType;
 
       const model: ClassModel = {
@@ -189,14 +195,14 @@ export class ModelParser extends Parser {
       };
 
       for (const parameter of currentClass.declaration.getTypeParameters()) {
-        const parameterName = parameter.getName().replace(/"/g, "'");
+        const parameterName = unwrapPropertyName(parameter.getName());
         const parameterType = parameter.getType();
         const parameterExtends = parameterType.getConstraint()?.getText();
         model.arguments.push({ name: parameterName, extends: parameterExtends });
       }
 
       if (currentClass.extends) {
-        const extendsName = trimImport(currentClass.extends.getText()).replace(/"/g, "'");
+        const extendsName = unwrapPropertyName(trimImport(currentClass.extends.getText()));
         const extendsModel = modelNameToModelMap.get(extendsName);
         if (extendsModel) {
           model.extends = extendsModel;
@@ -205,7 +211,7 @@ export class ModelParser extends Parser {
 
       if (currentClass.implements.length > 0) {
         for (const implementsExpression of currentClass.implements) {
-          const implementsName = trimImport(implementsExpression.getText()).replace(/"/g, "'");
+          const implementsName = unwrapPropertyName(trimImport(implementsExpression.getText()));
           const implementsModel = modelNameToModelMap.get(implementsName);
           model.implements.push(implementsModel ?? implementsName);
         }
@@ -233,7 +239,7 @@ export class ModelParser extends Parser {
 
       // helpers
       const addFunctionProp = (prop: Prop, type?: Type) => {
-        const propName = prop.getName().replace(/"/g, "'");
+        const propName = unwrapPropertyName(prop.getName());
         const propType = type ?? prop.getType();
 
         const callSignatures = propType.getCallSignatures();
@@ -243,7 +249,7 @@ export class ModelParser extends Parser {
           const functionArguments: { name: string; type: Model | string }[] = [];
 
           for (const parameter of callSignature.getParameters()) {
-            const parameterName = parameter.getName().replace(/"/g, "'");
+            const parameterName = unwrapPropertyName(parameter.getName());
             const parameterTypeName = trimImport(parameter.getTypeAtLocation(prop).getText());
             const parameterTypeModel = modelNameToModelMap.get(parameterTypeName);
             if (parameterTypeModel) dependencies.add(parameterTypeModel);
@@ -280,7 +286,7 @@ export class ModelParser extends Parser {
       };
 
       const addArrayProp = (prop: Prop, type?: Type) => {
-        const propName = prop.getName();
+        const propName = unwrapPropertyName(prop.getName());
         const propType = type ?? prop.getType();
 
         if (!propType.isArray()) return false;
@@ -307,7 +313,7 @@ export class ModelParser extends Parser {
       };
 
       const addGenericProp = (prop: Prop, type?: Type) => {
-        const propName = prop.getName().replace(/"/g, "'");
+        const propName = unwrapPropertyName(prop.getName());
         const propType = type ?? prop.getType();
 
         const aliasSymbol = propType.getAliasSymbol();
@@ -360,7 +366,7 @@ export class ModelParser extends Parser {
 
       // FIXME: type these functions, prop is Symbol when Type is provided
       const addDefaultProp = (prop: Prop, type?: Type) => {
-        const propName = prop.getName().replace(/"/g, "'");
+        const propName = unwrapPropertyName(prop.getName());
         const propType = type ?? prop.getType();
         let typeName = trimImport(propType.getText());
 
@@ -410,7 +416,7 @@ export class ModelParser extends Parser {
         }
 
         if (item.node.type.isUnion()) {
-          const types: (Model | (string & {}))[] = [];
+          const types: (Model | ({} & string))[] = [];
           for (const type of item.node.type.getUnionTypes()) {
             const typeName = trimImport(type.getText());
             const typeModel = modelNameToModelMap.get(typeName);
