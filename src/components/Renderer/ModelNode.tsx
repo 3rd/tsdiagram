@@ -1,16 +1,16 @@
 import { useMemo } from "react";
-import { Position } from "reactflow";
 import classNames from "classnames";
+import { Position } from "reactflow";
 import {
-  Model,
   isArraySchemaField,
   isFunctionSchemaField,
   isGenericSchemaField,
   isUnionSchemaField,
+  Model,
 } from "../../lib/parser/ModelParser";
+import { useIsNodeHighlighted } from "../../stores/graph";
 import { useUserOptions } from "../../stores/user-options";
 import { CustomHandle } from "./CustomHandle";
-import { useIsNodeHighlighted } from "../../stores/graph";
 
 export type ModelNodeProps = {
   id: string;
@@ -28,6 +28,9 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
     }
     if (model.type === "class") {
       return model.extends instanceof Object || model.implements.some((item) => item instanceof Object);
+    }
+    if (model.type === "typeAlias") {
+      return model.dependencies.length > 0;
     }
     return false;
   }, [model]);

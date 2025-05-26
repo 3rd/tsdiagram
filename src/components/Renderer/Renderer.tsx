@@ -1,5 +1,19 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  EnterFullScreenIcon,
+  ExitFullScreenIcon,
+  HeightIcon,
+  TransformIcon,
+  WidthIcon,
+} from "@radix-ui/react-icons";
+import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
+import classNames from "classnames";
+import Elk, { ElkNode, LayoutOptions } from "elkjs";
+import omit from "lodash/omit";
+import throttle from "lodash/throttle";
+import "../../reactflow.css";
+
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -16,33 +30,19 @@ import ReactFlow, {
   useReactFlow,
   useUpdateNodeInternals,
 } from "reactflow";
-import classNames from "classnames";
-import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
-import Elk, { ElkNode, LayoutOptions } from "elkjs";
-import omit from "lodash/omit";
-import throttle from "lodash/throttle";
-import "../../reactflow.css";
-
+import { edgeSegmentCache } from "../../edge-segment-cache";
+import { useFullscreen } from "../../hooks/useFullscreen";
 import {
-  Model,
   isArraySchemaField,
   isFunctionSchemaField,
   isGenericSchemaField,
   isUnionSchemaField,
+  Model,
 } from "../../lib/parser/ModelParser";
-import { ModelNode } from "./ModelNode";
-import { CustomEdge } from "./CustomEdge";
-import { UserOptions, useUserOptions } from "../../stores/user-options";
-import {
-  EnterFullScreenIcon,
-  ExitFullScreenIcon,
-  HeightIcon,
-  TransformIcon,
-  WidthIcon,
-} from "@radix-ui/react-icons";
-import { edgeSegmentCache } from "../../edge-segment-cache";
 import { graphStore } from "../../stores/graph";
-import { useFullscreen } from "../../hooks/useFullscreen";
+import { UserOptions, useUserOptions } from "../../stores/user-options";
+import { CustomEdge } from "./CustomEdge";
+import { ModelNode } from "./ModelNode";
 
 const AUTO_LAYOUT_THROTTLE_MS = 120;
 
@@ -175,6 +175,17 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
       }
     }
 
+    if (model.type === "typeAlias") {
+      for (const dependency of model.dependencies) {
+        result.push({
+          ...sharedEdgeProps,
+          id: `${count++}-${model.id}-${dependency.id}`,
+          source: model.id,
+          target: dependency.id,
+        });
+      }
+    }
+
     if (model.type === "class") {
       if (model.extends instanceof Object) {
         result.push({
@@ -237,6 +248,20 @@ const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {})
 
       // function
       if (isFunctionSchemaField(field)) {
+        // function arguments
+        for (const argument of field.arguments) {
+          if (argument.type instanceof Object) {
+            result.push({
+              ...sharedEdgeProps,
+              id: `${count++}-${model.id}-${field.name}-arg-${argument.type.id}`,
+              source: model.id,
+              target: argument.type.id,
+              sourceHandle: `${model.id}-source-${field.name}`,
+            });
+          }
+        }
+
+        // function return type
         if (Array.isArray(field.returnType)) {
           const returnType = field.returnType[0];
           if (returnType instanceof Object) {

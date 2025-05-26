@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-magic-numbers */
 import { expect, it } from "vitest";
-import { ModelParser } from "./ModelParser";
+import { isFunctionSchemaField, ModelParser } from "./ModelParser";
 
 it("parses top level type aliases and interfaces into models", () => {
   const parser = new ModelParser("interface A { a: string; }; type B = { b: string };");
@@ -436,4 +436,201 @@ it("parses optional properties in classes", () => {
     arguments: [],
     implements: [],
   });
+});
+
+it("preserves type alias references instead of expanding unions", () => {
+  const parser = new ModelParser(`
+    type AgentResourceType = "tool" | "context" | "escalation";
+    type AgentFlowProps = {
+      onAddResource: (type: AgentResourceType) => void;
+    };
+  `);
+  const models = parser.getModels();
+
+  expect(models.length).toBe(2);
+
+  expect(models[0]).toEqual({
+    id: "AgentResourceType",
+    name: "AgentResourceType",
+    schema: [{ name: "==>", type: "union", types: ['"tool"', '"context"', '"escalation"'], optional: false }],
+    dependencies: [],
+    dependants: [expect.objectContaining({ name: "AgentFlowProps" })],
+    type: "typeAlias",
+    arguments: [],
+  });
+
+  expect(models[1]).toEqual({
+    id: "AgentFlowProps",
+    name: "AgentFlowProps",
+    schema: [
+      {
+        name: "onAddResource",
+        type: "function",
+        arguments: [
+          {
+            name: "type",
+            type: expect.objectContaining({ name: "AgentResourceType" }),
+          },
+        ],
+        returnType: "void",
+        optional: false,
+      },
+    ],
+    dependencies: [expect.objectContaining({ name: "AgentResourceType" })],
+    dependants: [],
+    type: "typeAlias",
+    arguments: [],
+  });
+});
+
+it("preserves type alias references in property types", () => {
+  const parser = new ModelParser(`
+    type Status = "active" | "inactive" | "pending";
+    interface User {
+      status: Status;
+      previousStatus?: Status;
+    }
+  `);
+  const models = parser.getModels();
+
+  expect(models.length).toBe(2);
+
+  expect(models[0]).toEqual({
+    id: "User",
+    name: "User",
+    extends: [],
+    schema: [
+      { name: "status", type: expect.objectContaining({ name: "Status" }), optional: false },
+      { name: "previousStatus", type: expect.objectContaining({ name: "Status" }), optional: true },
+    ],
+    dependencies: [expect.objectContaining({ name: "Status" })],
+    dependants: [],
+    type: "interface",
+    arguments: [],
+  });
+});
+
+it("preserves type alias references in arrays and generics", () => {
+  const parser = new ModelParser(`
+    type Color = "red" | "green" | "blue";
+    type Theme = {
+      colors: Color[];
+      colorMap: Record<string, Color>;
+    };
+  `);
+  const models = parser.getModels();
+
+  expect(models.length).toBe(2);
+
+  expect(models[1]).toEqual({
+    id: "Theme",
+    name: "Theme",
+    schema: [
+      {
+        name: "colors",
+        type: "array",
+        elementType: expect.objectContaining({ name: "Color" }),
+        optional: false,
+      },
+      {
+        name: "colorMap",
+        type: "generic",
+        genericName: "Record",
+        arguments: ["string", expect.objectContaining({ name: "Color" })],
+        optional: false,
+      },
+    ],
+    dependencies: [expect.objectContaining({ name: "Color" })],
+    dependants: [],
+    type: "typeAlias",
+    arguments: [],
+  });
+});
+
+it("ensures dependencies are properly tracked for function arguments", () => {
+  const parser = new ModelParser(`
+    type ResourceType = "tool" | "context" | "escalation";
+    interface Handler {
+      onAdd: (type: ResourceType) => void;
+      onRemove: (id: string, type: ResourceType) => ResourceType;
+    }
+  `);
+  const models = parser.getModels();
+
+  expect(models.length).toBe(2);
+
+  const resourceTypeModel = models.find((m) => m.name === "ResourceType");
+  const handlerModel = models.find((m) => m.name === "Handler");
+
+  expect(resourceTypeModel?.dependants).toEqual([expect.objectContaining({ name: "Handler" })]);
+  expect(handlerModel?.dependencies).toEqual([expect.objectContaining({ name: "ResourceType" })]);
+
+  expect(handlerModel?.schema).toEqual([
+    {
+      name: "onAdd",
+      type: "function",
+      arguments: [{ name: "type", type: expect.objectContaining({ name: "ResourceType" }) }],
+      returnType: "void",
+      optional: false,
+    },
+    {
+      name: "onRemove",
+      type: "function",
+      arguments: [
+        { name: "id", type: "string" },
+        { name: "type", type: expect.objectContaining({ name: "ResourceType" }) },
+      ],
+      returnType: expect.objectContaining({ name: "ResourceType" }),
+      optional: false,
+    },
+  ]);
+});
+
+it("handles indexed access type scenario", () => {
+  const parser = new ModelParser(`
+    type A = { type: "a" };
+    type B = { type: "b" };
+    type C = { type: "c" };
+    type Union = A | B | C;
+    type UnionKey = Union["type"];
+
+    type SampleA = {
+      id: string;
+      Works: UnionKey;
+    };
+
+    type SampleB = {
+      id: string;
+      AlsoWorks: (arg: UnionKey) => void;
+    };
+  `);
+  const models = parser.getModels();
+
+  const unionKeyModel = models.find((m) => m.name === "UnionKey");
+  const sampleAModel = models.find((m) => m.name === "SampleA");
+  const sampleBModel = models.find((m) => m.name === "SampleB");
+
+  const worksField = sampleAModel?.schema.find((field) => field.name === "Works");
+  const functionField = sampleBModel?.schema.find((field) => field.name === "AlsoWorks");
+  expect(models.length).toBe(7); // A, B, C, Union, UnionKey, SampleA, SampleB
+
+  const unionModel = models.find((m) => m.name === "Union");
+
+  // verify dependency chain: Union <- UnionKey <- SampleA/SampleB
+  expect(unionKeyModel?.dependencies).toEqual([expect.objectContaining({ name: "Union" })]);
+  expect(unionKeyModel?.dependants).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: "SampleA" }),
+      expect.objectContaining({ name: "SampleB" }),
+    ])
+  );
+  expect(sampleAModel?.dependencies).toEqual([expect.objectContaining({ name: "UnionKey" })]);
+  expect(sampleBModel?.dependencies).toEqual([expect.objectContaining({ name: "UnionKey" })]);
+  expect(unionModel?.dependants).toEqual([expect.objectContaining({ name: "UnionKey" })]);
+
+  // check that type alias references are preserved
+  expect(worksField?.type).toEqual(expect.objectContaining({ name: "UnionKey" }));
+  if (functionField && isFunctionSchemaField(functionField)) {
+    expect(functionField.arguments[0]?.type).toEqual(expect.objectContaining({ name: "UnionKey" }));
+  }
 });

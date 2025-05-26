@@ -1,7 +1,9 @@
 import {
   GetAccessorDeclaration,
+  IndexedAccessTypeNode,
   MethodDeclaration,
   MethodSignature,
+  ParameterDeclaration,
   PropertyDeclaration,
   PropertySignature,
   SetAccessorDeclaration,
@@ -248,7 +250,32 @@ export class ModelParser extends Parser {
 
           for (const parameter of callSignature.getParameters()) {
             const parameterName = sanitizePropertyName(parameter.getName());
-            const parameterTypeName = trimImport(parameter.getTypeAtLocation(prop).getText());
+            const parameterType = parameter.getTypeAtLocation(prop);
+            let parameterTypeName = trimImport(parameterType.getText());
+
+            // try to get the type from the parameter's actual declaration
+            const parameterDeclaration = parameter.getDeclarations()?.[0];
+            if (parameterDeclaration?.isKind(ts.SyntaxKind.Parameter)) {
+              const typedDeclaration = parameterDeclaration as ParameterDeclaration;
+              const typeNode = typedDeclaration.getTypeNode();
+              if (typeNode) {
+                const typeNodeText = trimImport(typeNode.getText());
+                // check if this matches a known type alias
+                const typeNodeModel = modelNameToModelMap.get(typeNodeText);
+                if (typeNodeModel) {
+                  parameterTypeName = typeNodeText;
+                }
+              }
+            }
+
+            // fallback: check if this type has an alias symbol
+            if (!modelNameToModelMap.get(parameterTypeName)) {
+              const aliasSymbol = parameterType.getAliasSymbol();
+              if (aliasSymbol) {
+                parameterTypeName = aliasSymbol.getName();
+              }
+            }
+
             const parameterTypeModel = modelNameToModelMap.get(parameterTypeName);
             if (parameterTypeModel) dependencies.add(parameterTypeModel);
             functionArguments.push({
@@ -259,9 +286,19 @@ export class ModelParser extends Parser {
 
           const returnType = callSignature.getReturnType();
           const isArray = returnType.isArray();
-          const returnTypeName = isArray
-            ? trimImport(returnType.getArrayElementType()?.getText() ?? "")
-            : trimImport(returnType.getText());
+          let returnTypeName = "";
+
+          if (isArray) {
+            const elementType = returnType.getArrayElementType();
+            if (elementType) {
+              const aliasSymbol = elementType.getAliasSymbol();
+              returnTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(elementType.getText());
+            }
+          } else {
+            const aliasSymbol = returnType.getAliasSymbol();
+            returnTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(returnType.getText());
+          }
+
           const returnTypeModel = modelNameToModelMap.get(returnTypeName);
           if (returnTypeModel) dependencies.add(returnTypeModel);
 
@@ -289,9 +326,12 @@ export class ModelParser extends Parser {
 
         if (!propType.isArray()) return false;
 
-        const elementType = prop.getType().getArrayElementType();
+        const elementType = propType.getArrayElementType();
         if (!elementType) return false;
-        const elementTypeName = trimImport(elementType.getText());
+
+        // check if the element type has an alias symbol
+        const aliasSymbol = elementType.getAliasSymbol();
+        const elementTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(elementType.getText());
         const elementTypeModel = modelNameToModelMap.get(elementTypeName);
 
         let optional = false;
@@ -345,7 +385,12 @@ export class ModelParser extends Parser {
 
           for (const [i, typeArgument] of typeArguments.entries()) {
             let typeArgumentName = trimImport(typeArgument.getText());
-            if (typeNodeArguments[i] && typeNodeArguments[i].isKind(ts.SyntaxKind.TypeReference)) {
+
+            // check if type argument has an alias symbol
+            const typeArgumentAliasSymbol = typeArgument.getAliasSymbol();
+            if (typeArgumentAliasSymbol) {
+              typeArgumentName = typeArgumentAliasSymbol.getName();
+            } else if (typeNodeArguments[i] && typeNodeArguments[i].isKind(ts.SyntaxKind.TypeReference)) {
               typeArgumentName = trimImport(typeNodeArguments[i].getText());
             }
 
@@ -362,16 +407,30 @@ export class ModelParser extends Parser {
         return false;
       };
 
-      // FIXME: type these functions, prop is Symbol when Type is provided
       const addDefaultProp = (prop: Prop, type?: Type) => {
         const propName = sanitizePropertyName(prop.getName());
         const propType = type ?? prop.getType();
         let typeName = trimImport(propType.getText());
 
+        // try to get the type from the property's actual declaration
         const symbolDeclaration = prop.getSymbol?.()?.getDeclarations()?.[0];
         if (symbolDeclaration?.isKind(ts.SyntaxKind.PropertySignature)) {
           const declarationName = symbolDeclaration.getTypeNode()?.getText();
-          if (declarationName) typeName = trimImport(declarationName);
+          if (declarationName) {
+            const declarationTypeName = trimImport(declarationName);
+            const declarationTypeModel = modelNameToModelMap.get(declarationTypeName);
+            if (declarationTypeModel) {
+              typeName = declarationTypeName;
+            }
+          }
+        }
+
+        // fallback: check if this type has an alias symbol
+        if (!modelNameToModelMap.get(typeName)) {
+          const aliasSymbol = propType.getAliasSymbol();
+          if (aliasSymbol) {
+            typeName = aliasSymbol.getName();
+          }
         }
 
         const typeModel = modelNameToModelMap.get(typeName);
@@ -393,6 +452,22 @@ export class ModelParser extends Parser {
       };
 
       if (item.type === "typeAlias") {
+        // check for indexed access type
+        const typeNode = item.node.declaration.getTypeNode();
+        if (typeNode?.isKind(ts.SyntaxKind.IndexedAccessType)) {
+          const indexedAccessType = typeNode as IndexedAccessTypeNode;
+          // first child which should be the object type
+          const children = indexedAccessType.getChildren();
+          const objectType = children[0];
+          if (objectType) {
+            const objectTypeName = trimImport(objectType.getText());
+            const objectTypeModel = modelNameToModelMap.get(objectTypeName);
+            if (objectTypeModel) {
+              dependencies.add(objectTypeModel);
+            }
+          }
+        }
+
         if (
           [
             //
@@ -410,6 +485,7 @@ export class ModelParser extends Parser {
           ].some(Boolean)
         ) {
           model.schema.push({ name: "==>", type: item.node.type.getText(), optional: false });
+          dependencyMap.set(item.name, dependencies);
           continue;
         }
 
@@ -439,14 +515,18 @@ export class ModelParser extends Parser {
             addDefaultProp(valueDeclaration);
           } else {
             const propType = this.checker.getTypeOfSymbolAtLocation(prop, item.node.declaration);
-            // @ts-expect-error
-            if (addFunctionProp(prop as unknown, propType)) continue;
-            // @ts-expect-error
-            if (addArrayProp(prop as unknown, propType)) continue;
-            // @ts-expect-error
-            if (addGenericProp(prop as unknown, propType)) continue;
-            // @ts-expect-error
-            addDefaultProp(prop as unknown, propType);
+            const fakeProp = {
+              getName: () => prop.getName(),
+              getType: () => propType,
+              getSymbol: () => prop,
+              isKind: () => false,
+              hasQuestionToken: () => false,
+            } as unknown as Prop;
+
+            if (addFunctionProp(fakeProp, propType)) continue;
+            if (addArrayProp(fakeProp, propType)) continue;
+            if (addGenericProp(fakeProp, propType)) continue;
+            addDefaultProp(fakeProp, propType);
           }
         }
       }
