@@ -527,6 +527,7 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     options.renderer.direction = options.renderer.direction === "horizontal" ? "vertical" : "horizontal";
     options.renderer.autoFitView = true;
     options.save();
+    manuallyMovedNodesSet.current.clear();
     handleAutoLayout();
   }, [handleAutoLayout, options]);
 
