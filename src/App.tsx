@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
 import { ReactFlowProvider } from "reactflow";
+import { Editor } from "./components/Editor";
 import { Header } from "./components/Header";
 import { Panels } from "./components/Panels";
-import { Editor } from "./components/Editor";
-import { RendererWrapper } from "./components/Renderer";
 import { Preferences } from "./components/Preferences";
+import { RendererWrapper } from "./components/Renderer";
 import { Share } from "./components/Share";
 import { Sidebar } from "./components/Sidebar";
 import { useUserOptions } from "./stores/user-options";

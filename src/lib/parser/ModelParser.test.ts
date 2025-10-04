@@ -634,3 +634,44 @@ it("handles indexed access type scenario", () => {
     expect(functionField.arguments[0]?.type).toEqual(expect.objectContaining({ name: "UnionKey" }));
   }
 });
+
+it("preserves alias references for function return types on class properties", () => {
+  const parser = new ModelParser(`
+    type A = { type: "a" };
+    type B = { type: "b" };
+    type C = { type: "c" };
+    type Union = A | B | C;
+    type UnionKey = Union["type"];
+
+    class Test {
+      name: string;
+      doThis: () => UnionKey;
+
+      help() {
+        console.log(2);
+      }
+    }
+  `);
+
+  const models = parser.getModels();
+
+  const unionKeyModel = models.find((m) => m.name === "UnionKey");
+  const testModel = models.find((m) => m.name === "Test");
+  expect(unionKeyModel).toBeDefined();
+  expect(testModel).toBeDefined();
+
+  if (!testModel) return;
+
+  const doThisField = testModel.schema.find((field) => field.name === "doThis");
+
+  expect(doThisField).toBeDefined();
+  if (!doThisField || !isFunctionSchemaField(doThisField)) {
+    throw new Error("Expected doThis to be parsed as a function field");
+  }
+
+  expect(doThisField.returnType).toEqual(expect.objectContaining({ name: "UnionKey" }));
+  expect(testModel.dependencies).toEqual([expect.objectContaining({ name: "UnionKey" })]);
+  expect(unionKeyModel?.dependants).toEqual(
+    expect.arrayContaining([expect.objectContaining({ name: "Test" })])
+  );
+});

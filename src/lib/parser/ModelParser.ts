@@ -1,4 +1,5 @@
 import {
+  FunctionTypeNode,
   GetAccessorDeclaration,
   IndexedAccessTypeNode,
   MethodDeclaration,
@@ -247,6 +248,27 @@ export class ModelParser extends Parser {
         if (callSignatures.length === 1) {
           const callSignature = callSignatures[0];
           const functionArguments: { name: string; type: Model | string }[] = [];
+          const declaredReturnTypeName = (() => {
+            if ("getReturnTypeNode" in prop && typeof prop.getReturnTypeNode === "function") {
+              const returnTypeNode = prop.getReturnTypeNode();
+              if (returnTypeNode) {
+                return trimImport(returnTypeNode.getText());
+              }
+            }
+
+            if ("getTypeNode" in prop && typeof prop.getTypeNode === "function") {
+              const typeNode = prop.getTypeNode();
+              if (typeNode?.isKind(ts.SyntaxKind.FunctionType)) {
+                const functionTypeNode = typeNode as FunctionTypeNode;
+                const returnTypeNode = functionTypeNode.getReturnTypeNode();
+                if (returnTypeNode) {
+                  return trimImport(returnTypeNode.getText());
+                }
+              }
+            }
+
+            return undefined;
+          })();
 
           for (const parameter of callSignature.getParameters()) {
             const parameterName = sanitizePropertyName(parameter.getName());
@@ -294,6 +316,8 @@ export class ModelParser extends Parser {
               const aliasSymbol = elementType.getAliasSymbol();
               returnTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(elementType.getText());
             }
+          } else if (declaredReturnTypeName) {
+            returnTypeName = declaredReturnTypeName;
           } else {
             const aliasSymbol = returnType.getAliasSymbol();
             returnTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(returnType.getText());

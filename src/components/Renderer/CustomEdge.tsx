@@ -1,9 +1,9 @@
 import { useMemo } from "react";
-import { useNodes, BezierEdge, EdgeProps, XYPosition } from "reactflow";
-import { PathFindingFunction, SVGDrawFunction, getSmartEdge } from "@tisoap/react-flow-smart-edge";
-import { JumpPointFinder, DiagonalMovement } from "pathfinding";
-import { Direction } from "../../types";
+import { getSmartEdge, PathFindingFunction, SVGDrawFunction } from "@tisoap/react-flow-smart-edge";
+import { DiagonalMovement, JumpPointFinder } from "pathfinding";
+import { BezierEdge, EdgeProps, useNodes, XYPosition } from "reactflow";
 import { useIsEdgeDecorated } from "../../stores/graph";
+import { Direction } from "../../types";
 // import { edgeSegmentCache } from "../../edge-segment-cache";
 
 const toPoint = ([x, y]: number[]): XYPosition => ({ x, y });

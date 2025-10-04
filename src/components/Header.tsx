@@ -1,9 +1,9 @@
 import { memo } from "react";
-import { Share1Icon, GearIcon, ArrowRightIcon, ArrowLeftIcon, FilePlusIcon } from "@radix-ui/react-icons";
-import { useUserOptions } from "../stores/user-options";
-import { documentsStore } from "../stores/documents";
+import { ArrowLeftIcon, ArrowRightIcon, FilePlusIcon, GearIcon, Share1Icon } from "@radix-ui/react-icons";
 import classNames from "classnames";
 import { useStore } from "statelift";
+import { documentsStore } from "../stores/documents";
+import { useUserOptions } from "../stores/user-options";
 
 type HeaderProps = {
   onPreferencesClick?: () => void;

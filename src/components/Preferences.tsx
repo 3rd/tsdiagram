@@ -1,8 +1,8 @@
 import { Fragment, useRef } from "react";
 import { Dialog, Transition } from "@headlessui/react";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { useUserOptions } from "../stores/user-options";
 import { themes } from "../themes";
-import { useIsMobile } from "../hooks/useIsMobile";
 
 export type PreferencesProps = {
   isOpen: boolean;

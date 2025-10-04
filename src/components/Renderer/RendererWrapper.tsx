@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { Renderer } from "./Renderer";
+import { useStore } from "statelift";
+import { useDebounced } from "../../hooks/useDebounced";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { ModelParser } from "../../lib/parser/ModelParser";
 import { documentsStore } from "../../stores/documents";
-import { useDebounced } from "../../hooks/useDebounced";
-import { useStore } from "statelift";
+import { Renderer } from "./Renderer";
 
 export const RendererWrapper = () => {
   const documentSource = useStore(documentsStore, (state) => state.currentDocument.source);

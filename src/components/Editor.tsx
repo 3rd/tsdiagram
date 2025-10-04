@@ -1,10 +1,10 @@
 import { ComponentProps, memo, useCallback, useEffect, useRef } from "react";
 import MonacoEditor, { useMonaco } from "@monaco-editor/react";
-import { InitVimModeResult, initVimMode } from "monaco-vim";
-import { themes } from "../themes";
+import { initVimMode, InitVimModeResult } from "monaco-vim";
+import { useStore } from "statelift";
 import { documentsStore } from "../stores/documents";
 import { useUserOptions } from "../stores/user-options";
-import { useStore } from "statelift";
+import { themes } from "../themes";
 
 type MonacoMountHandler = ComponentProps<typeof MonacoEditor>["onMount"];
 type IStandaloneCodeEditor = Parameters<Exclude<MonacoMountHandler, undefined>>[0];

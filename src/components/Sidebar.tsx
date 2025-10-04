@@ -1,8 +1,8 @@
-import { Cross2Icon } from "@radix-ui/react-icons";
-import { useUserOptions } from "../stores/user-options";
-import { documentsStore, useDocuments } from "../stores/documents";
 import { memo, useCallback, useState } from "react";
+import { Cross2Icon } from "@radix-ui/react-icons";
 import classNames from "classnames";
+import { documentsStore, useDocuments } from "../stores/documents";
+import { useUserOptions } from "../stores/user-options";
 
 type SidebarItemProps = {
   id: string;

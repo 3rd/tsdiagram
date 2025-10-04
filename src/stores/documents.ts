@@ -1,8 +1,8 @@
+import isEqual from "lodash/isEqual";
+import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from "lz-string";
+import { nanoid } from "nanoid";
 import { createStore, useStore } from "statelift";
 import { z } from "zod";
-import { decompressFromEncodedURIComponent, compressToEncodedURIComponent } from "lz-string";
-import { nanoid } from "nanoid";
-import isEqual from "lodash/isEqual";
 import * as examples from "../examples";
 
 const documentSchema = z.object({
