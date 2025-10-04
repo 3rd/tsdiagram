@@ -17,6 +17,12 @@ export type ModelNodeProps = {
   data: { model: Model };
 };
 
+const isModelReference = (value: unknown): value is Model => {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Partial<Model>;
+  return typeof candidate.name === "string" && typeof candidate.type === "string";
+};
+
 export const ModelNode = ({ id, data }: ModelNodeProps) => {
   const { model } = data;
   const options = useUserOptions();
@@ -24,10 +30,10 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
   const hasSourceHandle = useMemo(() => {
     if (model.type === "interface") {
-      return model.extends.some((item) => item instanceof Object);
+      return model.extends.some((item) => isModelReference(item));
     }
     if (model.type === "class") {
-      return model.extends instanceof Object || model.implements.some((item) => item instanceof Object);
+      return isModelReference(model.extends) || model.implements.some((item) => isModelReference(item));
     }
     if (model.type === "typeAlias") {
       return model.dependencies.length > 0;
@@ -87,7 +93,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       }
 
       // reference
-      if (field.type instanceof Object) {
+      if (isModelReference(field.type)) {
         hasFieldSourceHandle = true;
         typeFragments.push(
           <span key="reference" className={classes.field.modelTypeColor}>
@@ -98,7 +104,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
       // array
       else if (isArraySchemaField(field)) {
         // of model references
-        if (field.elementType instanceof Object) {
+        if (isModelReference(field.elementType)) {
           hasFieldSourceHandle = true;
           typeFragments.push(
             <span key="array-reference" className={classes.field.modelTypeColor}>
@@ -121,11 +127,11 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         for (let i = 0; i < field.arguments.length; i++) {
           const argument = field.arguments[i];
           const argumentKey = `${model.id}-${field.name}-${
-            argument instanceof Object ? argument.name : argument
+            isModelReference(argument) ? argument.name : argument
           }-${i}`;
 
           // of model references
-          if (argument instanceof Object) {
+          if (isModelReference(argument)) {
             hasFieldSourceHandle = true;
             argumentFragments.push(
               <span key={argumentKey} className={classes.field.modelTypeColor}>
@@ -168,7 +174,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         const argumentFragments: JSX.Element[] = [];
         for (const argument of field.arguments) {
           const argumentKey = `${model.id}-${field.name}-${argument.name}`;
-          if (argument.type instanceof Object) {
+          if (isModelReference(argument.type)) {
             hasFieldSourceHandle = true;
 
             argumentFragments.push(
@@ -207,7 +213,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         if (Array.isArray(field.returnType)) {
           const [returnType] = field.returnType;
 
-          if (returnType instanceof Object) {
+          if (isModelReference(returnType)) {
             hasFieldSourceHandle = true;
             typeFragments.push(
               <span key={returnTypeKey} className={classes.field.modelTypeColor}>
@@ -221,7 +227,7 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
               </span>
             );
           }
-        } else if (field.returnType instanceof Object) {
+        } else if (isModelReference(field.returnType)) {
           hasFieldSourceHandle = true;
 
           typeFragments.push(
@@ -241,10 +247,10 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
         for (let i = 0; i < field.types.length; i++) {
           const type = field.types[i];
-          const typeKey = `${model.id}-${field.name}-${type instanceof Object ? type.name : type}-${i}`;
+          const typeKey = `${model.id}-${field.name}-${isModelReference(type) ? type.name : type}-${i}`;
 
           // of model references
-          if (type instanceof Object) {
+          if (isModelReference(type)) {
             hasFieldSourceHandle = true;
             unionFragments.push(
               <span key={typeKey} className={classes.field.modelTypeColor}>
@@ -318,19 +324,19 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
     if (model.type === "interface" && model.extends.length > 0) {
       const extendParts = [];
       for (const extendedItem of model.extends) {
-        extendParts.push(extendedItem instanceof Object ? extendedItem.name : extendedItem);
+        extendParts.push(isModelReference(extendedItem) ? extendedItem.name : extendedItem);
       }
       nameParts.push(` extends ${extendParts.join(", ")}`);
     }
 
     if (model.type === "class" && model.extends) {
-      nameParts.push(` extends ${model.extends instanceof Object ? model.extends.name : model.extends}`);
+      nameParts.push(` extends ${isModelReference(model.extends) ? model.extends.name : model.extends}`);
     }
 
     if (model.type === "class" && model.implements.length > 0) {
       const implementParts = [];
       for (const implementedItem of model.implements) {
-        implementParts.push(implementedItem instanceof Object ? implementedItem.name : implementedItem);
+        implementParts.push(isModelReference(implementedItem) ? implementedItem.name : implementedItem);
       }
       nameParts.push(` implements ${implementParts.join(", ")}`);
     }

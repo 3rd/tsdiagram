@@ -10,6 +10,7 @@ import {
   SetAccessorDeclaration,
   ts,
   Type,
+  TypeNode,
   TypeReferenceNode,
 } from "ts-morph";
 import { ParsedClass, ParsedInterface, ParsedTypeAlias, Parser } from "./Parser";
@@ -242,106 +243,272 @@ export class ModelParser extends Parser {
       const addFunctionProp = (prop: Prop, type?: Type) => {
         const propName = sanitizePropertyName(prop.getName());
         const propType = type ?? prop.getType();
+        const propKind = "getKind" in prop ? prop.getKind() : undefined;
 
-        const callSignatures = propType.getCallSignatures();
+        const registerTypeDependencies = (currentType?: Type, seen = new Set<Type>()) => {
+          if (!currentType || seen.has(currentType)) return;
+          seen.add(currentType);
 
-        if (callSignatures.length === 1) {
-          const callSignature = callSignatures[0];
-          const functionArguments: { name: string; type: Model | string }[] = [];
-          const declaredReturnTypeName = (() => {
-            if ("getReturnTypeNode" in prop && typeof prop.getReturnTypeNode === "function") {
-              const returnTypeNode = prop.getReturnTypeNode();
-              if (returnTypeNode) {
-                return trimImport(returnTypeNode.getText());
-              }
-            }
-
-            if ("getTypeNode" in prop && typeof prop.getTypeNode === "function") {
-              const typeNode = prop.getTypeNode();
-              if (typeNode?.isKind(ts.SyntaxKind.FunctionType)) {
-                const functionTypeNode = typeNode as FunctionTypeNode;
-                const returnTypeNode = functionTypeNode.getReturnTypeNode();
-                if (returnTypeNode) {
-                  return trimImport(returnTypeNode.getText());
-                }
-              }
-            }
-
-            return undefined;
-          })();
-
-          for (const parameter of callSignature.getParameters()) {
-            const parameterName = sanitizePropertyName(parameter.getName());
-            const parameterType = parameter.getTypeAtLocation(prop);
-            let parameterTypeName = trimImport(parameterType.getText());
-
-            // try to get the type from the parameter's actual declaration
-            const parameterDeclaration = parameter.getDeclarations()?.[0];
-            if (parameterDeclaration?.isKind(ts.SyntaxKind.Parameter)) {
-              const typedDeclaration = parameterDeclaration as ParameterDeclaration;
-              const typeNode = typedDeclaration.getTypeNode();
-              if (typeNode) {
-                const typeNodeText = trimImport(typeNode.getText());
-                // check if this matches a known type alias
-                const typeNodeModel = modelNameToModelMap.get(typeNodeText);
-                if (typeNodeModel) {
-                  parameterTypeName = typeNodeText;
-                }
-              }
-            }
-
-            // fallback: check if this type has an alias symbol
-            if (!modelNameToModelMap.get(parameterTypeName)) {
-              const aliasSymbol = parameterType.getAliasSymbol();
-              if (aliasSymbol) {
-                parameterTypeName = aliasSymbol.getName();
-              }
-            }
-
-            const parameterTypeModel = modelNameToModelMap.get(parameterTypeName);
-            if (parameterTypeModel) dependencies.add(parameterTypeModel);
-            functionArguments.push({
-              name: parameterName,
-              type: parameterTypeModel ?? parameterTypeName,
-            });
+          const aliasSymbol = currentType.getAliasSymbol();
+          if (aliasSymbol) {
+            const aliasName = aliasSymbol.getName();
+            const aliasModel = modelNameToModelMap.get(aliasName);
+            if (aliasModel) dependencies.add(aliasModel);
           }
 
-          const returnType = callSignature.getReturnType();
-          const isArray = returnType.isArray();
-          let returnTypeName = "";
-
-          if (isArray) {
-            const elementType = returnType.getArrayElementType();
-            if (elementType) {
-              const aliasSymbol = elementType.getAliasSymbol();
-              returnTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(elementType.getText());
-            }
-          } else if (declaredReturnTypeName) {
-            returnTypeName = declaredReturnTypeName;
-          } else {
-            const aliasSymbol = returnType.getAliasSymbol();
-            returnTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(returnType.getText());
+          const symbol = currentType.getSymbol();
+          if (symbol) {
+            const symbolName = trimImport(symbol.getName());
+            const symbolModel = modelNameToModelMap.get(symbolName);
+            if (symbolModel) dependencies.add(symbolModel);
           }
 
+          if (currentType.isArray()) {
+            const elementType = currentType.getArrayElementType();
+            if (elementType) registerTypeDependencies(elementType, seen);
+          }
+
+          if (currentType.isTuple()) {
+            for (const elementType of currentType.getTupleElements()) {
+              registerTypeDependencies(elementType, seen);
+            }
+          }
+
+          for (const typeArgument of currentType.getTypeArguments()) {
+            registerTypeDependencies(typeArgument, seen);
+          }
+
+          if (currentType.isUnion()) {
+            for (const unionType of currentType.getUnionTypes()) {
+              registerTypeDependencies(unionType, seen);
+            }
+          }
+
+          if (currentType.isIntersection()) {
+            for (const intersectionType of currentType.getIntersectionTypes()) {
+              registerTypeDependencies(intersectionType, seen);
+            }
+          }
+        };
+
+        const registerTypeDependenciesFromNode = (node?: TypeNode) => {
+          if (!node) return;
+
+          const addFromName = (name: string) => {
+            const associatedModel = modelNameToModelMap.get(name);
+            if (associatedModel) dependencies.add(associatedModel);
+          };
+
+          const trimmed = trimImport(node.getText());
+          addFromName(trimmed);
+
+          for (const typeReference of node.getDescendantsOfKind(ts.SyntaxKind.TypeReference)) {
+            addFromName(trimImport(typeReference.getText()));
+          }
+        };
+
+        const toArgumentSchema = (argumentName: string, argumentType: Type, typeNode?: TypeNode) => {
+          let argumentTypeName = trimImport(argumentType.getText());
+
+          if (typeNode?.isKind(ts.SyntaxKind.TypeReference)) {
+            const nodeName = trimImport(typeNode.getText());
+            if (modelNameToModelMap.get(nodeName)) {
+              argumentTypeName = nodeName;
+            }
+          }
+
+          const aliasSymbol = argumentType.getAliasSymbol();
+          if (!modelNameToModelMap.get(argumentTypeName) && aliasSymbol) {
+            argumentTypeName = aliasSymbol.getName();
+          }
+
+          const argumentTypeModel = modelNameToModelMap.get(argumentTypeName);
+          if (argumentTypeModel) dependencies.add(argumentTypeModel);
+          registerTypeDependencies(argumentType);
+          registerTypeDependenciesFromNode(typeNode);
+
+          return {
+            name: argumentName,
+            type: argumentTypeModel ?? argumentTypeName,
+          };
+        };
+
+        if (propKind === ts.SyntaxKind.GetAccessor) {
+          const getter = prop as GetAccessorDeclaration;
+          const returnTypeNode = getter.getReturnTypeNode();
+          const returnType = getter.getReturnType();
+          const declaredName = returnTypeNode ? trimImport(returnTypeNode.getText()) : undefined;
+
+          const returnTypeName = declaredName ?? trimImport(returnType.getText());
           const returnTypeModel = modelNameToModelMap.get(returnTypeName);
           if (returnTypeModel) dependencies.add(returnTypeModel);
+          registerTypeDependencies(returnType);
+          registerTypeDependenciesFromNode(returnTypeNode);
 
-          let optional = false;
-          if (prop.isKind?.(ts.SyntaxKind.PropertySignature)) {
-            optional = prop.hasQuestionToken();
+          model.schema.push({
+            name: propName,
+            type: "function",
+            arguments: [],
+            returnType: returnTypeModel ?? returnTypeName,
+            optional: false,
+          });
+          return true;
+        }
+
+        if (propKind === ts.SyntaxKind.SetAccessor) {
+          const setter = prop as SetAccessorDeclaration;
+          const parameters = setter.getParameters();
+          const functionArguments: { name: string; type: Model | string }[] = [];
+
+          for (const parameter of parameters) {
+            const parameterName = sanitizePropertyName(parameter.getName());
+            const parameterType = parameter.getType();
+            functionArguments.push(
+              toArgumentSchema(parameterName, parameterType, parameter.getTypeNode() ?? undefined)
+            );
           }
+
+          registerTypeDependenciesFromNode(parameters[0]?.getTypeNode?.() ?? undefined);
 
           model.schema.push({
             name: propName,
             type: "function",
             arguments: functionArguments,
-            returnType: isArray ? [returnTypeModel ?? returnTypeName] : returnTypeModel ?? returnTypeName,
-            optional,
+            returnType: "void",
+            optional: false,
           });
           return true;
         }
 
-        return false;
+        const callSignatures = propType.getCallSignatures();
+        if (callSignatures.length === 0) return false;
+
+        const propDeclarations = prop.getSymbol?.()?.getDeclarations?.() ?? [];
+
+        const callSignature = (() => {
+          if (callSignatures.length === 1) return callSignatures[0];
+
+          const matchByDeclaration = callSignatures.find((signature) => {
+            const declaration = signature.getDeclaration();
+            if (!declaration) return false;
+            return propDeclarations.includes(declaration);
+          });
+          if (matchByDeclaration) return matchByDeclaration;
+
+          const matchByBody = callSignatures.find((signature) => {
+            const declaration = signature.getDeclaration();
+            if (!declaration) return false;
+            if ("getBody" in declaration && typeof declaration.getBody === "function") {
+              return Boolean(declaration.getBody());
+            }
+            return false;
+          });
+          if (matchByBody) return matchByBody;
+
+          return callSignatures[callSignatures.length - 1];
+        })();
+
+        if (!callSignature) return false;
+
+        const functionArguments: { name: string; type: Model | string }[] = [];
+
+        for (const parameter of callSignature.getParameters()) {
+          const parameterName = sanitizePropertyName(parameter.getName());
+          const parameterType = parameter.getTypeAtLocation(prop);
+          const parameterDeclaration = parameter.getDeclarations()?.[0];
+          const parameterTypeNode = parameterDeclaration?.isKind(ts.SyntaxKind.Parameter)
+            ? (parameterDeclaration as ParameterDeclaration).getTypeNode() ?? undefined
+            : undefined;
+
+          functionArguments.push(toArgumentSchema(parameterName, parameterType, parameterTypeNode));
+        }
+
+        const declaredReturnTypeNode = (() => {
+          const candidateNodes: TypeNode[] = [];
+
+          if ("getReturnTypeNode" in prop && typeof prop.getReturnTypeNode === "function") {
+            const returnTypeNode = prop.getReturnTypeNode();
+            if (returnTypeNode) candidateNodes.push(returnTypeNode);
+          }
+
+          if ("getTypeNode" in prop && typeof prop.getTypeNode === "function") {
+            const typeNode = prop.getTypeNode();
+            if (typeNode?.isKind(ts.SyntaxKind.FunctionType)) {
+              const functionTypeNode = typeNode as FunctionTypeNode;
+              const returnTypeNode = functionTypeNode.getReturnTypeNode();
+              if (returnTypeNode) candidateNodes.push(returnTypeNode);
+            }
+          }
+
+          const signatureDeclaration = callSignature.getDeclaration();
+          if (signatureDeclaration && "getReturnTypeNode" in signatureDeclaration) {
+            const signatureReturnTypeNode = signatureDeclaration.getReturnTypeNode();
+            if (signatureReturnTypeNode) candidateNodes.push(signatureReturnTypeNode);
+          }
+
+          if (candidateNodes.length === 0) {
+            for (const signature of callSignatures) {
+              const declaration = signature.getDeclaration();
+              if (!declaration || !("getReturnTypeNode" in declaration)) continue;
+              const signatureReturnTypeNode = declaration.getReturnTypeNode();
+              if (signatureReturnTypeNode) candidateNodes.push(signatureReturnTypeNode);
+            }
+          }
+
+          return (
+            candidateNodes.find((node) => {
+              const text = trimImport(node.getText());
+              return Boolean(modelNameToModelMap.get(text));
+            }) ?? candidateNodes[0]
+          );
+        })();
+
+        const declaredReturnTypeName = declaredReturnTypeNode
+          ? trimImport(declaredReturnTypeNode.getText())
+          : undefined;
+
+        const returnType = callSignature.getReturnType();
+        const isArray = returnType.isArray();
+        let returnTypeName = "";
+
+        if (isArray) {
+          const elementType = returnType.getArrayElementType();
+          if (elementType) {
+            const aliasSymbol = elementType.getAliasSymbol();
+            returnTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(elementType.getText());
+          }
+        } else if (declaredReturnTypeName) {
+          returnTypeName = declaredReturnTypeName;
+        } else {
+          const aliasSymbol = returnType.getAliasSymbol();
+          returnTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(returnType.getText());
+        }
+
+        const returnTypeModel = modelNameToModelMap.get(returnTypeName);
+        if (returnTypeModel) dependencies.add(returnTypeModel);
+
+        registerTypeDependencies(returnType);
+
+        if (declaredReturnTypeNode) {
+          const declaredText = trimImport(declaredReturnTypeNode.getText());
+          const declaredModel = modelNameToModelMap.get(declaredText);
+          if (declaredModel) dependencies.add(declaredModel);
+          registerTypeDependenciesFromNode(declaredReturnTypeNode);
+        }
+
+        let optional = false;
+        if (prop.isKind?.(ts.SyntaxKind.PropertySignature)) {
+          optional = prop.hasQuestionToken();
+        }
+
+        model.schema.push({
+          name: propName,
+          type: "function",
+          arguments: functionArguments,
+          returnType: isArray ? [returnTypeModel ?? returnTypeName] : returnTypeModel ?? returnTypeName,
+          optional,
+        });
+        return true;
       };
 
       const addArrayProp = (prop: Prop, type?: Type) => {

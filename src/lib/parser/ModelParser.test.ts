@@ -675,3 +675,129 @@ it("preserves alias references for function return types on class properties", (
     expect.arrayContaining([expect.objectContaining({ name: "Test" })])
   );
 });
+
+it("preserves alias references for class methods, getters, and setters", () => {
+  const parser = new ModelParser(`
+    type A = { type: "a" };
+    type B = { type: "b" };
+    type Union = A | B;
+    type UnionKey = Union["type"];
+
+    class Example {
+      doThis(): UnionKey {
+        return "a";
+      }
+
+      get aliasStatus(): UnionKey {
+        return "a";
+      }
+
+      set aliasStatus(value: UnionKey) {
+        console.log(value);
+      }
+    }
+  `);
+
+  const models = parser.getModels();
+  const exampleModel = models.find((m) => m.name === "Example");
+  const unionKeyModel = models.find((m) => m.name === "UnionKey");
+
+  expect(exampleModel?.dependencies).toEqual([expect.objectContaining({ name: "UnionKey" })]);
+  expect(unionKeyModel?.dependants).toEqual(
+    expect.arrayContaining([expect.objectContaining({ name: "Example" })])
+  );
+
+  const doThisField = exampleModel?.schema.find((field) => field.name === "doThis");
+  expect(doThisField).toBeDefined();
+  if (!doThisField || !isFunctionSchemaField(doThisField)) {
+    throw new Error("Expected doThis to be parsed as a function field");
+  }
+  expect(doThisField.returnType).toEqual(expect.objectContaining({ name: "UnionKey" }));
+
+  const statusFields = exampleModel?.schema.filter((field) => field.name === "aliasStatus") ?? [];
+  expect(statusFields.length).toBe(2);
+
+  const getterField = statusFields.find(
+    (field) => isFunctionSchemaField(field) && field.arguments.length === 0
+  );
+  if (!getterField || !isFunctionSchemaField(getterField)) {
+    throw new Error("Expected getter to be parsed as a function field");
+  }
+  expect(getterField.returnType).toEqual(expect.objectContaining({ name: "UnionKey" }));
+
+  const setterField = statusFields.find(
+    (field) => isFunctionSchemaField(field) && field.arguments.length === 1
+  );
+  if (!setterField || !isFunctionSchemaField(setterField)) {
+    throw new Error("Expected setter to be parsed as a function field");
+  }
+  expect(setterField.returnType).toBe("void");
+  expect(setterField.arguments[0]?.type).toEqual(expect.objectContaining({ name: "UnionKey" }));
+});
+
+it("preserves alias references for nested promise and tuple return types", () => {
+  const parser = new ModelParser(`
+    type Variant = { kind: "x" } | { kind: "y" };
+    type VariantKind = Variant["kind"];
+
+    class Handler {
+      doAsync(): Promise<VariantKind> {
+        return Promise.resolve("x");
+      }
+
+      doTuple(): [VariantKind, number] {
+        return ["x", 1];
+      }
+    }
+  `);
+
+  const models = parser.getModels();
+  const handlerModel = models.find((m) => m.name === "Handler");
+  const variantKindModel = models.find((m) => m.name === "VariantKind");
+
+  expect(handlerModel?.dependencies).toEqual([expect.objectContaining({ name: "VariantKind" })]);
+
+  const asyncField = handlerModel?.schema.find((field) => field.name === "doAsync");
+  if (!asyncField || !isFunctionSchemaField(asyncField)) {
+    throw new Error("Expected doAsync to be parsed as a function field");
+  }
+  expect(asyncField.returnType).toBe("Promise<VariantKind>");
+
+  const tupleField = handlerModel?.schema.find((field) => field.name === "doTuple");
+  if (!tupleField || !isFunctionSchemaField(tupleField)) {
+    throw new Error("Expected doTuple to be parsed as a function field");
+  }
+  expect(tupleField.returnType).toBe("[VariantKind, number]");
+
+  expect(variantKindModel?.dependants).toEqual(
+    expect.arrayContaining([expect.objectContaining({ name: "Handler" })])
+  );
+});
+
+it("prefers declared overload signatures for alias return types", () => {
+  const parser = new ModelParser(`
+    type Option = "enabled" | "disabled";
+
+    class Overloaded {
+      compute(value: number): Option;
+      compute(): Option;
+      compute(value?: number) {
+        return "enabled";
+      }
+    }
+  `);
+
+  const models = parser.getModels();
+  const overloadedModel = models.find((m) => m.name === "Overloaded");
+
+  const optionModel = models.find((m) => m.name === "Option");
+  expect(optionModel).toBeDefined();
+
+  const computeField = overloadedModel?.schema.find((field) => field.name === "compute");
+  if (!computeField || !isFunctionSchemaField(computeField)) {
+    throw new Error("Expected compute to be parsed as a function field");
+  }
+
+  expect(computeField.returnType).toEqual(expect.objectContaining({ name: "Option" }));
+  expect(overloadedModel?.dependencies).toEqual([expect.objectContaining({ name: "Option" })]);
+});
