@@ -30,10 +30,10 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
 
   const hasSourceHandle = useMemo(() => {
     if (model.type === "interface") {
-      return model.extends.some((item) => isModelReference(item));
+      return model.extends.some(isModelReference);
     }
     if (model.type === "class") {
-      return isModelReference(model.extends) || model.implements.some((item) => isModelReference(item));
+      return isModelReference(model.extends) || model.implements.some(isModelReference);
     }
     if (model.type === "typeAlias") {
       return model.dependencies.length > 0;

@@ -1,7 +1,7 @@
 import { Fragment, useRef } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { useIsMobile } from "../hooks/useIsMobile";
-import { useUserOptions } from "../stores/user-options";
+import { optionsStore, useUserOptions } from "../stores/user-options";
 import { themes } from "../themes";
 
 export type PreferencesProps = {
@@ -15,28 +15,28 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
   const isMobile = useIsMobile();
 
   const handleEditorThemeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    options.editor.theme = event.target.value as keyof typeof themes;
-    options.save();
+    optionsStore.state.editor.theme = event.target.value as keyof typeof themes;
+    optionsStore.state.save();
   };
 
   const handleRendererThemeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    options.renderer.theme = event.target.value as "dark" | "light";
-    options.save();
+    optionsStore.state.renderer.theme = event.target.value as "dark" | "light";
+    optionsStore.state.save();
   };
 
   const handleMinimapChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    options.renderer.enableMinimap = event.target.checked;
-    options.save();
+    optionsStore.state.renderer.enableMinimap = event.target.checked;
+    optionsStore.state.save();
   };
 
   const handlePanelSplitDirectionChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    options.panels.splitDirection = event.target.value as "horizontal" | "vertical";
-    options.save();
+    optionsStore.state.panels.splitDirection = event.target.value as "horizontal" | "vertical";
+    optionsStore.state.save();
   };
 
   const handleEditingModeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    options.editor.editingMode = event.target.value as "default" | "vim";
-    options.save();
+    optionsStore.state.editor.editingMode = event.target.value as "default" | "vim";
+    optionsStore.state.save();
   };
 
   return (
