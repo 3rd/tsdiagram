@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { getSmartEdge, PathFindingFunction, SVGDrawFunction } from "@tisoap/react-flow-smart-edge";
 import { DiagonalMovement, JumpPointFinder } from "pathfinding";
-import { BezierEdge, EdgeProps, useNodes, XYPosition } from "reactflow";
+import { EdgeProps, Position, useStoreApi, XYPosition } from "reactflow";
 import { useIsEdgeDecorated } from "../../stores/graph";
 import { Direction } from "../../types";
 // import { edgeSegmentCache } from "../../edge-segment-cache";
@@ -129,11 +129,78 @@ const styles = {
   },
 };
 
-export const CustomEdge = (edge: EdgeProps) => {
-  const nodes = useNodes();
+const FALLBACK_HANDLE_OFFSET = 24;
+
+const isHorizontalPosition = (position: Position) =>
+  position === Position.Left || position === Position.Right;
+
+const offsetPointFromHandle = (
+  point: XYPosition,
+  position: Position,
+  offset = FALLBACK_HANDLE_OFFSET
+): XYPosition => {
+  switch (position) {
+    case Position.Left:
+      return { x: point.x - offset, y: point.y };
+    case Position.Right:
+      return { x: point.x + offset, y: point.y };
+    case Position.Top:
+      return { x: point.x, y: point.y - offset };
+    case Position.Bottom:
+      return { x: point.x, y: point.y + offset };
+  }
+};
+
+const dedupeConsecutivePoints = (points: XYPosition[]) => {
+  return points.filter((point, index) => {
+    if (index === 0) return true;
+    const previousPoint = points[index - 1];
+    return previousPoint.x !== point.x || previousPoint.y !== point.y;
+  });
+};
+
+// Preserve the same edge renderer when smart routing temporarily fails during live drag.
+const getFallbackEdgePath = ({
+  sourcePosition,
+  sourceX,
+  sourceY,
+  targetPosition,
+  targetX,
+  targetY,
+}: Pick<EdgeProps, "sourcePosition" | "sourceX" | "sourceY" | "targetPosition" | "targetX" | "targetY">) => {
+  const resolvedSourcePosition = sourcePosition ?? Position.Right;
+  const resolvedTargetPosition = targetPosition ?? Position.Left;
+  const source = { x: sourceX, y: sourceY };
+  const target = { x: targetX, y: targetY };
+  const sourceAnchor = offsetPointFromHandle(source, resolvedSourcePosition);
+  const targetAnchor = offsetPointFromHandle(target, resolvedTargetPosition);
+  const fallbackPoints = [sourceAnchor];
+
+  if (isHorizontalPosition(resolvedSourcePosition) && isHorizontalPosition(resolvedTargetPosition)) {
+    const midX = Math.round((sourceAnchor.x + targetAnchor.x) / 2);
+    fallbackPoints.push({ x: midX, y: sourceAnchor.y }, { x: midX, y: targetAnchor.y });
+  } else if (!isHorizontalPosition(resolvedSourcePosition) && !isHorizontalPosition(resolvedTargetPosition)) {
+    const midY = Math.round((sourceAnchor.y + targetAnchor.y) / 2);
+    fallbackPoints.push({ x: sourceAnchor.x, y: midY }, { x: targetAnchor.x, y: midY });
+  } else if (isHorizontalPosition(resolvedSourcePosition)) {
+    fallbackPoints.push({ x: targetAnchor.x, y: sourceAnchor.y });
+  } else {
+    fallbackPoints.push({ x: sourceAnchor.x, y: targetAnchor.y });
+  }
+
+  fallbackPoints.push(targetAnchor);
+
+  return drawEdge(
+    source,
+    target,
+    dedupeConsecutivePoints(fallbackPoints).map((point) => [point.x, point.y])
+  );
+};
+
+const useDecoratedEdgeStyle = (edge: EdgeProps) => {
   const { highlighted, faded } = useIsEdgeDecorated(edge);
 
-  const edgeStyle = useMemo(() => {
+  return useMemo(() => {
     return {
       ...edge.style,
       ...(edge.source === edge.target ? styles.selfLoop : {}),
@@ -141,40 +208,75 @@ export const CustomEdge = (edge: EdgeProps) => {
       ...(faded ? styles.faded : {}),
     };
   }, [edge.source, edge.style, edge.target, faded, highlighted]);
+};
 
-  const getSmartEdgeResponse = useMemo(
-    () =>
-      getSmartEdge({
+export const CustomEdge = memo((edge: EdgeProps) => {
+  const store = useStoreApi();
+  const edgeStyle = useDecoratedEdgeStyle(edge);
+  const rerouteEpoch = edge.data?.rerouteEpoch ?? 0;
+
+  const getSmartEdgeResponse = useMemo(() => {
+    const nodes = store.getState().getNodes();
+
+    return getSmartEdge({
+      sourcePosition: edge.sourcePosition,
+      targetPosition: edge.targetPosition,
+      sourceX: edge.sourceX,
+      sourceY: edge.sourceY,
+      targetX: edge.targetX,
+      targetY: edge.targetY,
+      nodes,
+      options: {
+        drawEdge,
+        generatePath,
+        nodePadding: 6,
+        gridRatio: 10,
+      },
+    });
+  }, [
+    edge.sourcePosition,
+    edge.targetPosition,
+    edge.sourceX,
+    edge.sourceY,
+    edge.targetX,
+    edge.targetY,
+    rerouteEpoch,
+    store,
+  ]);
+
+  const svgPathString = useMemo(() => {
+    return (
+      getSmartEdgeResponse?.svgPathString ??
+      getFallbackEdgePath({
         sourcePosition: edge.sourcePosition,
-        targetPosition: edge.targetPosition,
         sourceX: edge.sourceX,
         sourceY: edge.sourceY,
+        targetPosition: edge.targetPosition,
         targetX: edge.targetX,
         targetY: edge.targetY,
-        nodes,
-        options: {
-          drawEdge,
-          generatePath,
-          nodePadding: 6,
-          gridRatio: 10,
-        },
-      }),
-    [edge.sourcePosition, edge.targetPosition, edge.sourceX, edge.sourceY, edge.targetX, edge.targetY, nodes]
-  );
-
-  if (getSmartEdgeResponse === null) {
-    return <BezierEdge {...edge} style={edgeStyle} />;
-  }
+      })
+    );
+  }, [
+    edge.sourcePosition,
+    edge.sourceX,
+    edge.sourceY,
+    edge.targetPosition,
+    edge.targetX,
+    edge.targetY,
+    getSmartEdgeResponse?.svgPathString,
+  ]);
 
   return (
     <>
       <path
         className="react-flow__edge-path"
-        d={getSmartEdgeResponse.svgPathString}
+        d={svgPathString}
         markerEnd={edge.markerEnd}
         markerStart={edge.markerStart}
         style={edgeStyle}
       />
     </>
   );
-};
+});
+
+CustomEdge.displayName = "CustomEdge";

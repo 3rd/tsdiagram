@@ -8,6 +8,7 @@ import { Renderer } from "./Renderer";
 
 export const RendererWrapper = () => {
   const documentSource = useStore(documentsStore, (state) => state.currentDocument.source);
+  const currentDocumentId = useStore(documentsStore, (state) => state.currentDocumentId);
   const isMobile = useIsMobile();
 
   const debouncedSource = useDebounced(documentSource, 16);
@@ -20,5 +21,5 @@ export const RendererWrapper = () => {
     return parser.getModels();
   }, [parser, debouncedSource]);
 
-  return <Renderer disableMiniMap={isMobile} models={models} />;
+  return <Renderer disableMiniMap={isMobile} documentId={currentDocumentId} models={models} />;
 };

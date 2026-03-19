@@ -9,8 +9,6 @@ import {
 } from "@radix-ui/react-icons";
 import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
 import classNames from "classnames";
-import Elk, { ElkNode, LayoutOptions } from "elkjs";
-import omit from "lodash/omit";
 import throttle from "lodash/throttle";
 import "../../reactflow.css";
 
@@ -18,7 +16,6 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
-  Edge,
   FitViewOptions,
   MarkerType,
   MiniMap,
@@ -30,18 +27,24 @@ import ReactFlow, {
   useReactFlow,
   useUpdateNodeInternals,
 } from "reactflow";
-import { edgeSegmentCache } from "../../edge-segment-cache";
 import { useFullscreen } from "../../hooks/useFullscreen";
-import {
-  isArraySchemaField,
-  isFunctionSchemaField,
-  isGenericSchemaField,
-  isUnionSchemaField,
-  Model,
-} from "../../lib/parser/ModelParser";
+import { Model } from "../../lib/parser/ModelParser";
 import { graphStore } from "../../stores/graph";
-import { UserOptions, useUserOptions } from "../../stores/user-options";
+import { useUserOptions } from "../../stores/user-options";
 import { CustomEdge } from "./CustomEdge";
+import {
+  bumpModelEdgeRerouteEpoch,
+  decorateModelEdges,
+  extractModelEdges,
+  extractModelNodes,
+  layoutModelNodes,
+  LAYOUT_RESET_NODE_COUNT_CHANGE_THRESHOLD,
+  LAYOUT_RESET_NODE_OVERLAP_THRESHOLD,
+  ModelEdge,
+  ModelEdgeData,
+  shouldResetLayoutAnchors,
+  normalizeLayoutEdges,
+} from "./layout";
 import { ModelNode } from "./ModelNode";
 
 const AUTO_LAYOUT_THROTTLE_MS = 120;
@@ -50,272 +53,25 @@ const nodeTypes = { model: ModelNode };
 const edgeTypes = { smart: SmartStepEdge, custom: CustomEdge };
 const proOptions = { hideAttribution: true };
 
-type GetLayoutedElementsArgs = {
-  nodes: Node[];
-  edges: Edge[];
-  options: UserOptions;
-  manuallyMovedNodesSet: Set<string>;
-};
-
-const getLayoutedElements = async ({
-  nodes,
-  edges,
-  options,
-  manuallyMovedNodesSet,
-}: GetLayoutedElementsArgs) => {
-  const elkOptions: LayoutOptions = {
-    "elk.algorithm": "layered",
-    "elk.direction": options.renderer.direction === "horizontal" ? "RIGHT" : "DOWN",
-    "elk.edgeRouting": "ORTHOGONAL",
-    "elk.insideSelfLoops.activate": "false",
-    "elk.interactiveLayout": "true",
-    "elk.layered.crossingMinimization.semiInteractive": "true",
-    "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
-    "elk.layered.nodePlacement.strategy": "LINEAR_SEGMENTS",
-    // "elk.layered.layering.strategy": "LONGEST_PATH",
-    "elk.layered.spacing.edgeNodeBetweenLayers": "25", // default 10
-    "elk.layered.spacing.nodeNodeBetweenLayers": "50", // default 20
-    "elk.spacing.nodeNode": "50", // default 20
-    "elk.spacing.componentComponent": "100", // default 20
-    "elk.separateConnectedComponents": "true",
-  };
-
-  const elk = new Elk({
-    defaultLayoutOptions: elkOptions,
-  });
-
-  const graph: ElkNode = {
-    id: "root",
-    layoutOptions: elkOptions,
-    children: nodes.map((node) => {
-      const wasManuallyMoved = manuallyMovedNodesSet.has(node.id);
-
-      return {
-        ...node,
-        width: node.width ?? 0,
-        height: node.height ?? 0,
-        ports: node.data?.model?.schema.map((field: Model["schema"][0], index: number) => {
-          return {
-            id: `${node.id}-source-${field.name}`,
-            order: index,
-            properties: {
-              "port.side": "EAST",
-            },
-          };
-        }),
-        ...(wasManuallyMoved && {
-          x: node.position.x,
-          y: node.position.y,
-        }),
-      };
-    }),
-    edges: edges.map((edge) => {
-      return {
-        ...edge,
-        sources: [edge.sourceHandle ?? edge.source],
-        targets: [edge.target],
-      };
-    }),
-  };
-
-  const layoutedGraph = await elk.layout(graph);
-
-  return {
-    nodes: nodes.map((node) => {
-      const layoutedNode = layoutedGraph.children?.find((n) => n.id === node.id);
-      if (!layoutedNode) return node;
-      const clone = omit(node, ["width", "height"]);
-      const hasManuallyMoved = manuallyMovedNodesSet.has(node.id);
-      return {
-        id: node.id,
-        type: node.type,
-        data: node.data,
-        position: {
-          x: hasManuallyMoved ? node.position.x : layoutedNode.x ?? clone.position.x,
-          y: hasManuallyMoved ? node.position.y : layoutedNode.y ?? clone.position.y,
-        },
-        ...(layoutedNode.width &&
-          layoutedNode.height && {
-            width: layoutedNode.width,
-            height: layoutedNode.height,
-          }),
-      };
-    }),
-    edges,
-  };
-};
-
-const extractModelNodes = (models: Model[]) => {
-  return models.map((model) => {
-    return {
-      id: model.id,
-      type: "model",
-      position: { x: -1, y: -1 },
-      data: { model },
-    };
-  });
-};
-
-// eslint-disable-next-line sonarjs/cognitive-complexity
-const extractModelEdges = (models: Model[], sharedEdgeProps: Partial<Edge> = {}) => {
-  const result: Edge[] = [];
-
-  let count = 1;
-  for (const model of models) {
-    if (model.type === "interface") {
-      for (const extended of model.extends) {
-        if (extended instanceof Object) {
-          result.push({
-            ...sharedEdgeProps,
-            id: `${count++}-${model.id}-${extended.id}`,
-            source: model.id,
-            target: extended.id,
-          });
-        }
-      }
-    }
-
-    if (model.type === "typeAlias") {
-      for (const dependency of model.dependencies) {
-        result.push({
-          ...sharedEdgeProps,
-          id: `${count++}-${model.id}-${dependency.id}`,
-          source: model.id,
-          target: dependency.id,
-        });
-      }
-    }
-
-    if (model.type === "class") {
-      if (model.extends instanceof Object) {
-        result.push({
-          ...sharedEdgeProps,
-          id: `${count++}-${model.id}-${model.extends.id}`,
-          source: model.id,
-          target: model.extends.id,
-        });
-      }
-
-      for (const implemented of model.implements) {
-        if (implemented instanceof Object) {
-          result.push({
-            ...sharedEdgeProps,
-            id: `${count++}-${model.id}-${implemented.id}`,
-            source: model.id,
-            target: implemented.id,
-          });
-        }
-      }
-    }
-
-    for (const field of model.schema) {
-      // direct model reference
-      if (field.type instanceof Object) {
-        result.push({
-          ...sharedEdgeProps,
-          id: `${count++}-${model.id}-${field.name}`,
-          source: model.id,
-          target: field.type.id,
-          sourceHandle: `${model.id}-source-${field.name}`,
-        });
-      }
-
-      // array of model references
-      if (isArraySchemaField(field) && field.elementType instanceof Object) {
-        result.push({
-          ...sharedEdgeProps,
-          id: `${count++}-${model.id}-${field.name}`,
-          source: model.id,
-          target: field.elementType.id,
-          sourceHandle: `${model.id}-source-${field.name}`,
-        });
-      }
-
-      // generic
-      if (isGenericSchemaField(field)) {
-        for (const argument of field.arguments) {
-          if (argument instanceof Object) {
-            result.push({
-              ...sharedEdgeProps,
-              id: `${count++}-${model.id}-${field.name}-${argument.id}`,
-              source: model.id,
-              target: argument.id,
-              sourceHandle: `${model.id}-source-${field.name}`,
-            });
-          }
-        }
-      }
-
-      // function
-      if (isFunctionSchemaField(field)) {
-        // function arguments
-        for (const argument of field.arguments) {
-          if (argument.type instanceof Object) {
-            result.push({
-              ...sharedEdgeProps,
-              id: `${count++}-${model.id}-${field.name}-arg-${argument.type.id}`,
-              source: model.id,
-              target: argument.type.id,
-              sourceHandle: `${model.id}-source-${field.name}`,
-            });
-          }
-        }
-
-        // function return type
-        if (Array.isArray(field.returnType)) {
-          const returnType = field.returnType[0];
-          if (returnType instanceof Object) {
-            result.push({
-              ...sharedEdgeProps,
-              id: `${count++}-${model.id}-${field.name}-${returnType.id}`,
-              source: model.id,
-              target: returnType.id,
-              sourceHandle: `${model.id}-source-${field.name}`,
-            });
-          }
-        } else if (field.returnType instanceof Object) {
-          result.push({
-            ...sharedEdgeProps,
-            id: `${count++}-${model.id}-${field.name}-${field.returnType.id}`,
-            source: model.id,
-            target: field.returnType.id,
-            sourceHandle: `${model.id}-source-${field.name}`,
-          });
-        }
-      }
-
-      // union
-      if (isUnionSchemaField(field)) {
-        for (const unionType of field.types) {
-          if (unionType instanceof Object) {
-            result.push({
-              ...sharedEdgeProps,
-              id: `${count++}-${model.id}-${field.name}-${unionType.id}`,
-              source: model.id,
-              target: unionType.id,
-              sourceHandle: `${model.id}-source-${field.name}`,
-            });
-          }
-        }
-      }
-    }
-  }
-  return result;
-};
-
 export type RendererProps = {
+  documentId: string;
   models: Model[];
   disableMiniMap?: boolean;
 };
 
 // eslint-disable-next-line sonarjs/cognitive-complexity
-export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
-  const { fitView, getNodes, getEdges } = useReactFlow();
+export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererProps) => {
+  const { fitView, getNodes, getEdges } = useReactFlow<{ model: Model }, ModelEdgeData>();
   const updateNodeInternals = useUpdateNodeInternals();
   const [nodes, setNodes, onNodesChange] = useNodesState<{ model: Model }>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<ModelEdgeData>([]);
   const cachedNodesMap = useRef<Map<string, Node<{ model: Model }>>>(new Map());
   const manuallyMovedNodesSet = useRef<Set<string>>(new Set());
+  const autoLayoutRunId = useRef(0);
+  const previousParsedGraphRef = useRef<{
+    documentId: string;
+    nodeIds: Set<string>;
+  }>();
   const options = useUserOptions();
   const panelRef = useRef<HTMLDivElement>(null);
   const [shouldAnimate, setShouldAnimate] = useState(false);
@@ -328,7 +84,7 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     }),
     [shouldAnimate]
   );
-  const sharedEdgeProps = useMemo(
+  const sharedEdgeProps = useMemo<Omit<Partial<ModelEdge>, "data">>(
     () => ({
       type: "custom",
       markerEnd: { type: MarkerType.ArrowClosed },
@@ -348,46 +104,106 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     return "#a9b2bc";
   }, [options.renderer.theme]);
 
+  // parse source
+  const parsedNodes = useMemo(() => extractModelNodes(models), [models]);
+  const modelEdges = useMemo(() => extractModelEdges(models), [models]);
+  const parsedEdges = useMemo(
+    () => decorateModelEdges(modelEdges, sharedEdgeProps),
+    [modelEdges, sharedEdgeProps]
+  );
+
+  const bumpEdgeRerouteEpoch = useCallback(() => {
+    setEdges((currentEdges) => bumpModelEdgeRerouteEpoch(currentEdges));
+  }, [setEdges]);
+
   // auto layout
   const handleAutoLayout = useMemo(() => {
     return throttle(
       () => {
         const currentNodes = getNodes();
+        const currentEdges = normalizeLayoutEdges(getEdges() as ModelEdge[]);
         const hasSizeForAllNodes = currentNodes.every((node) => node.width && node.height);
         if (!hasSizeForAllNodes) return;
+        const currentRunId = ++autoLayoutRunId.current;
 
-        getLayoutedElements({
-          nodes: currentNodes,
-          edges: getEdges(),
-          options,
+        void layoutModelNodes({
+          direction: options.renderer.direction,
+          edges: currentEdges,
           manuallyMovedNodesSet: manuallyMovedNodesSet.current,
-        }).then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
-          setNodes(layoutedNodes);
-          setEdges(layoutedEdges);
-          if (options.renderer.autoFitView) {
-            requestIdleCallback(() => fitView(fitViewOptions));
-          }
-        });
+          nodes: currentNodes,
+        })
+          .then((layoutedNodes) => {
+            if (currentRunId !== autoLayoutRunId.current) return;
+
+            setNodes(layoutedNodes);
+            requestAnimationFrame(() => {
+              if (currentRunId !== autoLayoutRunId.current) return;
+              bumpEdgeRerouteEpoch();
+            });
+
+            if (options.renderer.autoFitView) {
+              requestIdleCallback(() => fitView(fitViewOptions));
+            }
+          })
+          .catch((error) => {
+            if (currentRunId !== autoLayoutRunId.current) return;
+            console.error(error);
+          });
       },
       AUTO_LAYOUT_THROTTLE_MS,
       { leading: true, trailing: true }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitView, fitViewOptions, getEdges, getNodes, options]);
+  }, [
+    bumpEdgeRerouteEpoch,
+    fitView,
+    fitViewOptions,
+    getEdges,
+    getNodes,
+    options.renderer.autoFitView,
+    options.renderer.direction,
+  ]);
   const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
 
-  // parse source
-  const { parsedNodes, parsedEdges } = useMemo(() => {
-    return {
-      parsedNodes: extractModelNodes(models),
-      parsedEdges: extractModelEdges(models, sharedEdgeProps),
+  useEffect(() => {
+    return () => {
+      handleAutoLayout.cancel();
     };
-  }, [models, sharedEdgeProps]);
+  }, [handleAutoLayout]);
 
   // update nodes and edges after parsing (before auto layout)
   useLayoutEffect(() => {
-    const hitCachedNodeSet = new Set<Node>();
-    const nodesThatMissedCache: Node[] = [];
+    const currentNodeIds = new Set(parsedNodes.map((node) => node.id));
+    const previousParsedGraph = previousParsedGraphRef.current;
+
+    if (
+      shouldResetLayoutAnchors({
+        countChangeThreshold: LAYOUT_RESET_NODE_COUNT_CHANGE_THRESHOLD,
+        nextDocumentId: documentId,
+        nextNodeIds: currentNodeIds,
+        overlapThreshold: LAYOUT_RESET_NODE_OVERLAP_THRESHOLD,
+        previousDocumentId: previousParsedGraph?.documentId,
+        previousNodeIds: previousParsedGraph?.nodeIds ?? [],
+      })
+    ) {
+      manuallyMovedNodesSet.current.clear();
+      cachedNodesMap.current.clear();
+    } else {
+      manuallyMovedNodesSet.current = new Set(
+        [...manuallyMovedNodesSet.current].filter((nodeId) => currentNodeIds.has(nodeId))
+      );
+      cachedNodesMap.current = new Map(
+        [...cachedNodesMap.current.entries()].filter(([nodeId]) => currentNodeIds.has(nodeId))
+      );
+    }
+
+    previousParsedGraphRef.current = {
+      documentId,
+      nodeIds: currentNodeIds,
+    };
+
+    const hitCachedNodeSet = new Set<Node<{ model: Model }>>();
+    const nodesThatMissedCache: Node<{ model: Model }>[] = [];
 
     const updatedNodes = parsedNodes.map((node) => {
       const cachedNode = cachedNodesMap.current.get(node.id);
@@ -422,13 +238,14 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
       updatedNode.position = missedCachedNode.position;
     }
 
+    autoLayoutRunId.current += 1;
     setNodes(updatedNodes);
     setEdges(parsedEdges);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parsedEdges, parsedNodes]);
+  }, [documentId, parsedEdges, parsedNodes]);
 
   // cache computed nodes and trigger auto layout if their width or height changed
-  const previousEdges = useRef<Edge[]>(edges);
+  const previousEdges = useRef<ModelEdge[]>(edges);
   useLayoutEffect(() => {
     let needsAutoLayout = false;
     if (previousEdges.current.length !== edges.length) {
@@ -485,7 +302,7 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     previousModels.current = modelsMap;
 
     const currentEdges = getEdges();
-    const modelEdgesMap = new Map<Model, Edge[]>();
+    const modelEdgesMap = new Map<Model, ModelEdge[]>();
     const modelEdgeHashMap = new Map<string, string>();
 
     for (const edge of currentEdges) {
@@ -547,9 +364,19 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     },
     [options.renderer]
   );
-  const handleNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
-    manuallyMovedNodesSet.current.add(node.id);
-  }, []);
+  const handleNodeDragStop = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      manuallyMovedNodesSet.current.add(node.id);
+
+      // Edges connected to the dragged node rerender live via updated edge props. Force a
+      // single full reroute after drop so the rest of the graph catches up without paying
+      // that cost on every pointer move.
+      requestAnimationFrame(() => {
+        bumpEdgeRerouteEpoch();
+      });
+    },
+    [bumpEdgeRerouteEpoch]
+  );
   const handleNodeMouseEnter = useCallback((_event: React.MouseEvent, node: Node) => {
     graphStore.state.hoveredNode = node;
   }, []);
@@ -569,12 +396,6 @@ export const Renderer = memo(({ models, disableMiniMap }: RendererProps) => {
     previousPanelDirection.current = options.panels.splitDirection;
     requestIdleCallback(() => fitView(fitViewOptions));
   }, [fitView, fitViewOptions, options.panels.splitDirection, options.renderer]);
-
-  // reset segment cache when nodes change
-  useEffect(() => {
-    edgeSegmentCache.clear();
-    // eslint-disable-next-line react-hooks-addons/no-unused-deps
-  }, [nodes]);
 
   // fullscreen
   const containerRef = useRef<HTMLDivElement>(null);
