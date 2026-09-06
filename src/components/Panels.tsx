@@ -36,19 +36,23 @@ export const Panels = ({ editorChildren, rendererChildren }: PanelsProps) => {
           "transition-colors hover:bg-blue-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600",
           isVertical ? "h-1.5" : "w-1.5",
           { "bg-gray-700": options.renderer.theme === "dark" },
-          { "bg-gray-100": options.renderer.theme === "light" },
+          { "bg-gray-100": options.renderer.theme === "light" }
         )}
       />,
       <Panel key="panel-renderer" id="renderer">
         {rendererChildren}
       </Panel>,
     ];
-    if (isVertical) members.reverse();
     return members;
   }, [isMobile, isVertical, editorChildren, options.renderer.theme, rendererChildren]);
 
   return (
-    <Group defaultLayout={defaultLayout} orientation={direction} onLayoutChanged={onLayoutChanged}>
+    <Group
+      className={isVertical ? "panels-vertical" : undefined}
+      defaultLayout={defaultLayout}
+      orientation={direction}
+      onLayoutChanged={onLayoutChanged}
+    >
       {panelGroupMembers}
     </Group>
   );

@@ -68,8 +68,8 @@ const getHandlePort = (node: InternalNode, type: "source" | "target", handleId?:
     (handleId ? handles.find((candidate) => candidate.id === handleId) : undefined) ?? handles[0];
   const x = node.internals.positionAbsolute.x + handle.x;
   const y = node.internals.positionAbsolute.y + handle.y;
-  return handle.position === Position.Right ?
-      { x: x + handle.width, y: y + handle.height / 2 }
+  return handle.position === Position.Right
+    ? { x: x + handle.width, y: y + handle.height / 2 }
     : { x, y: y + handle.height / 2 };
 };
 
@@ -103,6 +103,11 @@ export const EdgeRoutingProvider = ({ children }: EdgeRoutingProviderProps) => {
   const nodes = useStore((state) => state.nodes);
   const edges = useStore((state) => state.edges);
   const nodesInitialized = useStore((state) => state.nodesInitialized);
+  const handleBounds = useStore(
+    (state) => Array.from(state.nodeLookup.values(), (node) => node.internals.handleBounds),
+    (previous, next) =>
+      previous.length === next.length && previous.every((bounds, index) => bounds === next[index])
+  );
   const svgExportMode = useSvgExportMode();
   const routeStore = useMemo(createEdgeRouteStore, []);
   const workerRef = useRef<Worker | null>(null);
@@ -116,7 +121,7 @@ export const EdgeRoutingProvider = ({ children }: EdgeRoutingProviderProps) => {
   const input = useMemo(() => {
     if (!nodesInitialized || nodes.some(isUnplacedNode)) return null;
     return buildRoutingInput(reactFlowStore.getState().nodeLookup, edges);
-  }, [edges, nodes, nodesInitialized, reactFlowStore]);
+  }, [edges, handleBounds, nodes, nodesInitialized, reactFlowStore]);
   // the router state seeds a main-thread router for exports; it is the bulk of every reply
   // and no export can start mid-drag, so drag frames leave it out and the drop refreshes it
   const includeState = !nodes.some((node) => node.dragging);
@@ -126,7 +131,7 @@ export const EdgeRoutingProvider = ({ children }: EdgeRoutingProviderProps) => {
       mainThreadRouterRef.current ??= createEdgeRouter(workerStateRef.current);
       routeStore.publish(mainThreadRouterRef.current.route(request));
     },
-    [routeStore],
+    [routeStore]
   );
 
   const post = useCallback((worker: Worker, request: PendingRequest) => {

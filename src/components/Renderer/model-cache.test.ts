@@ -33,7 +33,7 @@ describe("reuseUnchangedModels", () => {
     const status = reused.find((m) => m.name === "Status");
     expect(status).not.toBe(previousStatus);
     expect(status?.schema).toContainEqual(
-      expect.objectContaining({ type: "union", types: ['"open"', '"done"'] }),
+      expect.objectContaining({ type: "union", types: ['"open"', '"done"'] })
     );
   });
 
@@ -50,4 +50,42 @@ describe("reuseUnchangedModels", () => {
     expect(user).not.toBe(previousUser);
     expect(reused.find((m) => m.name === "Status")).toBe(previousStatus);
   });
+
+  it.each(["items: string[]", "run(): string[]", "callback: () => string[]"])(
+    "replaces the model when readonly changes on %s",
+    (member) => {
+      const mutable = new ModelParser(`interface Example { ${member} }`).getModels();
+      const immutable = new ModelParser(
+        `interface Example { ${member.replace("string[]", "readonly string[]")} }`
+      ).getModels();
+
+      expect(reuseUnchangedModels(mutable, immutable)[0]).toBe(immutable[0]);
+      expect(reuseUnchangedModels(immutable, mutable)[0]).toBe(mutable[0]);
+    }
+  );
+
+  it.each(["class", "interface"])("replaces a %s when a member changes between inherited and own", (kind) => {
+    const source = `${kind} Base { value: string } ${kind} Child extends Base {}`;
+    const inherited = new ModelParser(source).getModels();
+    const own = new ModelParser(
+      source.replace("extends Base {}", "extends Base { value: string }")
+    ).getModels();
+    const inheritedChild = inherited.find((model) => model.name === "Child");
+    const ownChild = own.find((model) => model.name === "Child");
+    if (!inheritedChild || !ownChild) throw new Error("Expected Child models");
+
+    expect(reuseUnchangedModels(inherited, own).find((model) => model.name === "Child")).toBe(ownChild);
+    expect(reuseUnchangedModels(own, inherited).find((model) => model.name === "Child")).toBe(inheritedChild);
+  });
+
+  it.each(["get value(): number { return 0; }", "set value(next: number) {}"])(
+    "replaces a model when %s changes between an accessor and a method",
+    (member) => {
+      const accessor = new ModelParser(`class Example { ${member} }`).getModels();
+      const method = new ModelParser(`class Example { ${member.replace(/^(get|set) /, "")} }`).getModels();
+
+      expect(reuseUnchangedModels(accessor, method)[0]).toBe(method[0]);
+      expect(reuseUnchangedModels(method, accessor)[0]).toBe(accessor[0]);
+    }
+  );
 });

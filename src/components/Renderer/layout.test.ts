@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ModelParser } from "../../lib/parser/ModelParser";
-import { compactLayoutedNodes, fieldHasSourceEdge, ModelNodeState } from "./layout";
+import { compactLayoutedNodes, extractModelEdges, fieldHasSourceEdge, ModelNodeState } from "./layout";
 
 const NO_PINS: ReadonlySet<string> = new Set();
 
@@ -12,6 +12,7 @@ const makeNode = (id: string, x: number, y: number, width: number, height: numbe
       name: id,
       type: "typeAlias",
       schema: [],
+      typeTextSegments: {},
       arguments: [],
       dependencies: [],
       dependants: [],
@@ -127,6 +128,76 @@ describe("compactLayoutedNodes", () => {
     const result = compactLayoutedNodes({ direction: "vertical", nodes: [left, right], pinnedIds: NO_PINS });
 
     expect(result[1].position).toEqual({ x: 272, y: 0 });
+  });
+});
+
+describe("extractModelEdges", () => {
+  it("connects inherited synthesized class properties to their models once", () => {
+    const models = new ModelParser(`
+      interface Target { id: string }
+      interface Source { value: Target }
+      declare const Ctor: new () => Pick<Source, "value">;
+      class Impl extends Ctor { own = ""; }
+      class Merged extends Ctor {}
+      interface Merged extends Pick<Source, "value"> {}
+    `).getModels();
+
+    expect(
+      extractModelEdges(models)
+        .filter((edge) => edge.source === "Impl" || edge.source === "Merged")
+        .filter((edge) => edge.sourceHandle)
+        .map(({ source, sourceHandle, target }) => ({ source, sourceHandle, target }))
+    ).toEqual([
+      { source: "Impl", sourceHandle: "Impl-source-value", target: "Target" },
+      { source: "Merged", sourceHandle: "Merged-source-value", target: "Target" },
+    ]);
+  });
+
+  it("keeps array field and return edges unchanged when arrays become readonly", () => {
+    const source = `
+      interface Item { id: string }
+      interface Example {
+        items: Item[];
+        run(): Item[];
+        callback: () => Item[];
+      }
+    `;
+    const mutable = extractModelEdges(new ModelParser(source).getModels());
+    const readonlyModels = new ModelParser(source.replaceAll("Item[]", "readonly Item[]")).getModels();
+    const immutable = extractModelEdges(readonlyModels);
+
+    expect(immutable).toEqual(mutable);
+    expect(immutable.map((edge) => edge.id)).toEqual([
+      "fieldarr-Example-items",
+      "fnret-Example-callback-Item",
+      "fnret-Example-run-Item",
+    ]);
+    const example = readonlyModels.find((model) => model.name === "Example");
+    if (!example) throw new Error("missing Example model");
+    expect(example.schema.every((field) => fieldHasSourceEdge(field, new Set()))).toBe(true);
+  });
+
+  it("omits built-in method edges while preserving declared alias relationships and recursion", () => {
+    const models = new ModelParser(`
+      interface User { id: string }
+      type Ids = string[];
+      type Lookup = Map<string, number>;
+      type Flags = Set<string>;
+      type Later = Promise<string>;
+      type Timestamp = Date;
+      type Users = User[];
+      type Directory = Map<string, Promise<User>>;
+      type Tree = { children: Tree[] };
+      type Nested = Map<string, Nested>;
+    `).getModels();
+
+    const edges = extractModelEdges(models);
+    expect(edges.map(({ source, target }) => ({ source, target }))).toEqual([
+      { source: "Users", target: "User" },
+      { source: "Directory", target: "User" },
+      { source: "Tree", target: "Tree" },
+      { source: "Nested", target: "Nested" },
+    ]);
   });
 });
 

@@ -8,6 +8,7 @@ const model = (id: string, links: { dependencies?: Model[]; dependants?: Model[]
   name: id,
   type: "typeAlias",
   schema: [],
+  typeTextSegments: {},
   arguments: [],
   dependencies: links.dependencies ?? [],
   dependants: links.dependants ?? [],
@@ -48,8 +49,8 @@ it("stores prototype-named model ids as own properties", () => {
     hoveredNode(
       model("constructor", {
         dependencies: [model("toString"), model("__proto__")],
-      }),
-    ),
+      })
+    )
   );
 
   expect(Object.hasOwn(highlightedNodeIds, "constructor")).toBe(true);

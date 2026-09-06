@@ -111,3 +111,21 @@ it("parses classes", () => {
   expect(C.properties.length).toBe(1);
   expect(C.methods.length).toBe(1);
 });
+
+it("collects inherited getter and setter declarations separately from methods", () => {
+  const parser = new Parser(`
+    class Base {
+      get value(): number { return 0; }
+      set value(value: number) {}
+    }
+    class Child extends Base {}
+    class Grandchild extends Child {}
+  `);
+
+  for (const item of parser.classes) {
+    expect(item.getAccessors.map((accessor) => accessor.getName())).toEqual(["value"]);
+    expect(item.setAccessors.map((accessor) => accessor.getName())).toEqual(["value"]);
+    expect(item.properties).toEqual([]);
+    expect(item.methods).toEqual([]);
+  }
+});

@@ -1,6 +1,99 @@
 import { expect, it } from "vitest";
 import { isDefaultSchemaField, isFunctionSchemaField, ModelParser } from "./ModelParser";
 
+it.each([
+  {
+    name: "both branches of a conditional type",
+    text: "T extends string ? Date : RegExp",
+    colored: [
+      { text: "T", kind: "reference" },
+      { text: "string", kind: "primitive" },
+      { text: "Date", kind: "reference" },
+      { text: "RegExp", kind: "reference" },
+    ],
+  },
+  {
+    name: "types without coloring method, property, parameter, or tuple names",
+    text: "[value: { run(arg: string): number; readonly name?: boolean; string: bigint }]",
+    colored: [
+      { text: "string", kind: "primitive" },
+      { text: "number", kind: "primitive" },
+      { text: "boolean", kind: "primitive" },
+      { text: "bigint", kind: "primitive" },
+    ],
+  },
+  {
+    name: "nested template substitutions separately from literal text",
+    text: "`item-${T extends string ? `inner-${T}` : number}-end`",
+    colored: [
+      { text: "`item-", kind: "literal" },
+      { text: "T", kind: "reference" },
+      { text: "string", kind: "primitive" },
+      { text: "`inner-", kind: "literal" },
+      { text: "T", kind: "reference" },
+      { text: "`", kind: "literal" },
+      { text: "number", kind: "primitive" },
+      { text: "-end`", kind: "literal" },
+    ],
+  },
+  {
+    name: "literal syntax while leaving null and type operators neutral",
+    text: '[value: -0x2An | "a\\\"b" | false | null, keys: keyof T]',
+    colored: [
+      { text: "-0x2An", kind: "literal" },
+      { text: '"a\\\"b"', kind: "literal" },
+      { text: "false", kind: "literal" },
+      { text: "T", kind: "reference" },
+    ],
+  },
+  {
+    name: "qualified references and type queries without coloring punctuation",
+    text: "[value: Outer.Inner, query: typeof registry.item]",
+    colored: [
+      { text: "Outer", kind: "reference" },
+      { text: "Inner", kind: "reference" },
+      { text: "registry", kind: "reference" },
+      { text: "item", kind: "reference" },
+    ],
+  },
+])("classifies $name and preserves the displayed text", ({ text, colored }) => {
+  const [model] = new ModelParser(`type Example<T> = ${text};`).getModels();
+  const segments = model.typeTextSegments[text];
+
+  expect(segments.map((segment) => segment.text).join("")).toBe(text);
+  expect(segments.filter((segment) => segment.kind !== "default")).toEqual(colored);
+});
+
+it("provides cloneable type segments for every field shape without replacing model references", () => {
+  const models = new ModelParser(`
+    interface Item { id: string }
+    interface Example<T> {
+      item: Item;
+      list: readonly string[];
+      generic: Map<string, T>;
+      run(argument: boolean): number[];
+    }
+    type Choice = "open" | 2;
+    enum State { Open }
+  `).getModels();
+  const cloned = structuredClone(models);
+  const example = cloned.find((model) => model.name === "Example");
+  const item = cloned.find((model) => model.name === "Item");
+  const choice = cloned.find((model) => model.name === "Choice");
+  const state = cloned.find((model) => model.name === "State");
+  if (!example || !item || !choice || !state) throw new Error("Expected source models");
+
+  expect(example.schema.find((field) => field.name === "item")?.type).toBe(item);
+  expect(Object.keys(example.typeTextSegments).sort()).toEqual(["Map", "T", "boolean", "number", "string"]);
+  expect(Object.keys(choice.typeTextSegments).sort()).toEqual(['"open"', "2"]);
+  expect(state.typeTextSegments["0"]).toEqual([{ text: "0", kind: "literal" }]);
+  for (const model of cloned) {
+    for (const [text, segments] of Object.entries(model.typeTextSegments)) {
+      expect(segments.map((segment) => segment.text).join("")).toBe(text);
+    }
+  }
+});
+
 it("links interface extends declared after the deriving interface", () => {
   const parser = new ModelParser("interface B extends A { b: string }\ninterface A { a: string }");
   const models = parser.getModels();
@@ -58,6 +151,7 @@ it("parses top level type aliases and interfaces into models", () => {
     name: "A",
     extends: [],
     schema: [{ name: "a", type: "string", optional: false }],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "interface",
@@ -67,6 +161,7 @@ it("parses top level type aliases and interfaces into models", () => {
     id: "B",
     name: "B",
     schema: [{ name: "b", type: "string", optional: false }],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "typeAlias",
@@ -84,6 +179,7 @@ it("parses exported top level type aliases and interfaces into models", () => {
     name: "A",
     extends: [],
     schema: [{ name: "a", type: "string", optional: false }],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "interface",
@@ -93,6 +189,7 @@ it("parses exported top level type aliases and interfaces into models", () => {
     id: "B",
     name: "B",
     schema: [{ name: "b", type: "string", optional: false }],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "typeAlias",
@@ -129,7 +226,7 @@ it("collects and links declarations from explicitly nested namespaces", () => {
       expect.objectContaining({ name: "Domain.Billing.Ledger", type: "class" }),
       expect.objectContaining({ name: "Domain.Billing.InvoiceId", type: "typeAlias" }),
       expect.objectContaining({ name: "Domain.Billing.InvoiceState", type: "enum" }),
-    ]),
+    ])
   );
   expect(invoice.id).toBe("Domain.Billing.Invoice");
   expect(invoice.schema).toEqual([{ name: "id", type: "string", optional: false }]);
@@ -143,7 +240,7 @@ it("preserves qualified names across namespace spellings and declaration merging
 
   expect(getModelNames("namespace A.B.C { export interface D {} }")).toEqual(["A.B.C.D"]);
   expect(
-    getModelNames("namespace A { export namespace B { export namespace C { export interface D {} } } }"),
+    getModelNames("namespace A { export namespace B { export namespace C { export interface D {} } } }")
   ).toEqual(["A.B.C.D"]);
   expect(getModelNames("namespace A { export interface C {} }")).toEqual(["A.C"]);
 
@@ -160,7 +257,7 @@ it("preserves qualified names across namespace spellings and declaration merging
         expect.objectContaining({ name: "dotted" }),
         expect.objectContaining({ name: "nested" }),
       ]),
-    }),
+    })
   );
 });
 
@@ -287,7 +384,7 @@ it("links inherited members of a module file to the declared model over a namesp
   }
 
   expect(holder.extends).toEqual([box]);
-  expect(holder.schema).toEqual([{ name: "value", type: item, optional: false }]);
+  expect(holder.schema).toEqual([{ name: "value", type: item, optional: false, inherited: true }]);
   expect(holder.dependencies).toEqual([box, item]);
   expect(innerItem.dependants).toEqual([]);
 });
@@ -336,7 +433,7 @@ it("resolves inherited index signature values through namespace import aliases",
 
   if (!globalUser || !aliasedUser || d?.type !== "interface") throw new Error("expected alias models");
 
-  expect(d.schema).toEqual([{ name: "[key: string]", type: aliasedUser, optional: false }]);
+  expect(d.schema).toEqual([{ name: "[key: string]", type: aliasedUser, optional: false, inherited: true }]);
   expect(d.dependencies).toEqual([aliasedUser]);
   expect(globalUser.dependants).toEqual([]);
 });
@@ -417,7 +514,7 @@ it("keeps generic type parameters distinct from same-named namespace models", ()
         arguments: [{ name: "input", type: "U[]" }],
         returnType: ["U"],
       }),
-    ]),
+    ])
   );
   expect(box.dependencies).toContain(sibling);
   expect(box.dependencies).not.toContain(target);
@@ -428,7 +525,7 @@ it("keeps generic type parameters distinct from same-named namespace models", ()
       name: "",
       arguments: [{ name: "input", type: "U[]" }],
       returnType: "U[]",
-    }),
+    })
   );
   expect(adapter.dependencies).toContain(callable);
   expect(adapter.dependencies).not.toContain(sibling);
@@ -472,6 +569,7 @@ it("supports type aliases with kind != TypeLiteral", () => {
     id: "A",
     name: "A",
     schema: [{ name: "==>", type: "string", optional: false }],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [expect.objectContaining({ name: "B" }), expect.objectContaining({ name: "C" })],
     type: "typeAlias",
@@ -481,6 +579,7 @@ it("supports type aliases with kind != TypeLiteral", () => {
     id: "B",
     name: "B",
     schema: [{ name: "field", type: expect.objectContaining({ name: "A" }), optional: false }],
+    typeTextSegments: {},
     dependencies: [expect.objectContaining({ name: "A" })],
     dependants: [],
     type: "typeAlias",
@@ -498,6 +597,7 @@ it("supports type aliases with kind != TypeLiteral", () => {
         optional: false,
       },
     ],
+    typeTextSegments: { Record: [{ text: "Record", kind: "reference" }] },
     dependencies: [expect.objectContaining({ name: "A" })],
     dependants: [],
     type: "typeAlias",
@@ -521,6 +621,7 @@ it("supports declaration merging", () => {
       { name: "a", type: "string", optional: false },
       { name: "b", type: "string", optional: false },
     ],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "interface",
@@ -555,22 +656,22 @@ it("renders synthesized properties from mapped interface heritage", () => {
     throw new Error("expected mapped models");
   }
   expect(picked.schema).toEqual([
-    { name: "a", type: "string", optional: false },
+    { name: "a", type: "string", optional: false, inherited: true },
     { name: "own", type: "boolean", optional: false },
   ]);
   expect(picked.dependencies).toContain(full);
   expect(optional.schema).toEqual([
-    { name: "a", type: "string", optional: true },
-    { name: "b", type: "number", optional: true },
+    { name: "a", type: "string", optional: true, inherited: true },
+    { name: "b", type: "number", optional: true, inherited: true },
   ]);
   expect(plain.schema).toEqual([
-    { name: "a", type: "string", optional: false },
-    { name: "b", type: "number", optional: false },
+    { name: "a", type: "string", optional: false, inherited: true },
+    { name: "b", type: "number", optional: false, inherited: true },
   ]);
   expect(mixed.schema).toEqual([
-    { name: "a", type: "string", optional: false },
-    { name: "b", type: "number", optional: false },
-    { name: "c", type: "boolean", optional: true },
+    { name: "a", type: "string", optional: false, inherited: true },
+    { name: "b", type: "number", optional: false, inherited: true },
+    { name: "c", type: "boolean", optional: true, inherited: true },
     { name: "own", type: "bigint", optional: false },
   ]);
   expect(override.schema).toEqual([
@@ -578,12 +679,84 @@ it("renders synthesized properties from mapped interface heritage", () => {
     { name: "inherited", type: "string", optional: false },
   ]);
   expect(merged.schema).toEqual([
+    { name: "a", type: "string", optional: true, inherited: true },
+    { name: "b", type: "number", optional: true, inherited: true },
     { name: "own", type: "boolean", optional: false },
-    { name: "a", type: "string", optional: true },
-    { name: "b", type: "number", optional: true },
   ]);
   expect(merged.dependencies).toContain(full);
   expect(alias.schema).toEqual([{ name: "a", type: "string", optional: false }]);
+});
+
+it.each([
+  { base: 'Pick<Source, "value">', optional: false, readonly: false },
+  { base: 'Omit<Source, "other">', optional: false, readonly: false },
+  { base: "Partial<Source>", optional: true, readonly: false },
+  { base: "Required<Source>", optional: false, readonly: false },
+  { base: "Readonly<Source>", optional: false, readonly: true },
+  { base: 'Record<"value", Entity>', optional: false, readonly: false },
+  { base: "{ [K in keyof Source]: Source[K] }", optional: false, readonly: false },
+])("renders inherited class properties from $base", ({ base, optional, readonly }) => {
+  const models = new ModelParser(`
+    interface Entity { id: string }
+    interface Source { value: Entity }
+    type Base = ${base};
+    declare const Ctor: new () => Base;
+    class Impl extends Ctor { own = ""; }
+    interface IfaceImpl extends Base { own: string; }
+  `).getModels();
+  const entity = models.find((model) => model.name === "Entity");
+  const impl = models.find((model) => model.name === "Impl");
+  const iface = models.find((model) => model.name === "IfaceImpl");
+  if (!entity || !impl || !iface) throw new Error("expected mapped class models");
+
+  const value = {
+    name: "value",
+    type: entity,
+    optional,
+    inherited: true,
+    ...(readonly ? { modifiers: ["readonly"] } : {}),
+  };
+  const own = { name: "own", type: "string", optional: false };
+  expect(impl.schema).toHaveLength(2);
+  expect(impl.schema).toEqual(expect.arrayContaining([own, value]));
+  expect(iface.schema).toEqual([value, own]);
+  expect(impl.dependencies).toContain(entity);
+});
+
+it("keeps class overrides and merged synthesized members once without reordering own members", () => {
+  const models = new ModelParser(`
+    interface Source { value: string | number; inherited: boolean }
+    declare const Ctor: new () => Partial<Source>;
+    class Impl extends Ctor {
+      own = "";
+      value = 1;
+      static inherited = 2;
+      run() {}
+      get size() { return 1; }
+    }
+    interface Impl extends Partial<Source> {}
+  `).getModels();
+  const impl = models.find((model) => model.name === "Impl");
+  if (!impl) throw new Error("expected merged class");
+
+  expect(impl.schema.filter((field) => !field.inherited).map((field) => field.name)).toEqual([
+    "own",
+    "value",
+    "inherited",
+    "run",
+    "size",
+  ]);
+  expect(impl.schema.filter((field) => field.name === "value")).toEqual([
+    { name: "value", type: "number", optional: false },
+  ]);
+  const inheritedRows = impl.schema.filter((field) => field.name === "inherited");
+  expect(inheritedRows).toHaveLength(2);
+  expect(inheritedRows).toEqual(
+    expect.arrayContaining([
+      { name: "inherited", type: "number", optional: false, modifiers: ["static"] },
+      { name: "inherited", type: "boolean", optional: true, inherited: true },
+    ])
+  );
 });
 
 it("keeps effective mapped property types and readonly modifiers", () => {
@@ -592,6 +765,8 @@ it("keeps effective mapped property types and readonly modifiers", () => {
     interface Source { value: Entity; }
     type Strings = { [K in keyof Source]: string };
     interface StringView extends Strings {}
+    declare const StringCtor: new () => Strings;
+    class StringModel extends StringCtor {}
     interface ReadonlyView extends Readonly<Source> {}
     class ReadonlyModel {}
     interface ReadonlyModel extends Readonly<Source> {}
@@ -599,23 +774,34 @@ it("keeps effective mapped property types and readonly modifiers", () => {
   const entity = models.find((model) => model.name === "Entity");
   const strings = models.find((model) => model.name === "Strings");
   const stringView = models.find((model) => model.name === "StringView");
+  const stringModel = models.find((model) => model.name === "StringModel");
   const readonlyView = models.find((model) => model.name === "ReadonlyView");
   const readonlyModel = models.find((model) => model.name === "ReadonlyModel");
 
-  if (!entity || !strings || !stringView || !readonlyView || readonlyModel?.type !== "class") {
+  if (
+    !entity ||
+    !strings ||
+    !stringView ||
+    !stringModel ||
+    !readonlyView ||
+    readonlyModel?.type !== "class"
+  ) {
     throw new Error("expected mapped models");
   }
 
   expect(strings.schema).toEqual([{ name: "value", type: "string", optional: false }]);
-  expect(stringView.schema).toEqual([{ name: "value", type: "string", optional: false }]);
+  expect(stringView.schema).toEqual([{ name: "value", type: "string", optional: false, inherited: true }]);
+  expect(stringModel.schema).toEqual([{ name: "value", type: "string", optional: false, inherited: true }]);
   expect(strings.dependencies).not.toContain(entity);
   expect(stringView.dependencies).not.toContain(entity);
+  expect(stringModel.dependencies).not.toContain(entity);
   expect(readonlyView.schema).toEqual([
     {
       name: "value",
       type: expect.objectContaining({ name: "Entity" }),
       optional: false,
       modifiers: ["readonly"],
+      inherited: true,
     },
   ]);
   expect(readonlyModel.schema).toEqual([
@@ -624,6 +810,7 @@ it("keeps effective mapped property types and readonly modifiers", () => {
       type: expect.objectContaining({ name: "Entity" }),
       optional: false,
       modifiers: ["readonly"],
+      inherited: true,
     },
   ]);
 });
@@ -641,11 +828,13 @@ it("renders inherited index signatures from Record heritage", () => {
   const mixedScores = models.find((model) => model.name === "MixedScores");
 
   if (!user || !userMap || !scores || !mixedScores) throw new Error("expected record models");
-  expect(userMap.schema).toEqual([{ name: "[key: string]", type: user, optional: false }]);
+  expect(userMap.schema).toEqual([{ name: "[key: string]", type: user, optional: false, inherited: true }]);
   expect(userMap.dependencies).toContain(user);
-  expect(scores.schema).toEqual([{ name: "[key: string]", type: "number", optional: false }]);
+  expect(scores.schema).toEqual([
+    { name: "[key: string]", type: "number", optional: false, inherited: true },
+  ]);
   expect(mixedScores.schema).toEqual([
-    { name: "[key: string]", type: "number", optional: false },
+    { name: "[key: string]", type: "number", optional: false, inherited: true },
     { name: "[key: number]", type: "number", optional: false },
   ]);
 });
@@ -663,10 +852,10 @@ it("renders inherited symbol and template-literal index signatures", () => {
   const data = models.find((model) => model.name === "Data");
 
   if (!user || !symbols || !data) throw new Error("expected index models");
-  expect(symbols.schema).toEqual([{ name: "[key: symbol]", type: user, optional: false }]);
+  expect(symbols.schema).toEqual([{ name: "[key: symbol]", type: user, optional: false, inherited: true }]);
   expect(symbols.dependencies).toContain(user);
   expect(data.schema).toEqual([
-    { name: "[key: `data-${string}`]", type: user, optional: false },
+    { name: "[key: `data-${string}`]", type: user, optional: false, inherited: true },
     { name: "[key: number]", type: "number", optional: false },
   ]);
   expect(data.dependencies).toContain(user);
@@ -684,8 +873,8 @@ it("keeps interface heritage when the interface merges with a class", () => {
   if (!base || sprite?.type !== "class") throw new Error("expected merged class and base");
   expect(models.length).toBe(2);
   expect(sprite.schema).toEqual([
+    { name: "x", type: "string", optional: false, inherited: true },
     { name: "name", type: "string", optional: false },
-    { name: "x", type: "string", optional: false },
   ]);
   expect(sprite.extends).toBe(base);
   expect(sprite.dependencies).toEqual([base]);
@@ -757,6 +946,7 @@ it("keeps inherited generic signatures on a class merge", () => {
       arguments: [{ name: "value", type: user }],
       returnType: user,
       optional: false,
+      inherited: true,
     },
     {
       name: "",
@@ -764,6 +954,7 @@ it("keeps inherited generic signatures on a class merge", () => {
       arguments: [{ name: "values", type: "User[]" }],
       returnType: "User[]",
       optional: false,
+      inherited: true,
       typeRefs: [user],
     },
     {
@@ -772,6 +963,7 @@ it("keeps inherited generic signatures on a class merge", () => {
       arguments: [{ name: "value", type: user }],
       returnType: "{ value: User; }",
       optional: false,
+      inherited: true,
       typeRefs: [user],
     },
   ]);
@@ -798,6 +990,7 @@ it("renders inherited generic signatures on a plain interface", () => {
       arguments: [{ name: "value", type: user }],
       returnType: user,
       optional: false,
+      inherited: true,
     },
     {
       name: "new",
@@ -805,6 +998,7 @@ it("renders inherited generic signatures on a plain interface", () => {
       arguments: [{ name: "value", type: user }],
       returnType: "{ value: User; }",
       optional: false,
+      inherited: true,
       typeRefs: [user],
     },
   ]);
@@ -820,6 +1014,7 @@ it("parses arrays of primitives", () => {
     id: "A",
     name: "A",
     schema: [{ name: "a", type: "array", elementType: "string", optional: false }],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "typeAlias",
@@ -847,6 +1042,7 @@ it("parses arrays of models", () => {
         optional: false,
       },
     ],
+    typeTextSegments: {},
     dependencies: [expect.objectContaining({ name: "B" })],
     dependants: [],
     type: "typeAlias",
@@ -858,6 +1054,7 @@ it("parses arrays of models", () => {
     schema: [{ name: "b", type: "string", optional: false }],
     dependencies: [],
     dependants: [expect.objectContaining({ name: "A" })],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     type: "typeAlias",
     arguments: [],
   });
@@ -877,6 +1074,7 @@ it("parses generics", () => {
     name: "A",
     schema: [{ name: "a", type: "array", elementType: "string", optional: false }],
     dependencies: [],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependants: [expect.objectContaining({ name: "B" }), expect.objectContaining({ name: "C" })],
     type: "typeAlias",
     arguments: [],
@@ -893,6 +1091,10 @@ it("parses generics", () => {
         optional: false,
       },
     ],
+    typeTextSegments: {
+      Record: [{ text: "Record", kind: "reference" }],
+      string: [{ text: "string", kind: "primitive" }],
+    },
     dependencies: [expect.objectContaining({ name: "A" })],
     dependants: [],
     type: "typeAlias",
@@ -910,6 +1112,7 @@ it("parses generics", () => {
         optional: false,
       },
     ],
+    typeTextSegments: { Map: [{ text: "Map", kind: "reference" }] },
     dependencies: [expect.objectContaining({ name: "A" })],
     dependants: [],
     type: "typeAlias",
@@ -941,6 +1144,7 @@ it("parses type alias functions and interface methods", () => {
         optional: false,
       },
     ],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "interface",
@@ -959,6 +1163,7 @@ it("parses type alias functions and interface methods", () => {
         optional: false,
       },
     ],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "typeAlias",
@@ -982,6 +1187,7 @@ it("parses generic alias and interface arguments", () => {
     name: "B",
     extends: [],
     schema: [{ name: "b", type: "T", optional: false }],
+    typeTextSegments: { T: [{ text: "T", kind: "reference" }] },
     dependencies: [],
     dependants: [],
     type: "interface",
@@ -992,6 +1198,7 @@ it("parses generic alias and interface arguments", () => {
     id: "A",
     name: "A",
     schema: [{ name: "a", type: "T", optional: false }],
+    typeTextSegments: { T: [{ text: "T", kind: "reference" }] },
     dependencies: [],
     dependants: [],
     type: "typeAlias",
@@ -1013,6 +1220,7 @@ it("parses classes", () => {
     id: "A",
     name: "A",
     schema: [{ name: "foo", type: "string", optional: false }],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [expect.objectContaining({ name: "C" })],
     type: "class",
@@ -1031,6 +1239,7 @@ it("parses classes", () => {
         optional: false,
       },
     ],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [expect.objectContaining({ name: "C" })],
     type: "class",
@@ -1047,6 +1256,7 @@ it("parses classes", () => {
         name: "foo",
         type: "string",
         optional: false,
+        inherited: true,
       },
       {
         name: "bar",
@@ -1057,6 +1267,7 @@ it("parses classes", () => {
       },
     ],
     dependencies: [expect.objectContaining({ name: "A" }), expect.objectContaining({ name: "B" })],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependants: [],
     type: "class",
     arguments: [],
@@ -1077,6 +1288,7 @@ it("parses optional properties", () => {
     name: "A",
     extends: [],
     schema: [{ name: "a", type: "string", optional: true }],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "interface",
@@ -1087,6 +1299,7 @@ it("parses optional properties", () => {
     id: "B",
     name: "B",
     schema: [{ name: "b", type: "string", optional: true }],
+    typeTextSegments: { string: [{ text: "string", kind: "primitive" }] },
     dependencies: [],
     dependants: [],
     type: "typeAlias",
@@ -1111,12 +1324,77 @@ it("parses optional properties in classes", () => {
       { name: "requiredProp", type: "string", optional: false },
       { name: "optionalProp", type: "number", optional: true },
     ],
+    typeTextSegments: {
+      string: [{ text: "string", kind: "primitive" }],
+      number: [{ text: "number", kind: "primitive" }],
+    },
     dependencies: [],
     dependants: [],
     type: "class",
     arguments: [],
     implements: [],
   });
+});
+
+it("preserves declared alias union order and resolved model references", () => {
+  const models = new ModelParser(`
+    interface User { id: string }
+    interface Admin { id: string }
+    type Actor = User | Admin | null | undefined;
+    interface Holder { actor: User | Admin | null | undefined }
+  `).getModels();
+  const user = models.find((model) => model.name === "User");
+  const admin = models.find((model) => model.name === "Admin");
+  const actor = models.find((model) => model.name === "Actor");
+  const holder = models.find((model) => model.name === "Holder");
+  if (!user || !admin || !actor || !holder) throw new Error("missing models");
+
+  expect(actor.schema).toEqual([
+    { name: "==>", type: "union", types: [user, admin, "null", "undefined"], optional: false },
+  ]);
+  expect(actor.dependencies).toEqual([user, admin]);
+  expect(user.dependants).toContain(actor);
+  expect(admin.dependants).toContain(actor);
+  expect(holder.schema).toEqual([
+    { name: "actor", type: "User | Admin | null | undefined", optional: false, typeRefs: [user, admin] },
+  ]);
+});
+
+it.each([
+  ["User | User | null | never", ["User", "null"]],
+  ["boolean | null", ["false", "true", "null"]],
+  ["Pair | null", ["User", "Admin", "null"]],
+  ["User | (Admin | null)", ["User", "Admin", "null"]],
+  ["(User | Admin | null)", ["User", "Admin", "null"]],
+  ["null | User | Admin", ["null", "User", "Admin"]],
+  ["Indirect", ["null", "User", "Admin"]],
+])("preserves normalized alias union members for %s", (expression, expectedNames) => {
+  const models = new ModelParser(`
+    interface User { id: string }
+    interface Admin { id: string }
+    type Pair = User | Admin;
+    type Indirect = Pair | null;
+    type Result = ${expression};
+  `).getModels();
+  const field = models.find((model) => model.name === "Result")?.schema[0];
+  if (!field || !("types" in field)) throw new Error("expected union field");
+
+  expect(field.types.map((type) => (typeof type === "string" ? type : type.name))).toEqual(expectedNames);
+});
+
+it("retains distinct alias union members with identical rendered text", () => {
+  const [model] = new ModelParser(`
+    type Result = { value: string } | { value: string } | null;
+  `).getModels();
+
+  expect(model.schema).toEqual([
+    {
+      name: "==>",
+      type: "union",
+      types: ["{ value: string; }", "{ value: string; }", "null"],
+      optional: false,
+    },
+  ]);
 });
 
 it("preserves type alias references instead of expanding unions", () => {
@@ -1134,6 +1412,11 @@ it("preserves type alias references instead of expanding unions", () => {
     id: "AgentResourceType",
     name: "AgentResourceType",
     schema: [{ name: "==>", type: "union", types: ['"tool"', '"context"', '"escalation"'], optional: false }],
+    typeTextSegments: {
+      '"tool"': [{ text: '"tool"', kind: "literal" }],
+      '"context"': [{ text: '"context"', kind: "literal" }],
+      '"escalation"': [{ text: '"escalation"', kind: "literal" }],
+    },
     dependencies: [],
     dependants: [expect.objectContaining({ name: "AgentFlowProps" })],
     type: "typeAlias",
@@ -1158,6 +1441,7 @@ it("preserves type alias references instead of expanding unions", () => {
       },
     ],
     dependencies: [expect.objectContaining({ name: "AgentResourceType" })],
+    typeTextSegments: { void: [{ text: "void", kind: "default" }] },
     dependants: [],
     type: "typeAlias",
     arguments: [],
@@ -1185,6 +1469,7 @@ it("preserves type alias references in property types", () => {
       { name: "previousStatus", type: expect.objectContaining({ name: "Status" }), optional: true },
     ],
     dependencies: [expect.objectContaining({ name: "Status" })],
+    typeTextSegments: {},
     dependants: [],
     type: "interface",
     arguments: [],
@@ -1222,11 +1507,119 @@ it("preserves type alias references in arrays and generics", () => {
       },
     ],
     dependencies: [expect.objectContaining({ name: "Color" })],
+    typeTextSegments: {
+      Record: [{ text: "Record", kind: "reference" }],
+      string: [{ text: "string", kind: "primitive" }],
+    },
     dependants: [],
     type: "typeAlias",
     arguments: [],
   });
 });
+
+it.each(["interface Example", "declare class Example", "type Example ="])(
+  "preserves readonly array types and independent property modifiers in %s",
+  (declaration) => {
+    const models = new ModelParser(`
+      interface Item { id: string }
+      type Items = ReadonlyArray<Item>;
+      ${declaration} {
+        mutable: string[];
+        immutable: readonly string[];
+        generic: ReadonlyArray<string>;
+        optional?: readonly string[];
+        items: readonly Item[];
+        aliased: Items;
+        readonly property: string[];
+        readonly both: readonly string[];
+        tuple: readonly [Item, number];
+        map: ReadonlyMap<string, Item>;
+      }
+    `).getModels();
+    const example = models.find((model) => model.name === "Example");
+    const item = models.find((model) => model.name === "Item");
+    if (!example || !item) throw new Error("missing models");
+
+    expect(example.schema).toEqual([
+      { name: "mutable", type: "array", elementType: "string", optional: false },
+      { name: "immutable", type: "array", elementType: "string", readonly: true, optional: false },
+      { name: "generic", type: "array", elementType: "string", readonly: true, optional: false },
+      { name: "optional", type: "array", elementType: "string", readonly: true, optional: true },
+      { name: "items", type: "array", elementType: item, readonly: true, optional: false },
+      expect.objectContaining({ name: "aliased", type: "array", elementType: item, readonly: true }),
+      { name: "property", type: "array", elementType: "string", modifiers: ["readonly"], optional: false },
+      {
+        name: "both",
+        type: "array",
+        elementType: "string",
+        readonly: true,
+        modifiers: ["readonly"],
+        optional: false,
+      },
+      { name: "tuple", type: "readonly [Item, number]", typeRefs: [item], optional: false },
+      {
+        name: "map",
+        type: "generic",
+        genericName: "ReadonlyMap",
+        arguments: ["string", item],
+        optional: false,
+      },
+    ]);
+    expect(example.dependencies).toContain(item);
+    expect(item.dependants).toContain(example);
+  }
+);
+
+it.each(["interface Example", "declare class Example", "type Example ="])(
+  "preserves readonly method and callback array returns in %s",
+  (declaration) => {
+    const models = new ModelParser(`
+      interface Item { id: string }
+      type Items = ReadonlyArray<Item>;
+      ${declaration} {
+        mutable(): Item[];
+        immutable(input: readonly Item[]): readonly Item[];
+        callback: () => ReadonlyArray<string>;
+        aliased(): Items;
+      }
+    `).getModels();
+    const example = models.find((model) => model.name === "Example");
+    const item = models.find((model) => model.name === "Item");
+    if (!example || !item) throw new Error("missing models");
+
+    expect(example.schema).toHaveLength(4);
+    expect(example.schema).toEqual(
+      expect.arrayContaining([
+        { name: "mutable", type: "function", arguments: [], returnType: [item], optional: false },
+        {
+          name: "immutable",
+          type: "function",
+          arguments: [{ name: "input", type: "readonly Item[]" }],
+          returnType: [item],
+          returnTypeReadonly: true,
+          optional: false,
+          typeRefs: [item],
+        },
+        {
+          name: "callback",
+          type: "function",
+          arguments: [],
+          returnType: ["string"],
+          returnTypeReadonly: true,
+          optional: false,
+        },
+        expect.objectContaining({
+          name: "aliased",
+          type: "function",
+          returnType: [item],
+          returnTypeReadonly: true,
+        }),
+      ])
+    );
+    expect(example.dependencies).toContain(item);
+    expect(item.dependants).toContain(example);
+  }
+);
 
 it("links function argument and return types to their models", () => {
   const parser = new ModelParser(`
@@ -1302,7 +1695,7 @@ it("preserves indexed access aliases in property and function argument types", (
     expect.arrayContaining([
       expect.objectContaining({ name: "SampleA" }),
       expect.objectContaining({ name: "SampleB" }),
-    ]),
+    ])
   );
   expect(sampleAModel?.dependencies).toEqual([expect.objectContaining({ name: "UnionKey" })]);
   expect(sampleBModel?.dependencies).toEqual([expect.objectContaining({ name: "UnionKey" })]);
@@ -1350,7 +1743,7 @@ it("preserves alias references for function return types on class properties", (
   expect(doThisField.returnType).toEqual(expect.objectContaining({ name: "UnionKey" }));
   expect(testModel.dependencies).toEqual([expect.objectContaining({ name: "UnionKey" })]);
   expect(unionKeyModel?.dependants).toEqual(
-    expect.arrayContaining([expect.objectContaining({ name: "Test" })]),
+    expect.arrayContaining([expect.objectContaining({ name: "Test" })])
   );
 });
 
@@ -1382,7 +1775,7 @@ it("preserves alias references for class methods, getters, and setters", () => {
 
   expect(exampleModel?.dependencies).toEqual([expect.objectContaining({ name: "UnionKey" })]);
   expect(unionKeyModel?.dependants).toEqual(
-    expect.arrayContaining([expect.objectContaining({ name: "Example" })]),
+    expect.arrayContaining([expect.objectContaining({ name: "Example" })])
   );
 
   const doThisField = exampleModel?.schema.find((field) => field.name === "doThis");
@@ -1393,24 +1786,349 @@ it("preserves alias references for class methods, getters, and setters", () => {
   expect(doThisField.returnType).toEqual(expect.objectContaining({ name: "UnionKey" }));
 
   const statusFields = exampleModel?.schema.filter((field) => field.name === "aliasStatus") ?? [];
+  expect(doThisField.accessor).toBeUndefined();
   expect(statusFields.length).toBe(2);
 
   const getterField = statusFields.find(
-    (field) => isFunctionSchemaField(field) && field.arguments.length === 0,
+    (field) => isFunctionSchemaField(field) && field.arguments.length === 0
   );
   if (!getterField || !isFunctionSchemaField(getterField)) {
     throw new Error("Expected getter to be parsed as a function field");
   }
   expect(getterField.returnType).toEqual(expect.objectContaining({ name: "UnionKey" }));
+  expect(getterField.accessor).toBe("get");
 
   const setterField = statusFields.find(
-    (field) => isFunctionSchemaField(field) && field.arguments.length === 1,
+    (field) => isFunctionSchemaField(field) && field.arguments.length === 1
   );
   if (!setterField || !isFunctionSchemaField(setterField)) {
     throw new Error("Expected setter to be parsed as a function field");
   }
   expect(setterField.returnType).toBe("void");
+  expect(setterField.accessor).toBe("set");
   expect(setterField.arguments[0]?.type).toEqual(expect.objectContaining({ name: "UnionKey" }));
+});
+
+it("inherits accessor rows and their model dependencies without duplicating own accessors", () => {
+  const models = new ModelParser(`
+    interface Value { amount: number }
+    class Base {
+      label: string;
+      get value(): Value { return { amount: 0 }; }
+      set value(next: Value) {}
+      run(): void {}
+    }
+    class Child extends Base { count: number; }
+  `).getModels();
+  const value = models.find((model) => model.name === "Value");
+  const base = models.find((model) => model.name === "Base");
+  const child = models.find((model) => model.name === "Child");
+  if (!value || !base || !child) throw new Error("Expected accessor models");
+
+  for (const model of [base, child]) {
+    const inheritance = model === child ? { inherited: true } : {};
+    expect(model.schema.filter((field) => field.name === "value")).toEqual([
+      {
+        name: "value",
+        type: "function",
+        accessor: "get",
+        arguments: [],
+        returnType: value,
+        optional: false,
+        ...inheritance,
+      },
+      {
+        name: "value",
+        type: "function",
+        accessor: "set",
+        arguments: [{ name: "next", type: value }],
+        returnType: "void",
+        optional: false,
+        ...inheritance,
+      },
+    ]);
+    expect(model.dependencies).toContain(value);
+    expect(value.dependants).toContain(model);
+  }
+  expect(child.schema.map(({ name, inherited }) => ({ name, inherited }))).toEqual([
+    { name: "label", inherited: true },
+    { name: "count", inherited: undefined },
+    { name: "run", inherited: true },
+    { name: "value", inherited: true },
+    { name: "value", inherited: true },
+  ]);
+});
+
+it.each([
+  { argument: "string", setterType: "string | number" },
+  { argument: "Value", setterType: "number | Value" },
+])("specializes inherited getter and setter types with $argument", ({ argument, setterType }) => {
+  const parser = new ModelParser(`
+    interface Value { amount: number }
+    class Base<T> {
+      get value(): T { throw 0; }
+      set value(next: T | number) {}
+      set reversed(next: T) {}
+      get reversed(): T { throw 0; }
+      get readOnly(): T { throw 0; }
+      set writeOnly(next: T) {}
+    }
+    class Child extends Base<${argument}> {}
+    class Grandchild extends Child {}
+  `);
+  expect(parser.project.getPreEmitDiagnostics()).toHaveLength(0);
+  const models = parser.getModels();
+  const value = models.find((model) => model.name === "Value");
+  if (!value) throw new Error("Expected Value");
+  const expectedType = argument === "Value" ? value : argument;
+
+  for (const name of ["Child", "Grandchild"]) {
+    const model = models.find((model) => model.name === name);
+    if (!model) throw new Error(`Expected ${name}`);
+    const fields = model.schema.filter(isFunctionSchemaField);
+    expect(fields).toHaveLength(6);
+    expect(fields.filter((field) => field.accessor === "get").map((field) => field.returnType)).toEqual([
+      expectedType,
+      expectedType,
+      expectedType,
+    ]);
+    expect(fields.filter((field) => field.accessor === "set").map((field) => field.arguments)).toEqual([
+      [{ name: "next", type: setterType }],
+      [{ name: "next", type: expectedType }],
+      [{ name: "next", type: expectedType }],
+    ]);
+    expect(fields.every((field) => field.inherited)).toBe(true);
+    if (argument === "Value") {
+      expect(model.dependencies).toContain(value);
+      expect(fields.find((field) => field.accessor === "set" && field.name === "value")?.typeRefs).toContain(
+        value
+      );
+    }
+  }
+});
+
+it("preserves computed accessors and specializes inherited symbol accessors", () => {
+  const parser = new ModelParser(`
+    declare const key: unique symbol;
+    const dynamicKey: string = "value";
+    class Base<T> {
+      get [Symbol.iterator](): T { throw 0; }
+      set [Symbol.iterator](next: T) {}
+      get [key](): T { throw 0; }
+      set [key](next: T) {}
+      get [dynamicKey](): T { throw 0; }
+      set [dynamicKey](next: T) {}
+    }
+    class Child extends Base<string> {}
+  `);
+  const models = parser.getModels();
+  for (const modelName of ["Base", "Child"]) {
+    const model = models.find((candidate) => candidate.name === modelName);
+    if (!model) throw new Error(`Expected ${modelName}`);
+    const type = modelName === "Base" ? "T" : "string";
+    const names = ["[Symbol.iterator]", "[key]"];
+    if (modelName === "Base") names.push("[dynamicKey]");
+    const fields = model.schema.filter(isFunctionSchemaField);
+    expect(fields).toHaveLength(names.length * 2);
+    for (const name of names) {
+      expect(fields.filter((field) => field.name === name)).toEqual([
+        expect.objectContaining({ accessor: "get", returnType: type }),
+        expect.objectContaining({ accessor: "set", arguments: [{ name: "next", type }] }),
+      ]);
+    }
+  }
+});
+
+it.each([
+  ["get value(): string;", "", ["get"]],
+  ["set value(next: string);", "", ["set"]],
+  ["get value(): string; set value(next: string);", "", ["get", "set"]],
+  ["get value(): string;", "set value(next: string);", ["get", "set"]],
+  ["set value(next: string);", "get value(): string;", ["set", "get"]],
+])("emits merged interface accessors once: %s %s", (accessors, laterAccessors, expectedKinds) => {
+  const parser = new ModelParser(`
+    interface Combined { ${accessors} }
+    interface Combined { get later(): number; set later(next: number); ${laterAccessors} }
+    class Base { get inherited(): boolean { return true; } }
+    class Combined extends Base {}
+  `);
+  const combined = parser.getModels().find((model) => model.name === "Combined");
+  if (!combined) throw new Error("Expected Combined");
+  const fields = combined.schema.filter(isFunctionSchemaField);
+  expect(fields.filter((field) => field.name === "value").map((field) => field.accessor)).toEqual(
+    expectedKinds
+  );
+  expect(fields.filter((field) => field.name === "inherited")).toEqual([
+    expect.objectContaining({ accessor: "get", returnType: "boolean", inherited: true }),
+  ]);
+  expect(fields.filter((field) => field.name === "later")).toEqual([
+    expect.objectContaining({ accessor: "get", returnType: "number" }),
+    expect.objectContaining({ accessor: "set", arguments: [{ name: "next", type: "number" }] }),
+  ]);
+});
+
+it.each(["class", "interface"])("places inherited members first within each %s member group", (kind) => {
+  const models = new ModelParser(`
+    ${kind} Base {
+      baseField: string;
+      baseMethod(): void;
+      callback: () => void;
+      overridden: string;
+    }
+    ${kind} Child extends Base {
+      ownMethod(): void;
+      ownField: number;
+      overridden: string;
+      ownCallback: () => void;
+    }
+  `).getModels();
+  const child = models.find((model) => model.name === "Child");
+  if (!child) throw new Error("Expected Child");
+  expect(child.schema.map(({ name, inherited }) => ({ name, inherited }))).toEqual([
+    { name: "baseField", inherited: true },
+    { name: "callback", inherited: true },
+    { name: "ownField", inherited: undefined },
+    { name: "overridden", inherited: undefined },
+    { name: "ownCallback", inherited: undefined },
+    { name: "baseMethod", inherited: true },
+    { name: "ownMethod", inherited: undefined },
+  ]);
+});
+
+it("preserves own accessor order and static accessors after inherited accessors", () => {
+  const models = new ModelParser(`
+    class Base { get inherited(): boolean { return true; } }
+    class Child extends Base {
+      set first(value: string) {}
+      get first(): string { return ""; }
+      static get first(): number { return 0; }
+      static set first(value: number) {}
+      run(): void {}
+      static count: number;
+      static build(): void {}
+      get second(): string { return ""; }
+      label: string;
+    }
+  `).getModels();
+  const child = models.find((model) => model.name === "Child");
+  if (!child) throw new Error("Expected Child");
+
+  expect(child.schema.map((field) => field.name)).toEqual([
+    "label",
+    "count",
+    "run",
+    "build",
+    "inherited",
+    "first",
+    "first",
+    "second",
+    "first",
+    "first",
+  ]);
+  expect(child.schema.filter(isFunctionSchemaField).filter((field) => field.name === "first")).toEqual([
+    {
+      name: "first",
+      type: "function",
+      accessor: "get",
+      arguments: [],
+      returnType: "string",
+      optional: false,
+    },
+    {
+      name: "first",
+      type: "function",
+      accessor: "get",
+      arguments: [],
+      returnType: "number",
+      optional: false,
+      modifiers: ["static"],
+    },
+    {
+      name: "first",
+      type: "function",
+      accessor: "set",
+      arguments: [{ name: "value", type: "string" }],
+      returnType: "void",
+      optional: false,
+    },
+    {
+      name: "first",
+      type: "function",
+      accessor: "set",
+      arguments: [{ name: "value", type: "number" }],
+      returnType: "void",
+      optional: false,
+      modifiers: ["static"],
+    },
+  ]);
+});
+
+it("uses overridden accessors once and inherits getter-only and setter-only scalar rows", () => {
+  const models = new ModelParser(`
+    class Base {
+      get value(): string | number { return ""; }
+      set value(next: string | number) {}
+      get ready(): boolean { return true; }
+      set label(next: string) {}
+    }
+    class Child extends Base {
+      get value(): number { return 0; }
+      set value(next: number) {}
+    }
+    class Grandchild extends Child {}
+  `).getModels();
+
+  for (const name of ["Child", "Grandchild"]) {
+    const model = models.find((item) => item.name === name);
+    if (!model) throw new Error(`Expected ${name}`);
+    const inheritance = name === "Grandchild" ? { inherited: true } : {};
+    expect(model.schema.map((field) => field.name)).toEqual(
+      name === "Child" ? ["ready", "value", "label", "value"] : ["value", "ready", "value", "label"]
+    );
+    expect(model.schema).toEqual(
+      expect.arrayContaining([
+        {
+          name: "value",
+          type: "function",
+          accessor: "get",
+          arguments: [],
+          returnType: "number",
+          optional: false,
+          ...inheritance,
+        },
+        {
+          name: "ready",
+          type: "function",
+          accessor: "get",
+          arguments: [],
+          returnType: "boolean",
+          optional: false,
+          inherited: true,
+        },
+        {
+          name: "value",
+          type: "function",
+          accessor: "set",
+          arguments: [{ name: "next", type: "number" }],
+          returnType: "void",
+          optional: false,
+          ...inheritance,
+        },
+        {
+          name: "label",
+          type: "function",
+          accessor: "set",
+          arguments: [{ name: "next", type: "string" }],
+          returnType: "void",
+          optional: false,
+          inherited: true,
+        },
+      ])
+    );
+    expect(model.dependencies.map((dependency) => dependency.name)).toEqual([
+      name === "Child" ? "Base" : "Child",
+    ]);
+  }
 });
 
 it("preserves alias references for nested promise and tuple return types", () => {
@@ -1448,7 +2166,7 @@ it("preserves alias references for nested promise and tuple return types", () =>
   expect(tupleField.returnType).toBe("[VariantKind, number]");
 
   expect(variantKindModel?.dependants).toEqual(
-    expect.arrayContaining([expect.objectContaining({ name: "Handler" })]),
+    expect.arrayContaining([expect.objectContaining({ name: "Handler" })])
   );
 });
 
@@ -1493,6 +2211,55 @@ it("renders tuple aliases as their type text instead of Array members", () => {
   expect(pair?.dependencies).toEqual([expect.objectContaining({ name: "User" })]);
 });
 
+it("renders built-in object aliases as declared text without library members or self-dependencies", () => {
+  const types = [
+    "string[]",
+    "Array<string>",
+    "readonly string[]",
+    "ReadonlyArray<string>",
+    "Map<string, number>",
+    "Set<string>",
+    "Promise<string>",
+    "Date",
+    "RegExp",
+    "Uint8Array",
+  ];
+  const models = new ModelParser(
+    types.map((type, index) => `type BuiltIn${index} = ${type};`).join("\n")
+  ).getModels();
+
+  expect(models).toHaveLength(types.length);
+  for (const [index, model] of models.entries()) {
+    expect(model.schema).toHaveLength(1);
+    expect(model.schema).toEqual([{ name: "==>", type: types[index], optional: false }]);
+    expect(model.dependencies).toEqual([]);
+  }
+});
+
+it("preserves declared dependencies inside built-in object aliases", () => {
+  const types = ["User[]", "readonly User[]", "Map<string, Promise<User>>", "Set<User>", "Promise<User>"];
+  const models = new ModelParser(`
+    interface User { id: string }
+    ${types.map((type, index) => `type Users${index} = ${type};`).join("\n")}
+    type List<T> = ReadonlyArray<T>;
+  `).getModels();
+  const user = models.find((model) => model.name === "User");
+  if (!user) throw new Error("missing User model");
+
+  for (const [index, type] of types.entries()) {
+    const alias = models.find((model) => model.name === `Users${index}`);
+    if (!alias) throw new Error("missing alias model");
+    expect(alias.schema).toHaveLength(1);
+    expect(alias.schema).toEqual([{ name: "==>", type, optional: false }]);
+    expect(alias.dependencies).toEqual([user]);
+    expect(user.dependants).toContain(alias);
+  }
+  const list = models.find((model) => model.name === "List");
+  if (!list) throw new Error("missing List model");
+  expect(list.schema).toEqual([{ name: "==>", type: "ReadonlyArray<T>", optional: false }]);
+  expect(list.dependencies).toEqual([]);
+});
+
 it("renders template literal aliases as their type text instead of String members", () => {
   const parser = new ModelParser("type EventName = `on${string}`;");
 
@@ -1534,7 +2301,7 @@ it("renders interface index signatures", () => {
       type: "number | User",
       optional: false,
       typeRefs: [expect.objectContaining({ name: "User" })],
-    }),
+    })
   );
   expect(registry?.schema).toContainEqual({ name: "count", type: "number", optional: false });
 });
@@ -1578,11 +2345,14 @@ it("renders index-signature-only aliases like Record instead of an empty node", 
   ]);
 });
 
-it("renders mapped-type and Partial properties as optional without `| undefined`", () => {
+it("preserves property rows and optionality for mapped utility aliases", () => {
   const parser = new ModelParser(`
     interface User { id: string; age: number }
     type PartialUser = Partial<User>;
     type UserFlags = { [K in keyof User]?: boolean };
+    type PickedUser = Pick<User, "id">;
+    type OmittedUser = Omit<User, "age">;
+    type ReadonlyUser = Readonly<User>;
   `);
 
   const models = parser.getModels();
@@ -1596,6 +2366,17 @@ it("renders mapped-type and Partial properties as optional without `| undefined`
   expect(userFlags?.schema).toEqual([
     { name: "id", type: "boolean", optional: true },
     { name: "age", type: "boolean", optional: true },
+  ]);
+  for (const name of ["PickedUser", "OmittedUser"]) {
+    const model = models.find((candidate) => candidate.name === name);
+    if (!model) throw new Error("missing utility alias model");
+    expect(model.schema).toEqual([{ name: "id", type: "string", optional: false }]);
+  }
+  const readonlyUser = models.find((model) => model.name === "ReadonlyUser");
+  if (!readonlyUser) throw new Error("missing ReadonlyUser model");
+  expect(readonlyUser.schema).toEqual([
+    { name: "id", type: "string", optional: false, modifiers: ["readonly"] },
+    { name: "age", type: "number", optional: false, modifiers: ["readonly"] },
   ]);
 });
 
@@ -1642,6 +2423,14 @@ it("includes static members and surfaces member modifiers", () => {
       protected id: number;
       readonly tag: string;
       abstract run(): void;
+      private static cache: string;
+      protected static ids: string[];
+      private static readonly registry: Map<string, number>;
+      protected static create(): string { return ""; }
+      public static publicCount: number;
+      protected readonly name: string;
+      abstract readonly label: string;
+      plain: string;
     }
     interface Frozen { readonly key: string }
   `);
@@ -1677,7 +2466,7 @@ it("includes static members and surfaces member modifiers", () => {
     modifiers: ["readonly"],
   });
   expect(base?.schema).toContainEqual(
-    expect.objectContaining({ name: "run", type: "function", modifiers: ["abstract"] }),
+    expect.objectContaining({ name: "run", type: "function", modifiers: ["abstract"] })
   );
   expect(frozen?.schema).toContainEqual({
     name: "key",
@@ -1685,6 +2474,18 @@ it("includes static members and surfaces member modifiers", () => {
     optional: false,
     modifiers: ["readonly"],
   });
+  for (const { name, modifiers } of [
+    { name: "cache", modifiers: ["private", "static"] },
+    { name: "ids", modifiers: ["protected", "static"] },
+    { name: "registry", modifiers: ["private", "static", "readonly"] },
+    { name: "create", modifiers: ["protected", "static"] },
+    { name: "publicCount", modifiers: ["static"] },
+    { name: "name", modifiers: ["protected", "readonly"] },
+    { name: "label", modifiers: ["readonly", "abstract"] },
+  ]) {
+    expect(base?.schema).toContainEqual(expect.objectContaining({ name, modifiers }));
+  }
+  expect(base?.schema).toContainEqual({ name: "plain", type: "string", optional: false });
 });
 
 it("renders interface call and construct signatures", () => {
@@ -1716,6 +2517,116 @@ it("renders interface call and construct signatures", () => {
     },
   ]);
   expect(factory?.dependencies).toEqual([expect.objectContaining({ name: "Widget" })]);
+});
+
+it("renders function and constructor aliases with the same relationships as interfaces", () => {
+  const models = new ModelParser(`
+    interface Item { id: string }
+    type Handler = (item: Item) => Item;
+    interface HandlerI { (item: Item): Item }
+    type Ctor = new (item: Item) => Item;
+    interface CtorI { new (item: Item): Item }
+  `).getModels();
+  const item = models.find((model) => model.name === "Item");
+  if (!item) throw new Error("missing Item model");
+
+  for (const [name, interfaceName, fieldName] of [
+    ["Handler", "HandlerI", ""],
+    ["Ctor", "CtorI", "new"],
+  ]) {
+    const alias = models.find((model) => model.name === name);
+    const equivalent = models.find((model) => model.name === interfaceName);
+    if (!alias || !equivalent) throw new Error("missing signature model");
+    expect(alias.schema).toEqual([
+      {
+        name: fieldName,
+        type: "function",
+        arguments: [{ name: "item", type: item }],
+        returnType: item,
+        optional: false,
+      },
+    ]);
+    expect(alias.schema).toEqual(equivalent.schema);
+    expect(alias.dependencies).toEqual([item]);
+    expect(item.dependants).toContain(alias);
+  }
+});
+
+it("renders every alias call and construct overload alongside properties and index signatures", () => {
+  const models = new ModelParser(`
+    type Factory = {
+      (text: string): number;
+      (value: number): string;
+      new (text: string): object;
+      new (value: number): object;
+      label: string;
+      [key: string]: unknown;
+    };
+  `).getModels();
+  expect(models[0].schema).toEqual([
+    {
+      name: "",
+      type: "function",
+      arguments: [{ name: "text", type: "string" }],
+      returnType: "number",
+      optional: false,
+    },
+    {
+      name: "",
+      type: "function",
+      arguments: [{ name: "value", type: "number" }],
+      returnType: "string",
+      optional: false,
+    },
+    {
+      name: "new",
+      type: "function",
+      arguments: [{ name: "text", type: "string" }],
+      returnType: "object",
+      optional: false,
+    },
+    {
+      name: "new",
+      type: "function",
+      arguments: [{ name: "value", type: "number" }],
+      returnType: "object",
+      optional: false,
+    },
+    { name: "label", type: "string", optional: false },
+    { name: "[key: string]", type: "unknown", optional: false },
+  ]);
+  expect(models[0].dependencies).toEqual([]);
+});
+
+it("resolves specialized function and constructor alias signatures", () => {
+  const models = new ModelParser(`
+    interface Item { id: string }
+    type Callback<T> = (value: T) => T;
+    type Constructor<T> = new (value: T) => T;
+    type Handler = Callback<Item>;
+    type Ctor = Constructor<Item>;
+  `).getModels();
+  const item = models.find((model) => model.name === "Item");
+  if (!item) throw new Error("missing Item model");
+
+  for (const [name, fieldName] of [
+    ["Handler", ""],
+    ["Ctor", "new"],
+  ]) {
+    const alias = models.find((model) => model.name === name);
+    if (!alias) throw new Error("missing alias model");
+    expect(alias.schema).toEqual([
+      {
+        name: fieldName,
+        type: "function",
+        arguments: [{ name: "value", type: item }],
+        returnType: item,
+        optional: false,
+      },
+    ]);
+    expect(alias.dependencies).toEqual([item]);
+    expect(item.dependants).toContain(alias);
+  }
 });
 
 it("renders every overload signature instead of collapsing them", () => {
@@ -1788,13 +2699,14 @@ it("substitutes generic type arguments for inherited and aliased members", () =>
     type: "array",
     elementType: expect.objectContaining({ name: "User" }),
     optional: false,
+    inherited: true,
   });
   expect(users?.schema).toContainEqual(
     expect.objectContaining({
       name: "first",
       type: "function",
       returnType: expect.objectContaining({ name: "User" }),
-    }),
+    })
   );
   expect(userBox?.schema).toEqual([
     { name: "value", type: expect.objectContaining({ name: "User" }), optional: false },
@@ -1835,8 +2747,8 @@ it("keeps optional methods as optional function fields", () => {
   const models = parser.getModels();
 
   expect(models[0]?.schema).toEqual([
-    { name: "onInit", type: "function", arguments: [], returnType: "void", optional: true },
     { name: "onDone", type: "function", arguments: [], returnType: "void", optional: true },
+    { name: "onInit", type: "function", arguments: [], returnType: "void", optional: true },
   ]);
 });
 
@@ -1875,7 +2787,7 @@ it("links models referenced inside text-rendered field types", () => {
       type: "function",
       returnType: "Promise<User>",
       typeRefs: [expect.objectContaining({ name: "User" })],
-    }),
+    })
   );
   expect(holder?.dependencies).toEqual([
     expect.objectContaining({ name: "Status" }),
@@ -1943,7 +2855,7 @@ it("marks optional generic properties and links generic heads in constraints and
   const wide = models.find((m) => m.name === "Wide");
 
   expect(store?.schema).toContainEqual(
-    expect.objectContaining({ name: "cache", type: "generic", genericName: "Map", optional: true }),
+    expect.objectContaining({ name: "cache", type: "generic", genericName: "Map", optional: true })
   );
   expect(repo?.type === "interface" ? repo.headerRefs : undefined).toEqual([
     expect.objectContaining({ name: "Collection" }),
@@ -2076,7 +2988,7 @@ it("preserves qualified text in standalone signatures and index signatures", () 
         expect.objectContaining({ name: "Color" }),
         expect.objectContaining({ name: "Box" }),
       ]),
-    }),
+    })
   );
   expect(indexSignature).toEqual({
     name: "[key: string]",
@@ -2147,10 +3059,10 @@ it("merges index signatures independently of declaration order", () => {
   const last = models.find((model) => model.name === "Last");
 
   expect(first?.schema).toContainEqual(
-    expect.objectContaining({ name: "[key: string]", type: "Value | string" }),
+    expect.objectContaining({ name: "[key: string]", type: "Value | string" })
   );
   expect(last?.schema).toContainEqual(
-    expect.objectContaining({ name: "[key: string]", type: "Value | string" }),
+    expect.objectContaining({ name: "[key: string]", type: "Value | string" })
   );
   expect(first?.dependencies).toEqual([expect.objectContaining({ name: "Value" })]);
   expect(last?.dependencies).toEqual([expect.objectContaining({ name: "Value" })]);

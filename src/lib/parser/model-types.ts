@@ -2,11 +2,16 @@ export type SchemaFieldModifier = "abstract" | "private" | "protected" | "readon
 export type SharedSchemaField = {
   name: string;
   optional: boolean;
+  inherited?: boolean;
   modifiers?: SchemaFieldModifier[];
   typeRefs?: Model[];
 };
 export type DefaultSchemaField = SharedSchemaField & { type: Model | string };
-export type ArraySchemaField = SharedSchemaField & { type: "array"; elementType: Model | string };
+export type ArraySchemaField = SharedSchemaField & {
+  type: "array";
+  elementType: Model | string;
+  readonly?: boolean;
+};
 export type GenericSchemaField = SharedSchemaField & {
   type: "generic";
   genericName: string;
@@ -14,16 +19,14 @@ export type GenericSchemaField = SharedSchemaField & {
 };
 export type FunctionSchemaField = SharedSchemaField & {
   type: "function";
+  accessor?: "get" | "set";
   arguments: { name: string; type: Model | string }[];
   returnType: Model | [Model | string] | string;
+  returnTypeReadonly?: boolean;
 };
 export type UnionSchemaField = SharedSchemaField & { type: "union"; types: (Model | string)[] };
 export type SchemaField =
-  | ArraySchemaField
-  | DefaultSchemaField
-  | FunctionSchemaField
-  | GenericSchemaField
-  | UnionSchemaField;
+  ArraySchemaField | DefaultSchemaField | FunctionSchemaField | GenericSchemaField | UnionSchemaField;
 
 export const isArraySchemaField = (field: SchemaField): field is ArraySchemaField => {
   return field.type === "array";
@@ -46,10 +49,16 @@ export const isDefaultSchemaField = (field: SchemaField): field is DefaultSchema
   );
 };
 
+export type TypeTextSegment = {
+  text: string;
+  kind: "default" | "primitive" | "literal" | "reference";
+};
+
 export type ModelBase = {
   id: string;
   name: string;
   schema: SchemaField[];
+  typeTextSegments: Record<string, TypeTextSegment[]>;
   dependencies: Model[];
   dependants: Model[];
   arguments: { name: string; extends?: string; default?: string }[];

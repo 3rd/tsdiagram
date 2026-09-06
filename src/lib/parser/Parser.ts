@@ -5,6 +5,7 @@ import {
   EnumDeclaration,
   EnumMember,
   ExpressionWithTypeArguments,
+  GetAccessorDeclaration,
   IndexSignatureDeclaration,
   InterfaceDeclaration,
   MethodDeclaration,
@@ -14,6 +15,7 @@ import {
   PropertyDeclaration,
   PropertySignature,
   ScriptTarget,
+  SetAccessorDeclaration,
   SourceFile,
   SyntaxKind,
   Symbol as TsMorphSymbol,
@@ -46,6 +48,9 @@ export type ParsedClass = {
   implements: ExpressionWithTypeArguments[];
   properties: (PropertyDeclaration | PropertySignature)[];
   methods: (MethodDeclaration | MethodSignature)[];
+  getAccessors: GetAccessorDeclaration[];
+  setAccessors: SetAccessorDeclaration[];
+  synthesizedProperties: TsMorphSymbol[];
 };
 
 export type ParsedEnum = {
@@ -79,7 +84,7 @@ const collectQualifiedModules = (modules: ModuleDeclaration[], parentName = ""):
 const collectQualifiedDeclarations = <T>(
   declarations: T[],
   modules: ModuleDeclaration[],
-  getModuleDeclarations: (module: ModuleDeclaration) => T[],
+  getModuleDeclarations: (module: ModuleDeclaration) => T[]
 ): QualifiedDeclaration<T>[] => {
   const result: QualifiedDeclaration<T>[] = declarations.map((declaration) => ({
     declaration,
@@ -146,7 +151,7 @@ export class Parser {
     const declarations = collectQualifiedDeclarations(
       this.source.getInterfaces(),
       this.source.getModules(),
-      (module) => module.getInterfaces(),
+      (module) => module.getInterfaces()
     );
     const declarationMembersMap = new Map<string, Set<string>>();
 
@@ -257,7 +262,7 @@ export class Parser {
     const declarations = collectQualifiedDeclarations(
       this.source.getEnums(),
       this.source.getModules(),
-      (module) => module.getEnums(),
+      (module) => module.getEnums()
     );
 
     for (const { moduleName, declaration } of declarations) {
@@ -275,7 +280,7 @@ export class Parser {
     const declarations = collectQualifiedDeclarations(
       this.source.getTypeAliases(),
       this.source.getModules(),
-      (module) => module.getTypeAliases(),
+      (module) => module.getTypeAliases()
     );
 
     for (const { declaration, moduleName } of declarations) {
@@ -300,7 +305,7 @@ export class Parser {
     const declarations = collectQualifiedDeclarations(
       this.source.getClasses(),
       this.source.getModules(),
-      (module) => module.getClasses(),
+      (module) => module.getClasses()
     );
 
     for (const { declaration, moduleName } of declarations) {
@@ -315,6 +320,9 @@ export class Parser {
           implements: declaration.getImplements(),
           properties: [],
           methods: [],
+          getAccessors: declaration.getGetAccessors(),
+          setAccessors: declaration.getSetAccessors(),
+          synthesizedProperties: [],
         },
         propertyNames: new Set(),
         methodNames: new Set(),
@@ -322,10 +330,20 @@ export class Parser {
 
       const checkerType = this.checker.getTypeAtLocation(declaration);
 
+      const mergedInterfaceDeclaration = declaration
+        .getSymbolOrThrow()
+        .getDeclarations()
+        .find((node) => node.isKind(SyntaxKind.InterfaceDeclaration));
+
       for (const property of checkerType.getProperties()) {
         const propertyName = property.getName();
         const valueDeclaration = property.getValueDeclaration();
-        if (!valueDeclaration) continue;
+        if (!valueDeclaration) {
+          if (item.propertyNames.has(propertyName)) continue;
+          item.class.synthesizedProperties.push(property);
+          item.propertyNames.add(propertyName);
+          continue;
+        }
 
         if (
           valueDeclaration.getKindName() === "PropertySignature" ||
@@ -341,6 +359,21 @@ export class Parser {
           if (item.methodNames.has(propertyName)) continue;
           item.class.methods.push(valueDeclaration as MethodSignature);
           item.methodNames.add(propertyName);
+        } else if (
+          valueDeclaration.isKind(SyntaxKind.GetAccessor) ||
+          valueDeclaration.isKind(SyntaxKind.SetAccessor)
+        ) {
+          for (const accessor of property.getDeclarations()) {
+            if (!accessor.isKind(SyntaxKind.GetAccessor) && !accessor.isKind(SyntaxKind.SetAccessor))
+              continue;
+            const parent = accessor.getParent();
+            if (parent === declaration || parent === mergedInterfaceDeclaration) continue;
+            if (accessor.isKind(SyntaxKind.GetAccessor)) {
+              item.class.getAccessors.push(accessor);
+            } else {
+              item.class.setAccessors.push(accessor);
+            }
+          }
         }
       }
 

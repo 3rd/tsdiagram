@@ -16,11 +16,12 @@ const schemaFieldToken = (field: SchemaField) => {
   const shared = {
     name: field.name,
     optional: field.optional,
+    inherited: field.inherited,
     modifiers: field.modifiers ?? null,
     typeRefs: field.typeRefs?.map((typeRef) => typeRef.id) ?? null,
   };
   if (isArraySchemaField(field)) {
-    return { ...shared, kind: "array", elementType: refToken(field.elementType) };
+    return { ...shared, kind: "array", elementType: refToken(field.elementType), readonly: field.readonly };
   }
   if (isGenericSchemaField(field)) {
     return {
@@ -34,9 +35,12 @@ const schemaFieldToken = (field: SchemaField) => {
     return {
       ...shared,
       kind: "function",
+      accessor: field.accessor,
       arguments: field.arguments.map((argument) => ({ name: argument.name, type: refToken(argument.type) })),
-      returnType:
-        Array.isArray(field.returnType) ? [refToken(field.returnType[0])] : refToken(field.returnType),
+      returnType: Array.isArray(field.returnType)
+        ? [refToken(field.returnType[0])]
+        : refToken(field.returnType),
+      returnTypeReadonly: field.returnTypeReadonly,
     };
   }
   if (isUnionSchemaField(field)) {
@@ -52,6 +56,7 @@ const computeModelSignature = (model: Model): string => {
     type: model.type,
     arguments: model.arguments,
     schema: model.schema.map(schemaFieldToken),
+    typeTextSegments: model.typeTextSegments,
     dependencies: model.dependencies.map((dependency) => dependency.id),
     dependants: model.dependants.map((dependant) => dependant.id),
   };

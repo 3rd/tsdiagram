@@ -2,3 +2,11 @@
   width: 100%;
   height: 100%;
 }
+
+.panels-vertical > #renderer {
+  order: -1;
+}
+
+.panels-vertical > #editor {
+  order: 1;
+}
