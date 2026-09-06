@@ -1,7 +1,17 @@
-import { useMediaQuery } from "./useMediaQuery";
+import { useEffect, useState } from "react";
 
-export const useFullscreen = (ref: React.RefObject<HTMLElement>) => {
-  const isFullscreen = useMediaQuery("(display-mode: fullscreen)");
+export const useFullscreen = (ref: React.RefObject<HTMLElement | null>) => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === ref.current);
+    };
+
+    handleFullscreenChange();
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, [ref]);
 
   const enterFullscreen = () => {
     if (!ref.current) return;

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   EnterFullScreenIcon,
@@ -7,126 +6,236 @@ import {
   TransformIcon,
   WidthIcon,
 } from "@radix-ui/react-icons";
-import { SmartStepEdge } from "@tisoap/react-flow-smart-edge";
-import classNames from "classnames";
-import throttle from "lodash/throttle";
-import "../../reactflow.css";
-
-import ReactFlow, {
+import {
   Background,
   BackgroundVariant,
   Controls,
   FitViewOptions,
   MarkerType,
   MiniMap,
-  Node,
   Panel,
+  ReactFlow,
   useEdgesState,
   useNodesInitialized,
   useNodesState,
   useReactFlow,
+  useStore,
+  useStoreApi,
   useUpdateNodeInternals,
-} from "reactflow";
+  Viewport,
+} from "@xyflow/react";
+import classNames from "classnames";
+import "../../reactflow.css";
+
+import throttle from "lodash/throttle";
 import { useFullscreen } from "../../hooks/useFullscreen";
-import { Model } from "../../lib/parser/ModelParser";
+import { Model } from "../../lib/parser/model-types";
 import { graphStore } from "../../stores/graph";
-import { useUserOptions } from "../../stores/user-options";
-import { CustomEdge } from "./CustomEdge";
+import { optionsStore, useUserOptions } from "../../stores/user-options";
+import { computeBadgeHubIds, EMPTY_BADGE_HUB_IDS } from "./badge-hubs";
+import { CustomEdge, selectLowDetail } from "./CustomEdge";
+import { arePortColorsEqual, assignEdgeColors, EDGE_COLOR_PALETTES, EMPTY_PORT_COLORS } from "./edge-colors";
+import { EdgeRoutingProvider } from "./EdgeRoutingProvider";
 import {
-  bumpModelEdgeRerouteEpoch,
   decorateModelEdges,
   extractModelEdges,
   extractModelNodes,
-  layoutModelNodes,
+  isUnplacedNode,
   LAYOUT_RESET_NODE_COUNT_CHANGE_THRESHOLD,
   LAYOUT_RESET_NODE_OVERLAP_THRESHOLD,
+  layoutModelNodes,
   ModelEdge,
-  ModelEdgeData,
-  shouldResetLayoutAnchors,
+  ModelNodeState,
   normalizeLayoutEdges,
+  shouldResetLayoutAnchors,
 } from "./layout";
 import { ModelNode } from "./ModelNode";
+import { PortColorsContext } from "./port-colors";
 
 const AUTO_LAYOUT_THROTTLE_MS = 120;
 
+// a composited layer is not re-rasterized while it moves, so a pan must advance in whole
+// device pixels or its text is resampled at a fractional offset until the layer is dropped
+const snapToDevicePixel = (value: number) => Math.round(value * devicePixelRatio) / devicePixelRatio;
+
 const nodeTypes = { model: ModelNode };
-const edgeTypes = { smart: SmartStepEdge, custom: CustomEdge };
+const edgeTypes = { custom: CustomEdge };
 const proOptions = { hideAttribution: true };
+const minimapStyle = { opacity: 0.9 };
 
 export type RendererProps = {
   documentId: string;
   models: Model[];
+  isParsing: boolean;
   disableMiniMap?: boolean;
 };
 
-// eslint-disable-next-line sonarjs/cognitive-complexity
-export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererProps) => {
-  const { fitView, getNodes, getEdges } = useReactFlow<{ model: Model }, ModelEdgeData>();
+export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }: RendererProps) => {
+  const { fitView, getNodes, getEdges } = useReactFlow<ModelNodeState, ModelEdge>();
+  const reactFlowStore = useStoreApi();
   const updateNodeInternals = useUpdateNodeInternals();
-  const [nodes, setNodes, onNodesChange] = useNodesState<{ model: Model }>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<ModelEdgeData>([]);
-  const cachedNodesMap = useRef<Map<string, Node<{ model: Model }>>>(new Map());
+  const [nodes, setNodes, onNodesChange] = useNodesState<ModelNodeState>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<ModelEdge>([]);
+  const cachedNodesMap = useRef<Map<string, ModelNodeState>>(new Map());
   const manuallyMovedNodesSet = useRef<Set<string>>(new Set());
   const autoLayoutRunId = useRef(0);
-  const previousParsedGraphRef = useRef<{
-    documentId: string;
-    nodeIds: Set<string>;
-  }>();
+  const snapFitPendingRef = useRef(false);
+  const [isPlacing, setIsPlacing] = useState(false);
+  const previousParsedGraphRef = useRef<
+    | {
+        documentId: string;
+        nodeIds: Set<string>;
+      }
+    | undefined
+  >(undefined);
   const options = useUserOptions();
+  const lowDetail = useStore(selectLowDetail);
+  const previousBadgeHubIdsRef = useRef<{ documentId: string; ids: ReadonlySet<string> } | undefined>(
+    undefined,
+  );
+  const badgeHubIds = useMemo(() => {
+    const previousBadgeHubIds =
+      previousBadgeHubIdsRef.current?.documentId === documentId ?
+        previousBadgeHubIdsRef.current.ids
+      : EMPTY_BADGE_HUB_IDS;
+    return options.renderer.badgeHubs ? computeBadgeHubIds(models, previousBadgeHubIds) : EMPTY_BADGE_HUB_IDS;
+  }, [documentId, models, options.renderer.badgeHubs]);
+  useEffect(() => {
+    previousBadgeHubIdsRef.current = { documentId, ids: badgeHubIds };
+  }, [badgeHubIds, documentId]);
   const panelRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [shouldAnimate, setShouldAnimate] = useState(false);
 
-  // computed reactflow props
-  const fitViewOptions: FitViewOptions = useMemo(
+  const fitViewOptions: FitViewOptions<ModelNodeState> = useMemo(
     () => ({
       padding: 0.3,
       duration: shouldAnimate ? 500 : 0,
     }),
-    [shouldAnimate]
+    [shouldAnimate],
   );
   const sharedEdgeProps = useMemo<Omit<Partial<ModelEdge>, "data">>(
     () => ({
       type: "custom",
       markerEnd: { type: MarkerType.ArrowClosed },
       style: {
-        stroke: options.renderer.theme === "light" ? "#a9b2bc" : "#7f8084",
+        stroke: options.renderer.theme === "light" ? "#94a3b8" : "#64748b",
         strokeWidth: 1,
         markerEndId: "arrow",
       },
-      // type: "smoothstep",
-      // type: "smart",
-      // animated: true,
     }),
-    [options.renderer.theme]
+    [options.renderer.theme],
   );
+  const getEdgeColorProps = useMemo(() => {
+    const propsByColor = new Map<string, Pick<ModelEdge, "markerEnd" | "style">>();
+    return (color: string) => {
+      let props = propsByColor.get(color);
+      if (!props) {
+        props = {
+          markerEnd: { type: MarkerType.ArrowClosed, color },
+          style: { ...sharedEdgeProps.style, stroke: color },
+        };
+        propsByColor.set(color, props);
+      }
+      return props;
+    };
+  }, [sharedEdgeProps]);
   const backgroundForeground = useMemo(() => {
-    if (options.renderer.theme === "dark") return "#7f8084";
-    return "#a9b2bc";
+    if (options.renderer.theme === "dark") return "#475569";
+    return "#cbd5e1";
   }, [options.renderer.theme]);
 
-  // parse source
-  const parsedNodes = useMemo(() => extractModelNodes(models), [models]);
-  const modelEdges = useMemo(() => extractModelEdges(models), [models]);
-  const parsedEdges = useMemo(
-    () => decorateModelEdges(modelEdges, sharedEdgeProps),
-    [modelEdges, sharedEdgeProps]
+  const parsedNodes = useMemo(() => extractModelNodes(models, badgeHubIds), [models, badgeHubIds]);
+  const modelEdges = useMemo(() => extractModelEdges(models, badgeHubIds), [models, badgeHubIds]);
+  useEffect(() => {
+    const { hoveredNode, selectedNode } = graphStore.state;
+    if (hoveredNode) {
+      const currentNode = parsedNodes.find((node) => node.id === hoveredNode.id);
+      if (!currentNode) graphStore.state.hoveredNode = null;
+      else if (currentNode.data.model !== hoveredNode.data.model) graphStore.state.hoveredNode = currentNode;
+    }
+    if (selectedNode) {
+      const currentNode = parsedNodes.find((node) => node.id === selectedNode.id);
+      if (!currentNode) graphStore.state.selectedNode = null;
+      else if (currentNode.data.model !== selectedNode.data.model) {
+        graphStore.state.selectedNode = currentNode;
+      }
+    }
+  }, [parsedNodes]);
+  useEffect(() => {
+    const { selectedEdge } = graphStore.state;
+    if (selectedEdge && !modelEdges.some((edge) => edge.id === selectedEdge.id)) {
+      graphStore.state.selectedEdge = null;
+    }
+  }, [modelEdges]);
+  useEffect(() => {
+    graphStore.state.hoveredNode = null;
+    graphStore.state.selectedNode = null;
+    graphStore.state.selectedEdge = null;
+  }, [documentId]);
+  const edgeColors = useMemo(
+    () =>
+      options.renderer.colorizeEdges ?
+        assignEdgeColors(modelEdges, EDGE_COLOR_PALETTES[options.renderer.theme])
+      : null,
+    [modelEdges, options.renderer.colorizeEdges, options.renderer.theme],
   );
+  // ports read this through context; an unchanged map keeps its identity so they skip rendering
+  const previousPortColorsRef = useRef<ReadonlyMap<string, string>>(EMPTY_PORT_COLORS);
+  const portColors = useMemo(() => {
+    const next = edgeColors === null ? EMPTY_PORT_COLORS : edgeColors.ports;
+    const previous = previousPortColorsRef.current;
+    if (arePortColorsEqual(previous, next)) return previous;
+    previousPortColorsRef.current = next;
+    return next;
+  }, [edgeColors]);
+  const previousParsedEdgesRef = useRef<Map<string, ModelEdge>>(new Map());
+  const parsedEdges = useMemo(() => {
+    const decorated = decorateModelEdges(modelEdges, sharedEdgeProps);
+    const colored =
+      edgeColors === null ? decorated : (
+        decorated.map((edge, index) => ({ ...edge, ...getEdgeColorProps(edgeColors.edges[index]) }))
+      );
+    const previous = previousParsedEdgesRef.current;
+    const reused = colored.map((edge) => {
+      const previousEdge = previous.get(edge.id);
+      const isUnchanged =
+        previousEdge &&
+        previousEdge.source === edge.source &&
+        previousEdge.target === edge.target &&
+        previousEdge.sourceHandle === edge.sourceHandle &&
+        previousEdge.style === edge.style &&
+        previousEdge.markerEnd === edge.markerEnd &&
+        previousEdge.markerStart === edge.markerStart &&
+        previousEdge.type === edge.type &&
+        previousEdge.data?.layoutKind === edge.data?.layoutKind;
+      return isUnchanged ? previousEdge : edge;
+    });
+    previousParsedEdgesRef.current = new Map(reused.map((edge) => [edge.id, edge]));
+    return reused;
+  }, [edgeColors, getEdgeColorProps, modelEdges, sharedEdgeProps]);
 
-  const bumpEdgeRerouteEpoch = useCallback(() => {
-    setEdges((currentEdges) => bumpModelEdgeRerouteEpoch(currentEdges));
-  }, [setEdges]);
-
-  // auto layout
+  const layoutInFlightRef = useRef(false);
+  const layoutRequestedRef = useRef(false);
   const handleAutoLayout = useMemo(() => {
     return throttle(
       () => {
+        if (layoutInFlightRef.current) {
+          layoutRequestedRef.current = true;
+          return;
+        }
         const currentNodes = getNodes();
-        const currentEdges = normalizeLayoutEdges(getEdges() as ModelEdge[]);
-        const hasSizeForAllNodes = currentNodes.every((node) => node.width && node.height);
+        if (currentNodes.length === 0) return;
+        const currentEdges = normalizeLayoutEdges(getEdges());
+        const hasSizeForAllNodes = currentNodes.every(
+          (node) => node.measured?.width && node.measured?.height,
+        );
         if (!hasSizeForAllNodes) return;
         const currentRunId = ++autoLayoutRunId.current;
+        layoutInFlightRef.current = true;
 
-        void layoutModelNodes({
+        layoutModelNodes({
+          compact: options.renderer.compactLayout,
           direction: options.renderer.direction,
           edges: currentEdges,
           manuallyMovedNodesSet: manuallyMovedNodesSet.current,
@@ -136,40 +245,54 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
             if (currentRunId !== autoLayoutRunId.current) return;
 
             setNodes(layoutedNodes);
-            requestAnimationFrame(() => {
-              if (currentRunId !== autoLayoutRunId.current) return;
-              bumpEdgeRerouteEpoch();
-            });
 
-            if (options.renderer.autoFitView) {
+            if (options.renderer.autoFitView && !snapFitPendingRef.current) {
               requestIdleCallback(() => fitView(fitViewOptions));
             }
           })
-          .catch((error) => {
+          .catch((error: unknown) => {
             if (currentRunId !== autoLayoutRunId.current) return;
+            setIsPlacing(false);
             console.error(error);
+          })
+          .finally(() => {
+            layoutInFlightRef.current = false;
+            if (!layoutRequestedRef.current) return;
+            layoutRequestedRef.current = false;
+            handleAutoLayoutRef.current();
           });
       },
       AUTO_LAYOUT_THROTTLE_MS,
-      { leading: true, trailing: true }
+      { leading: true, trailing: true },
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    bumpEdgeRerouteEpoch,
     fitView,
     fitViewOptions,
     getEdges,
     getNodes,
     options.renderer.autoFitView,
+    options.renderer.compactLayout,
     options.renderer.direction,
+    setNodes,
   ]);
-  const handleInit = useCallback(handleAutoLayout, [handleAutoLayout]);
+
+  const handleAutoLayoutRef = useRef(handleAutoLayout);
+  useEffect(() => {
+    handleAutoLayoutRef.current = handleAutoLayout;
+  }, [handleAutoLayout]);
 
   useEffect(() => {
     return () => {
       handleAutoLayout.cancel();
     };
   }, [handleAutoLayout]);
+
+  const previousCompactLayoutRef = useRef(options.renderer.compactLayout);
+  useEffect(() => {
+    if (previousCompactLayoutRef.current === options.renderer.compactLayout) return;
+    previousCompactLayoutRef.current = options.renderer.compactLayout;
+    handleAutoLayoutRef.current();
+  }, [options.renderer.compactLayout]);
 
   // update nodes and edges after parsing (before auto layout)
   useLayoutEffect(() => {
@@ -188,12 +311,15 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
     ) {
       manuallyMovedNodesSet.current.clear();
       cachedNodesMap.current.clear();
+      optionsStore.state.renderer.autoFitView = true;
+      snapFitPendingRef.current = true;
+      setIsPlacing(true);
     } else {
       manuallyMovedNodesSet.current = new Set(
-        [...manuallyMovedNodesSet.current].filter((nodeId) => currentNodeIds.has(nodeId))
+        [...manuallyMovedNodesSet.current].filter((nodeId) => currentNodeIds.has(nodeId)),
       );
       cachedNodesMap.current = new Map(
-        [...cachedNodesMap.current.entries()].filter(([nodeId]) => currentNodeIds.has(nodeId))
+        [...cachedNodesMap.current.entries()].filter(([nodeId]) => currentNodeIds.has(nodeId)),
       );
     }
 
@@ -202,19 +328,23 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
       nodeIds: currentNodeIds,
     };
 
-    const hitCachedNodeSet = new Set<Node<{ model: Model }>>();
-    const nodesThatMissedCache: Node<{ model: Model }>[] = [];
+    const hitCachedNodeSet = new Set<ModelNodeState>();
+    const nodesThatMissedCache: ModelNodeState[] = [];
 
     const updatedNodes = parsedNodes.map((node) => {
       const cachedNode = cachedNodesMap.current.get(node.id);
       if (cachedNode) {
         hitCachedNodeSet.add(cachedNode);
-        // console.log({ node, cachedNode });
-        if (cachedNode.width && cachedNode.height) {
+        if (
+          cachedNode.data.model === node.data.model &&
+          cachedNode.data.badgeHubIds === node.data.badgeHubIds
+        ) {
+          return cachedNode;
+        }
+        if (cachedNode.measured?.width && cachedNode.measured?.height) {
           return {
             ...node,
-            width: cachedNode.width,
-            height: cachedNode.height,
+            measured: cachedNode.measured,
             position: cachedNode.position,
           };
         }
@@ -226,30 +356,27 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
 
     // if there's a single node that missed the cache and a single cache miss we're probably editing a node's name
     if (nodesThatMissedCache.length === 1 && hitCachedNodeSet.size === cachedNodesMap.current.size - 1) {
-      const cachedNodesSet = new Set(cachedNodesMap.current.values());
-      const missedCachedNode = [...cachedNodesSet].find((cachedNode) => !hitCachedNodeSet.has(cachedNode));
+      const missedCachedNode = [...cachedNodesMap.current.values()].find(
+        (cachedNode) => !hitCachedNodeSet.has(cachedNode),
+      );
       const updatedNode = nodesThatMissedCache.values().next().value;
 
       if (!missedCachedNode) throw new Error("missedCachedNode not found");
       if (!updatedNode) throw new Error("updatedNode not found");
 
-      // updatedNode.width = missedCachedNode.width;
-      // updatedNode.height = missedCachedNode.height;
       updatedNode.position = missedCachedNode.position;
     }
 
     autoLayoutRunId.current += 1;
     setNodes(updatedNodes);
     setEdges(parsedEdges);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentId, parsedEdges, parsedNodes]);
+  }, [documentId, parsedEdges, parsedNodes, setEdges, setNodes]);
 
   // cache computed nodes and trigger auto layout if their width or height changed
   const previousEdges = useRef<ModelEdge[]>(edges);
   useLayoutEffect(() => {
     let needsAutoLayout = false;
     if (previousEdges.current.length !== edges.length) {
-      // console.log("needsAutoLayout 1", { previousEdges: previousEdges.current, edges });
       needsAutoLayout = true;
       previousEdges.current = edges;
     } else if (nodes.length === cachedNodesMap.current.size) {
@@ -257,34 +384,40 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
         const previousNode = cachedNodesMap.current.get(node.id);
         if (
           !previousNode ||
-          (previousNode?.width && node.width !== previousNode.width) ||
-          (previousNode?.height && node.height !== previousNode.height)
+          (previousNode?.measured?.width && node.measured?.width !== previousNode.measured.width) ||
+          (previousNode?.measured?.height && node.measured?.height !== previousNode.measured.height)
         ) {
-          // console.log("needsAutoLayout 2", { node, previousNode });
           needsAutoLayout = true;
           break;
         }
       }
     } else {
-      // console.log("needsAutoLayout 3", { nodes, cachedNodesMap: cachedNodesMap.current });
       needsAutoLayout = true;
     }
     cachedNodesMap.current = new Map(nodes.map((node) => [node.id, node]));
     if (needsAutoLayout) requestAnimationFrame(handleAutoLayout);
   }, [handleAutoLayout, nodes, edges]);
 
-  // trigger auto layout after nodes are sized
+  useEffect(() => {
+    if (!snapFitPendingRef.current) return;
+    if (nodes.length === 0 || nodes.some(isUnplacedNode)) return;
+    snapFitPendingRef.current = false;
+    fitView({ ...fitViewOptions, duration: 0 }).then(() => setIsPlacing(false));
+  }, [fitView, fitViewOptions, nodes]);
+
   const nodesAreInitialized = useNodesInitialized();
   useEffect(() => {
     if (!nodesAreInitialized) return;
-    requestAnimationFrame(handleAutoLayout);
-  }, [handleAutoLayout, nodesAreInitialized]);
+    const frame = requestAnimationFrame(() => handleAutoLayoutRef.current());
+    return () => cancelAnimationFrame(frame);
+  }, [nodesAreInitialized, documentId]);
 
   // update node internals when node dependencies or edges change
   const previousModels = useRef<Map<string, Model>>(new Map());
   const previousModelEdgeHashMap = useRef<Map<string, string>>(new Map());
   useEffect(() => {
     const modelsMap = new Map(models.map((model) => [model.id, model]));
+    const staleNodeIds = new Set<string>();
     for (const model of models) {
       const previousModel = previousModels.current.get(model.id);
       if (!previousModel) continue;
@@ -296,7 +429,7 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
         previousDependantsHash !== currentDependantsHash ||
         previousDependenciesHash !== currentDependenciesHash
       ) {
-        updateNodeInternals(model.id);
+        staleNodeIds.add(model.id);
       }
     }
     previousModels.current = modelsMap;
@@ -308,15 +441,15 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
     for (const edge of currentEdges) {
       const sourceModel = modelsMap.get(edge.source);
       if (sourceModel) {
-        const modelEdges = modelEdgesMap.get(sourceModel) ?? [];
-        modelEdges.push(edge);
-        modelEdgesMap.set(sourceModel, modelEdges);
+        const sourceEdges = modelEdgesMap.get(sourceModel) ?? [];
+        sourceEdges.push(edge);
+        modelEdgesMap.set(sourceModel, sourceEdges);
       }
       const targetModel = modelsMap.get(edge.target);
       if (targetModel) {
-        const modelEdges = modelEdgesMap.get(targetModel) ?? [];
-        modelEdges.push(edge);
-        modelEdgesMap.set(targetModel, modelEdges);
+        const targetEdges = modelEdgesMap.get(targetModel) ?? [];
+        targetEdges.push(edge);
+        modelEdgesMap.set(targetModel, targetEdges);
       }
     }
 
@@ -327,14 +460,12 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
 
     for (const [modelId, hash] of modelEdgeHashMap.entries()) {
       const previousHash = previousModelEdgeHashMap.current.get(modelId);
-      if (previousHash !== hash) {
-        updateNodeInternals(modelId);
-      }
+      if (previousHash !== hash) staleNodeIds.add(modelId);
     }
     previousModelEdgeHashMap.current = modelEdgeHashMap;
+    if (staleNodeIds.size > 0) updateNodeInternals([...staleNodeIds]);
   }, [getEdges, models, updateNodeInternals]);
 
-  // option handlers
   const handleAutoFitToggle = useCallback(() => {
     options.renderer.autoFitView = !options.renderer.autoFitView;
     handleAutoLayout();
@@ -348,48 +479,64 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
     handleAutoLayout();
   }, [handleAutoLayout, options]);
 
-  // interaction handlers
   const handleMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (event.target && panelRef.current?.contains(event.target as HTMLElement)) return;
-      options.renderer.autoFitView = false;
+      if (options.renderer.autoFitView) options.renderer.autoFitView = false;
     },
-    [options.renderer]
+    [options.renderer],
   );
+  const pointerPanZoomRef = useRef<number | null>(null);
+  const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+    pointerPanZoomRef.current =
+      event?.type === "mousedown" || event?.type === "touchstart" ? viewport.zoom : null;
+    containerRef.current?.classList.add("renderer-moving");
+  }, []);
+  const handleMoveEnd = useCallback(() => {
+    pointerPanZoomRef.current = null;
+    containerRef.current?.classList.remove("renderer-moving");
+  }, []);
   const handleMove = useCallback(
-    (event: MouseEvent | TouchEvent) => {
-      if (event instanceof WheelEvent) {
+    (event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+      if (event instanceof WheelEvent && options.renderer.autoFitView) {
         options.renderer.autoFitView = false;
       }
+      const isPointerPan = event instanceof MouseEvent || event instanceof TouchEvent;
+      if (!isPointerPan || pointerPanZoomRef.current !== viewport.zoom) return;
+      const x = snapToDevicePixel(viewport.x);
+      const y = snapToDevicePixel(viewport.y);
+      if (x === viewport.x && y === viewport.y) return;
+      // the same two writes React Flow makes for a controlled viewport, without the
+      // per-frame re-render of this component that the viewport prop would cost
+      reactFlowStore.getState().panZoom?.syncViewport({ x, y, zoom: viewport.zoom });
+      reactFlowStore.setState({ transform: [x, y, viewport.zoom] });
     },
-    [options.renderer]
+    [options.renderer, reactFlowStore],
   );
-  const handleNodeDragStop = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
-      manuallyMovedNodesSet.current.add(node.id);
-
-      // Edges connected to the dragged node rerender live via updated edge props. Force a
-      // single full reroute after drop so the rest of the graph catches up without paying
-      // that cost on every pointer move.
-      requestAnimationFrame(() => {
-        bumpEdgeRerouteEpoch();
-      });
-    },
-    [bumpEdgeRerouteEpoch]
-  );
-  const handleNodeMouseEnter = useCallback((_event: React.MouseEvent, node: Node) => {
+  const handleNodeDragStop = useCallback((_event: MouseEvent | TouchEvent, node: ModelNodeState) => {
+    manuallyMovedNodesSet.current.add(node.id);
+  }, []);
+  const handleNodeMouseEnter = useCallback((_event: React.MouseEvent, node: ModelNodeState) => {
     graphStore.state.hoveredNode = node;
   }, []);
   const handleNodeMouseLeave = useCallback(() => {
     graphStore.state.hoveredNode = null;
   }, []);
+  const handleNodeClick = useCallback((_event: React.MouseEvent, node: ModelNodeState) => {
+    graphStore.state.selectedNode = node;
+  }, []);
+  const handleEdgeClick = useCallback((_event: React.MouseEvent, edge: ModelEdge) => {
+    graphStore.state.selectedEdge = edge;
+  }, []);
+  const handlePaneClick = useCallback(() => {
+    graphStore.state.selectedNode = null;
+    graphStore.state.selectedEdge = null;
+  }, []);
 
-  // enable animation after the initial render
   useEffect(() => {
     setShouldAnimate(true);
   }, []);
 
-  // auto fit when the panel direction changes
   const previousPanelDirection = useRef(options.panels.splitDirection);
   useEffect(() => {
     if (previousPanelDirection.current === options.panels.splitDirection) return;
@@ -397,117 +544,153 @@ export const Renderer = memo(({ documentId, models, disableMiniMap }: RendererPr
     requestIdleCallback(() => fitView(fitViewOptions));
   }, [fitView, fitViewOptions, options.panels.splitDirection, options.renderer]);
 
-  // fullscreen
-  const containerRef = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggleFullscreen } = useFullscreen(containerRef);
+  const isLoading = isParsing || isPlacing;
 
   return (
     <div
       ref={containerRef}
-      className={classNames("flex flex-1 w-full h-full", {
+      className={classNames("relative flex h-full w-full flex-1", {
         "bg-gray-50": options.renderer.theme === "light",
-        "bg-stone-800": options.renderer.theme === "dark",
+        "bg-gray-900": options.renderer.theme === "dark",
+        "renderer-loading": isLoading,
       })}
     >
-      <ReactFlow
-        autoPanOnNodeDrag={false}
-        deleteKeyCode={null}
-        edgeTypes={edgeTypes}
-        edges={edges}
-        fitViewOptions={fitViewOptions}
-        maxZoom={2}
-        minZoom={0.1}
-        nodeTypes={nodeTypes}
-        nodes={nodes}
-        nodesConnectable={false}
-        proOptions={proOptions}
-        elevateEdgesOnSelect
-        elevateNodesOnSelect
-        fitView
-        onEdgesChange={onEdgesChange}
-        onInit={handleInit}
-        onMouseDownCapture={handleMouseDown}
-        onMove={handleMove}
-        onNodeDragStop={handleNodeDragStop}
-        onNodeMouseEnter={handleNodeMouseEnter}
-        onNodeMouseLeave={handleNodeMouseLeave}
-        onNodesChange={onNodesChange}
-      >
-        {/* main panel */}
-        <Panel position="top-center">
-          <div
-            ref={panelRef}
-            className={classNames(
-              "flex flex-nowrap bg-opacity-90 overflow-hidden rounded-md shadow-md text-gray-800 whitespace-nowrap mt-0.5",
-              {
-                "bg-gray-50": options.renderer.theme === "light",
-                "bg-stone-50": options.renderer.theme === "dark",
-              }
-            )}
+      {isLoading && (
+        <div
+          className={classNames(
+            "pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 text-sm",
+            options.renderer.theme === "light" ? "text-gray-500" : "text-gray-400",
+          )}
+          role="status"
+        >
+          <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          Loading diagram…
+        </div>
+      )}
+      <EdgeRoutingProvider>
+        <PortColorsContext.Provider value={portColors}>
+          <ReactFlow
+            autoPanOnNodeDrag={false}
+            deleteKeyCode={null}
+            panActivationKeyCode={null}
+            edgeTypes={edgeTypes}
+            edges={edges}
+            maxZoom={2}
+            minZoom={0.1}
+            nodeTypes={nodeTypes}
+            nodes={nodes}
+            nodesConnectable={false}
+            proOptions={proOptions}
+            elevateEdgesOnSelect
+            elevateNodesOnSelect
+            onEdgesChange={onEdgesChange}
+            onInit={handleAutoLayout}
+            onMouseDownCapture={handleMouseDown}
+            onMove={handleMove}
+            onMoveEnd={handleMoveEnd}
+            onMoveStart={handleMoveStart}
+            onEdgeClick={handleEdgeClick}
+            onNodeClick={handleNodeClick}
+            onNodeDragStop={handleNodeDragStop}
+            onNodeMouseEnter={handleNodeMouseEnter}
+            onNodeMouseLeave={handleNodeMouseLeave}
+            onNodesChange={onNodesChange}
+            onPaneClick={handlePaneClick}
           >
-            {/* auto-fit */}
-            <button
-              className={classNames(
-                "flex items-center gap-1 py-0.5 px-2 text-sm border-r border-stone-300",
-                options.renderer.autoFitView ? "text-blue-600" : "hover:text-stone-500"
-              )}
-              onClick={handleAutoFitToggle}
-            >
-              <TransformIcon />
-              <span>Auto-fit</span>
-            </button>
+            <Panel position="top-center">
+              <div
+                ref={panelRef}
+                className={classNames(
+                  "mt-1 flex h-9 flex-nowrap overflow-hidden whitespace-nowrap rounded-lg border shadow-sm backdrop-blur-sm",
+                  {
+                    "border-gray-200 bg-white/95 text-gray-700": options.renderer.theme === "light",
+                    "border-gray-700 bg-gray-900/90 text-gray-200": options.renderer.theme === "dark",
+                  },
+                )}
+              >
+                <button
+                  className={classNames(
+                    "flex h-full items-center gap-1.5 border-r px-3 text-sm font-medium transition-colors focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-blue-600",
+                    options.renderer.theme === "light" ? "border-gray-200" : "border-gray-700",
+                    {
+                      "bg-blue-50 text-blue-700":
+                        options.renderer.autoFitView && options.renderer.theme === "light",
+                      "bg-blue-950/60 text-blue-200":
+                        options.renderer.autoFitView && options.renderer.theme === "dark",
+                      "hover:bg-gray-100 hover:text-gray-950":
+                        !options.renderer.autoFitView && options.renderer.theme === "light",
+                      "hover:bg-white/10 hover:text-white":
+                        !options.renderer.autoFitView && options.renderer.theme === "dark",
+                    },
+                  )}
+                  onClick={handleAutoFitToggle}
+                >
+                  <TransformIcon />
+                  <span>Auto-fit</span>
+                </button>
 
-            {/* direction: vertical | horizontal */}
-            <button className="flex gap-1 items-center py-0.5 px-2 text-sm" onClick={handleDirectionToggle}>
-              <span>Orientation:</span>{" "}
-              {options.renderer.direction === "vertical" ? <HeightIcon /> : <WidthIcon />}
-            </button>
-          </div>
-        </Panel>
+                <button
+                  className="flex h-full items-center gap-1.5 px-3 text-sm font-medium transition-colors hover:bg-gray-500/10 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-blue-600"
+                  onClick={handleDirectionToggle}
+                >
+                  <span>Orientation:</span>{" "}
+                  {options.renderer.direction === "vertical" ?
+                    <HeightIcon />
+                  : <WidthIcon />}
+                </button>
+              </div>
+            </Panel>
 
-        {/* top right panel */}
-        <Panel position="top-right">
-          <div
-            className={classNames("flex flex-nowrap overflow-hidden text-gray-800 whitespace-nowrap rounded")}
-          >
-            {/* fullscreen */}
-            <button
-              className={classNames("flex gap-1 items-center p-0.5 text-sm", {
-                "text-gray-600 hover:text-blue-600": options.renderer.theme === "light",
-                "text-gray-500 hover:text-white": options.renderer.theme === "dark",
+            <Panel position="top-right">
+              <div className="flex flex-nowrap overflow-hidden text-gray-800 whitespace-nowrap rounded-sm">
+                <button
+                  aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  className={classNames(
+                    "flex size-9 items-center justify-center rounded-lg border shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
+                    {
+                      "border-gray-200 bg-white/95 text-gray-600 hover:bg-gray-100 hover:text-blue-600":
+                        options.renderer.theme === "light",
+                      "border-gray-700 bg-gray-900/90 text-gray-300 hover:bg-gray-800 hover:text-white":
+                        options.renderer.theme === "dark",
+                    },
+                  )}
+                  onClick={toggleFullscreen}
+                >
+                  {isFullscreen ?
+                    <ExitFullScreenIcon height={18} width={18} />
+                  : <EnterFullScreenIcon height={18} width={18} />}
+                </button>
+              </div>
+            </Panel>
+
+            <Controls
+              className={classNames("renderer-controls", {
+                "renderer-controls-light": options.renderer.theme === "light",
+                "renderer-controls-dark": options.renderer.theme === "dark",
               })}
-              onClick={toggleFullscreen}
-            >
-              {isFullscreen ? (
-                <ExitFullScreenIcon height={18} width={18} />
-              ) : (
-                <EnterFullScreenIcon height={18} width={18} />
-              )}
-            </button>
-          </div>
-        </Panel>
+            />
 
-        <Controls
-          className={classNames("rounded overflow-hidden bg-opacity-90", {
-            "bg-gray-50": options.renderer.theme === "light",
-            "bg-stone-100": options.renderer.theme === "dark",
-          })}
-        />
-
-        {/* TODO: refactor */}
-        {!disableMiniMap && options.renderer.enableMinimap && (
-          <MiniMap
-            maskColor={backgroundForeground}
-            style={{
-              opacity: 0.9,
-            }}
-            zoomStep={1}
-            pannable
-            zoomable
-          />
-        )}
-        <Background color={backgroundForeground} gap={12} size={1} variant={BackgroundVariant.Dots} />
-      </ReactFlow>
+            {!disableMiniMap && options.renderer.enableMinimap && (
+              <MiniMap
+                bgColor={options.renderer.theme === "light" ? "#ffffff" : "#0f172a"}
+                className={classNames("overflow-hidden rounded-lg border shadow-sm", {
+                  "border-gray-200": options.renderer.theme === "light",
+                  "border-gray-700": options.renderer.theme === "dark",
+                })}
+                maskColor={backgroundForeground}
+                style={minimapStyle}
+                zoomStep={1}
+                pannable
+                zoomable
+              />
+            )}
+            {!lowDetail && (
+              <Background color={backgroundForeground} gap={12} size={1} variant={BackgroundVariant.Dots} />
+            )}
+          </ReactFlow>
+        </PortColorsContext.Provider>
+      </EdgeRoutingProvider>
     </div>
   );
 });

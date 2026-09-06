@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ReactFlowProvider } from "reactflow";
+import { ReactFlowProvider } from "@xyflow/react";
 import { Editor } from "./components/Editor";
 import { Header } from "./components/Header";
 import { Panels } from "./components/Panels";
@@ -27,7 +27,7 @@ function App() {
     <ReactFlowProvider>
       <div className="flex overflow-hidden flex-col w-full h-full">
         <Header onPreferencesClick={handlePreferencesClick} onShareClick={handleShareClick} />
-        <main className="flex flex-1">
+        <main className="flex flex-1 overflow-hidden">
           {options.general.sidebarOpen && <Sidebar />}
           <Panels editorChildren={<Editor />} rendererChildren={<RendererWrapper />} />
         </main>

@@ -10,7 +10,7 @@ import {
 } from "@radix-ui/react-icons";
 import classNames from "classnames";
 import { useStore } from "statelift";
-import { documentsStore } from "../stores/documents";
+import { documentsStore, flushDocumentURL } from "../stores/documents";
 import { optionsStore, useUserOptions } from "../stores/user-options";
 
 const RELATED_SITES = [
@@ -37,7 +37,11 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     documentsStore.state.setCurrentDocumentTitle(e.target.value);
-    documentsStore.state.save();
+  };
+
+  const handleShareClick = () => {
+    flushDocumentURL();
+    onShareClick?.();
   };
 
   const handleSidebarButtonClick = () => {
@@ -50,19 +54,19 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
   };
 
   return (
-    <header className="flex text-gray-50 bg-blue-900">
-      {/* sidebar header */}
+    <header className="flex h-10 shrink-0 bg-blue-900 text-gray-50 shadow-sm">
       {options.general.sidebarOpen && (
         <div
-          className={classNames("flex flex-col p-2 px-4 w-64 h-full flex-shrink-0", {
-            "bg-gray-100 text-gray-950": options.renderer.theme === "light",
+          className={classNames("flex h-10 w-64 shrink-0 items-center px-2.5", {
+            "bg-white text-gray-950": options.renderer.theme === "light",
             "bg-gray-950 text-gray-100": options.renderer.theme === "dark",
           })}
         >
-          <div className="flex gap-2 justify-between items-center">
-            <span className="font-bold leading-none">Documents</span>
+          <div className="flex w-full items-center justify-between gap-2">
+            <span className="text-sm font-semibold leading-none">Documents</span>
             <button
-              className="flex justify-center items-center w-7 h-7 rounded focus:outline-none hover:bg-gray-900/20"
+              aria-label="Create new document"
+              className="flex size-7 items-center justify-center rounded-md transition-colors hover:bg-gray-500/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               onClick={handleNewDocumentClick}
             >
               <FilePlusIcon />
@@ -71,32 +75,30 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
         </div>
       )}
 
-      {/* main wrapper */}
-      <div className="flex flex-1 gap-2 justify-between items-center p-2">
-        {/* left */}
-        <div className={classNames("flex gap-2 items-center", {})}>
-          {/* sidebar button */}
+      <div className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2">
+        <div className="flex items-center gap-1.5">
           <button
-            className="flex justify-center items-center w-7 h-7 rounded focus:outline-none hover:bg-white/20"
+            aria-label={options.general.sidebarOpen ? "Hide document sidebar" : "Show document sidebar"}
+            className="flex size-7 items-center justify-center rounded-md transition-colors hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             onClick={handleSidebarButtonClick}
           >
-            {options.general.sidebarOpen ? <ArrowLeftIcon /> : <ArrowRightIcon />}
+            {options.general.sidebarOpen ?
+              <ArrowLeftIcon />
+            : <ArrowRightIcon />}
           </button>
 
-          {/* logo with site switcher */}
           <div className="hidden items-center sm:flex">
             <div className="relative group">
-              <div className="flex gap-1 items-center py-1 px-1.5 text-lg font-bold leading-none rounded transition-colors cursor-pointer hover:bg-white/10">
-                <span className="py-1 px-0.5 mr-0.5 rounded" style={{ background: "#3178c6" }}>
+              <div className="flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-base font-bold leading-none transition-colors hover:bg-white/10">
+                <span className="mr-0.5 rounded-sm px-1 py-0.5" style={{ background: "#3178c6" }}>
                   TS
                 </span>
                 <span>Diagram</span>
-                <ChevronDownIcon className="w-4 h-4 opacity-60" />
+                <ChevronDownIcon className="size-3.5 opacity-60" />
               </div>
 
-              {/* dropdown menu - on hover */}
               <div className="absolute left-0 top-full invisible z-50 pt-2 w-64 opacity-0 transition-all duration-150 ease-out origin-top-left scale-95 group-hover:visible group-hover:opacity-100 group-hover:scale-100">
-                <div className="overflow-hidden rounded-lg divide-y ring-1 shadow-xl bg-blue-950 ring-white/10 divide-white/10">
+                <div className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-blue-950 shadow-xl">
                   {RELATED_SITES.map((site) => (
                     <a
                       key={site.name}
@@ -118,9 +120,8 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
               </div>
             </div>
 
-            {/* github link */}
             <iframe
-              className="ml-4 opacity-20 transition-opacity hover:opacity-100"
+              className="ml-3 opacity-40 transition-opacity hover:opacity-100"
               height="20"
               sandbox="allow-scripts allow-popups"
               src="https://ghbtns.com/github-btn.html?user=3rd&repo=tsdiagram&type=star&count=true"
@@ -130,31 +131,29 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
           </div>
         </div>
 
-        {/* center - document title */}
         <input
-          className="w-full text-sm text-left bg-transparent rounded ring-0 outline-none sm:text-lg sm:text-center hover:text-blue-200 focus:text-white overflow-ellipsis"
+          className="h-7 min-w-0 flex-1 truncate rounded-md bg-transparent px-2 text-left text-sm font-medium outline-none transition-colors hover:text-blue-200 focus:bg-white/10 focus:text-white sm:text-center"
           placeholder="Untitled"
           type="text"
           value={documentTitle}
           onChange={handleTitleChange}
         />
 
-        {/* right - actions */}
-        <div className="flex gap-2 items-center">
-          {/* share */}
+        <div className="flex shrink-0 items-center gap-1">
           <button
-            className="flex gap-1 items-center py-1.5 px-2 text-sm leading-none rounded shadow-sm bg-white/10 hover:bg-white/20"
-            onClick={onShareClick}
+            aria-label="Share"
+            className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/10 px-2 text-sm font-medium leading-none shadow-sm transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            onClick={handleShareClick}
           >
-            <Share1Icon /> Share
+            <Share1Icon /> <span className="hidden sm:inline">Share</span>
           </button>
 
-          {/* preferences */}
           <button
-            className="flex gap-1 items-center py-1.5 px-2 text-sm leading-none rounded shadow-sm bg-white/10 hover:bg-white/20"
+            aria-label="Preferences"
+            className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/10 px-2 text-sm font-medium leading-none shadow-sm transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             onClick={onPreferencesClick}
           >
-            <GearIcon /> Preferences
+            <GearIcon /> <span className="hidden sm:inline">Preferences</span>
           </button>
         </div>
       </div>

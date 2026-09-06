@@ -18,6 +18,9 @@ const userOptionsSchema = z.object({
     autoFitView: z.boolean().default(true),
     theme: z.enum(["light", "dark"]).default("light"),
     enableMinimap: z.boolean().default(true),
+    badgeHubs: z.boolean().default(true),
+    compactLayout: z.boolean().default(true),
+    colorizeEdges: z.boolean().default(true),
   }),
 });
 
@@ -41,6 +44,9 @@ export const optionsStore = createStore<UserOptions>({
     autoFitView: true,
     theme: "light",
     enableMinimap: true,
+    badgeHubs: true,
+    compactLayout: true,
+    colorizeEdges: true,
   },
   load() {
     try {
@@ -58,7 +64,7 @@ export const optionsStore = createStore<UserOptions>({
         panels: this.panels,
         editor: this.editor,
         renderer: this.renderer,
-      })
+      }),
     );
   },
 });

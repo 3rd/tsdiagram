@@ -1,5 +1,5 @@
 import { Fragment, useRef } from "react";
-import { Dialog, Transition } from "@headlessui/react";
+import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { optionsStore, useUserOptions } from "../stores/user-options";
 import { themes } from "../themes";
@@ -29,6 +29,25 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
     optionsStore.state.save();
   };
 
+  const handleBadgeHubsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    // re-enable auto-fit so the relayout this triggers is brought into view
+    optionsStore.state.renderer.autoFitView = true;
+    optionsStore.state.renderer.badgeHubs = event.target.checked;
+    optionsStore.state.save();
+  };
+
+  const handleCompactLayoutChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    // re-enable auto-fit so the relayout this triggers is brought into view
+    optionsStore.state.renderer.autoFitView = true;
+    optionsStore.state.renderer.compactLayout = event.target.checked;
+    optionsStore.state.save();
+  };
+
+  const handleColorizeEdgesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    optionsStore.state.renderer.colorizeEdges = event.target.checked;
+    optionsStore.state.save();
+  };
+
   const handlePanelSplitDirectionChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     optionsStore.state.panels.splitDirection = event.target.value as "horizontal" | "vertical";
     optionsStore.state.save();
@@ -40,9 +59,9 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
   };
 
   return (
-    <Transition.Root as={Fragment} show={isOpen}>
+    <Transition as={Fragment} show={isOpen}>
       <Dialog as="div" className="relative z-50" initialFocus={cancelButtonRef} onClose={onClose}>
-        <Transition.Child
+        <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"
           enterFrom="opacity-0"
@@ -51,12 +70,12 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
-        </Transition.Child>
+          <div className="dialog-backdrop" />
+        </TransitionChild>
 
         <div className="overflow-y-auto fixed inset-0 z-10 w-screen">
           <div className="flex justify-center items-end p-4 min-h-full text-center sm:items-center sm:p-0">
-            <Transition.Child
+            <TransitionChild
               as={Fragment}
               enter="ease-out duration-300"
               enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
@@ -65,26 +84,19 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
               leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >
-              <Dialog.Panel className="flex overflow-hidden flex-col w-full text-left bg-white rounded shadow-xl max-w-[512px]">
-                <Dialog.Title
-                  as="h3"
-                  className="py-3 px-3 text-base font-semibold leading-6 text-white bg-blue-800"
-                >
+              <DialogPanel className="dialog-panel">
+                <DialogTitle as="h3" className="dialog-title">
                   Preferences
-                </Dialog.Title>
+                </DialogTitle>
 
-                <div className="flex flex-col gap-4 py-4 px-3">
-                  {/* panel split direction */}
+                <div className="dialog-body">
                   {!isMobile && (
-                    <div className="flex flex-col gap-1">
-                      <label
-                        className="text-sm font-medium leading-6 text-gray-900"
-                        htmlFor="panel-split-direction"
-                      >
+                    <div className="field-group">
+                      <label className="field-label" htmlFor="panel-split-direction">
                         Panel split direction
                       </label>
                       <select
-                        className="block py-1.5 px-2 w-full rounded border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-inset focus:ring-indigo-600 placeholder:text-gray-400"
+                        className="field-control"
                         id="panel-split-direction"
                         value={options.panels.splitDirection}
                         onChange={handlePanelSplitDirectionChange}
@@ -95,13 +107,12 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
                     </div>
                   )}
 
-                  {/* editing mode */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium leading-6 text-gray-900" htmlFor="editing-mode">
+                  <div className="field-group">
+                    <label className="field-label" htmlFor="editing-mode">
                       Editing mode
                     </label>
                     <select
-                      className="block py-1.5 pr-10 pl-3 mt-2 w-full text-gray-900 rounded-md border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-indigo-600"
+                      className="field-control"
                       id="editing-mode"
                       value={options.editor.editingMode}
                       onChange={handleEditingModeChange}
@@ -111,18 +122,13 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
                     </select>
                   </div>
 
-                  {/* theme */}
-                  <div className="flex gap-2">
-                    {/* editor theme */}
-                    <div>
-                      <label
-                        className="block text-sm font-medium leading-6 text-gray-900"
-                        htmlFor="editor-theme"
-                      >
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="field-group min-w-0">
+                      <label className="field-label" htmlFor="editor-theme">
                         Editor theme
                       </label>
                       <select
-                        className="block py-1.5 pr-10 pl-3 mt-2 w-full text-gray-900 rounded-md border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-indigo-600"
+                        className="field-control"
                         id="editor-theme"
                         value={options.editor.theme}
                         onChange={handleEditorThemeChange}
@@ -135,16 +141,12 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
                       </select>
                     </div>
 
-                    {/* renderer theme */}
-                    <div>
-                      <label
-                        className="block text-sm font-medium leading-6 text-gray-900"
-                        htmlFor="renderer-theme"
-                      >
+                    <div className="field-group min-w-0">
+                      <label className="field-label" htmlFor="renderer-theme">
                         Renderer theme
                       </label>
                       <select
-                        className="block py-1.5 pr-10 pl-3 mt-2 w-full text-gray-900 rounded-md border-0 ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 focus:ring-2 focus:ring-indigo-600"
+                        className="field-control"
                         id="renderer-theme"
                         value={options.renderer.theme}
                         onChange={handleRendererThemeChange}
@@ -155,40 +157,78 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
                     </div>
                   </div>
 
-                  {/* enable / disable minimap */}
-                  {!isMobile && (
-                    <div className="flex gap-1">
+                  <div className="flex flex-col gap-3 border-t border-gray-200 pt-4">
+                    {!isMobile && (
+                      <div className="check-row">
+                        <input
+                          checked={options.renderer.enableMinimap}
+                          className="check-input"
+                          id="enable-minimap"
+                          type="checkbox"
+                          onChange={handleMinimapChange}
+                        />
+                        <label className="check-label" htmlFor="enable-minimap">
+                          Enable Minimap
+                        </label>
+                      </div>
+                    )}
+
+                    <div className="check-row">
                       <input
-                        checked={options.renderer.enableMinimap}
-                        id="enable-minimap"
+                        checked={options.renderer.badgeHubs}
+                        className="check-input"
+                        id="badge-hubs"
                         type="checkbox"
-                        onChange={handleMinimapChange}
+                        onChange={handleBadgeHubsChange}
                       />
-                      <label
-                        className="font-medium leading-6 text-gray-900 select-none"
-                        htmlFor="enable-minimap"
-                      >
-                        Enable Minimap
+                      <label className="check-label" htmlFor="badge-hubs">
+                        Collapse hub types into badges
                       </label>
                     </div>
-                  )}
+
+                    <div className="check-row">
+                      <input
+                        checked={options.renderer.compactLayout}
+                        className="check-input"
+                        id="compact-layout"
+                        type="checkbox"
+                        onChange={handleCompactLayoutChange}
+                      />
+                      <label className="check-label" htmlFor="compact-layout">
+                        Compact layout
+                      </label>
+                    </div>
+
+                    <div className="check-row">
+                      <input
+                        checked={options.renderer.colorizeEdges}
+                        className="check-input"
+                        id="colorize-edges"
+                        type="checkbox"
+                        onChange={handleColorizeEdgesChange}
+                      />
+                      <label className="check-label" htmlFor="colorize-edges">
+                        Colorize edges
+                      </label>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex justify-center p-3 sm:flex-row-reverse sm:justify-start">
+                <div className="dialog-footer">
                   <button
                     ref={cancelButtonRef}
-                    className="flex flex-1 gap-2 justify-center items-center py-3 px-2 text-sm leading-none text-white rounded shadow-sm sm:flex-grow-0 bg-gray-700/90 hover:bg-gray-700/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    className="button-secondary w-full sm:w-auto"
                     type="button"
                     onClick={onClose}
                   >
                     Close
                   </button>
                 </div>
-              </Dialog.Panel>
-            </Transition.Child>
+              </DialogPanel>
+            </TransitionChild>
           </div>
         </div>
       </Dialog>
-    </Transition.Root>
+    </Transition>
   );
 };

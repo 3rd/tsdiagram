@@ -1,20 +1,21 @@
-import { useMemo } from "react";
+import { JSX, memo, useEffect, useId, useMemo, useRef } from "react";
+import { Handle, Position, useUpdateNodeInternals } from "@xyflow/react";
 import classNames from "classnames";
-import { Position } from "reactflow";
 import {
   isArraySchemaField,
   isFunctionSchemaField,
   isGenericSchemaField,
   isUnionSchemaField,
   Model,
-} from "../../lib/parser/ModelParser";
-import { useIsNodeHighlighted } from "../../stores/graph";
+} from "../../lib/parser/model-types";
+import { graphStore, useIsBadgeHubHovered, useNodeDecoration } from "../../stores/graph";
 import { useUserOptions } from "../../stores/user-options";
-import { CustomHandle } from "./CustomHandle";
+import { fieldHasSourceEdge, getTypeAliasHeaderDependencies } from "./layout";
+import { usePortColor } from "./port-colors";
 
 export type ModelNodeProps = {
   id: string;
-  data: { model: Model };
+  data: { model: Model; badgeHubIds: ReadonlySet<string> };
 };
 
 const isModelReference = (value: unknown): value is Model => {
@@ -23,105 +24,192 @@ const isModelReference = (value: unknown): value is Model => {
   return typeof candidate.name === "string" && typeof candidate.type === "string";
 };
 
-export const ModelNode = ({ id, data }: ModelNodeProps) => {
-  const { model } = data;
+const MODEL_NODE_CLASSES = {
+  root: "max-w-md rounded-t-lg shadow-md",
+  field: {
+    root: "odd:bg-white even:bg-gray-50 text-sm leading-5",
+    keyCell: "py-1 pr-4 pl-2 text-gray-950 align-top",
+    typeCell: "relative py-1 pr-2 break-words",
+    defaultTypeColor: "text-gray-800",
+    modelTypeColor: "text-blue-700",
+  },
+} as const;
+
+const SourcePort = ({ portId }: { portId: string }) => {
+  const color = usePortColor(portId) ?? "var(--color-blue-700)";
+  return (
+    <svg className="model-node-port" aria-hidden>
+      <circle cx="4" cy="4" fill="#fff" r="3.6" />
+      <circle cx="4" cy="4" fill="#fff" r="2.4" stroke={color} strokeWidth="1.2" />
+    </svg>
+  );
+};
+const TargetPort = ({ portId }: { portId: string }) => {
+  const color = usePortColor(portId) ?? "var(--color-blue-700)";
+  return (
+    <svg className="model-node-port" aria-hidden>
+      <circle cx="4" cy="4" fill="#fff" r="3.6" />
+      <circle cx="4" cy="4" fill={color} r="3" />
+    </svg>
+  );
+};
+
+const HubBadgePill = ({ refModel }: { refModel: Model }) => {
+  const pillId = useId();
+  const isHovered = useIsBadgeHubHovered(refModel.id);
+  // a reparse can unmount the hovered pill without a mouseleave; clear the hub hover so
+  // the remaining pills of the hub do not stay highlighted
+  useEffect(() => {
+    return () => {
+      graphStore.state.clearHoveredBadgeHub(pillId);
+    };
+  }, [pillId]);
+  const handleMouseEnter = () => {
+    graphStore.state.setHoveredBadgeHub(refModel.id, pillId);
+  };
+  const handleMouseLeave = () => {
+    graphStore.state.clearHoveredBadgeHub(pillId);
+  };
+  return (
+    <span
+      className={classNames(
+        "cursor-default rounded-md px-1.5 py-0.5 text-xs font-medium",
+        isHovered ? "bg-blue-200 text-blue-900" : "bg-gray-200 text-gray-700",
+      )}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {refModel.name}
+    </span>
+  );
+};
+
+const TypeNameSpan = ({ badgeHubIds, refModel }: { badgeHubIds: ReadonlySet<string>; refModel: Model }) => {
+  if (badgeHubIds.has(refModel.id)) return <HubBadgePill key={refModel.id} refModel={refModel} />;
+  return <span className={MODEL_NODE_CLASSES.field.modelTypeColor}>{refModel.name}</span>;
+};
+
+const ModelNodeContent = ({ id, data }: ModelNodeProps) => {
+  const { model, badgeHubIds } = data;
   const options = useUserOptions();
-  const highlighted = useIsNodeHighlighted(model);
+  const decoration = useNodeDecoration(model);
 
   const hasSourceHandle = useMemo(() => {
     if (model.type === "interface") {
-      return model.extends.some(isModelReference);
+      return model.extends.some(isModelReference) || (model.headerRefs?.length ?? 0) > 0;
     }
     if (model.type === "class") {
-      return isModelReference(model.extends) || model.implements.some(isModelReference);
+      return (
+        isModelReference(model.extends) ||
+        model.implements.some(isModelReference) ||
+        (model.headerRefs?.length ?? 0) > 0
+      );
     }
     if (model.type === "typeAlias") {
-      return model.dependencies.length > 0;
+      return getTypeAliasHeaderDependencies(model).some((dependency) => !badgeHubIds.has(dependency.id));
     }
     return false;
-  }, [model]);
+  }, [badgeHubIds, model]);
 
   const hasTargetHandle = useMemo(() => model.dependants.length > 0, [model.dependants]);
 
-  const classes = useMemo(() => {
+  const renderedHandleKey = useMemo(() => {
+    const keys = [hasTargetHandle ? "target" : "", hasSourceHandle ? "source" : ""];
+    for (const field of model.schema) if (fieldHasSourceEdge(field, badgeHubIds)) keys.push(field.name);
+    return keys.join("|");
+  }, [badgeHubIds, hasSourceHandle, hasTargetHandle, model.schema]);
+  const updateNodeInternals = useUpdateNodeInternals();
+  const mountedHandleKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (mountedHandleKeyRef.current !== null && mountedHandleKeyRef.current !== renderedHandleKey) {
+      updateNodeInternals(id);
+    }
+    mountedHandleKeyRef.current = renderedHandleKey;
+  }, [id, renderedHandleKey, updateNodeInternals]);
+
+  const headerClasses = useMemo(() => {
     const isDarkTheme = options.renderer.theme === "dark";
     const isLightTheme = options.renderer.theme === "light";
+    const selected = decoration === "selected";
+    const highlighted = decoration === "highlighted";
     return {
-      root: classNames("shadow-md"),
+      root: classNames(
+        MODEL_NODE_CLASSES.root,
+        model.schema.length === 0 && "rounded-b-lg",
+        decoration === "dimmed" && "opacity-50",
+      ),
       header: classNames(
-        "relative px-1.5 py-0.5 text-white rounded-t",
-        isLightTheme && (highlighted ? "bg-blue-500" : "bg-blue-700"),
-        isDarkTheme && (highlighted ? "bg-blue-500" : "bg-blue-600"),
-        {
-          "rounded-b": model.schema.length === 0,
-        }
+        "relative rounded-t-lg px-2 py-1 font-medium text-white",
+        selected && "bg-indigo-600",
+        isLightTheme && !selected && (highlighted ? "bg-blue-500" : "bg-blue-700"),
+        isDarkTheme && !selected && (highlighted ? "bg-blue-500" : "bg-blue-600"),
+        model.schema.length === 0 ? "rounded-b-lg" : "svg-export-header",
       ),
       fieldsWrapper: classNames(
-        "bg-gray-50 flex flex-col",
-        isLightTheme && highlighted
-          ? "border-x border-b border-blue-500"
-          : "border-x border-b border-blue-800"
+        "model-node-fields flex flex-col border-x border-b bg-white",
+        selected && "border-indigo-600",
+        highlighted && "border-blue-500",
+        !selected && !highlighted && "border-gray-300",
       ),
-      field: {
-        root: classNames("odd:bg-gray-50 even:bg-gray-100 leading-tight text-sm"),
-        keyCell: classNames("pr-4 pl-2 text-gray-950"),
-        typeCell: classNames("relative pr-2"),
-        defaultTypeColor: classNames("text-gray-800"),
-        modelTypeColor: classNames("text-blue-700"),
-      },
-      handles: {
-        source: classNames("w-2 h-2 bg-stone-400 border-none z-[-10]"),
-        target: classNames("w-2 h-2 bg-blue-500"),
-      },
     };
-  }, [highlighted, model.schema.length, options.renderer.theme]);
+  }, [decoration, model.schema.length, options.renderer.theme]);
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   const fieldRows = useMemo(() => {
-    return model.schema.map((field) => {
-      const keyFragments: JSX.Element[] = [<span key={`${model.id}-${field.name}`}>{field.name}</span>];
+    const fieldNamesWithSourceEdge = new Set<string>();
+    for (const field of model.schema) {
+      if (fieldHasSourceEdge(field, badgeHubIds)) fieldNamesWithSourceEdge.add(field.name);
+    }
+    const seenFieldNames = new Set<string>();
+    return model.schema.map((field, fieldIndex) => {
+      const isDuplicateFieldName = seenFieldNames.has(field.name);
+      seenFieldNames.add(field.name);
+      const keyFragments: JSX.Element[] = [];
+      if (field.modifiers && field.modifiers.length > 0) {
+        keyFragments.push(
+          <span
+            key={`${model.id}-${field.name}-modifiers`}
+            className={MODEL_NODE_CLASSES.field.defaultTypeColor}
+          >
+            {`${field.modifiers.join(" ")} `}
+          </span>,
+        );
+      }
+      keyFragments.push(<span key={`${model.id}-${field.name}`}>{field.name}</span>);
       const typeFragments: JSX.Element[] = [];
 
-      let hasFieldSourceHandle = false;
+      const hasFieldSourceHandle = fieldNamesWithSourceEdge.has(field.name);
 
       if (field.optional) {
         keyFragments.push(
-          <span key={`${model.id}-${field.name}-optional`} className={classes.field.defaultTypeColor}>
+          <span
+            key={`${model.id}-${field.name}-optional`}
+            className={MODEL_NODE_CLASSES.field.defaultTypeColor}
+          >
             ?
-          </span>
+          </span>,
         );
       }
 
-      // reference
       if (isModelReference(field.type)) {
-        hasFieldSourceHandle = true;
-        typeFragments.push(
-          <span key="reference" className={classes.field.modelTypeColor}>
-            {field.type.name}
-          </span>
-        );
-      }
-      // array
-      else if (isArraySchemaField(field)) {
-        // of model references
+        typeFragments.push(<TypeNameSpan key="reference" badgeHubIds={badgeHubIds} refModel={field.type} />);
+      } else if (isArraySchemaField(field)) {
         if (isModelReference(field.elementType)) {
-          hasFieldSourceHandle = true;
           typeFragments.push(
-            <span key="array-reference" className={classes.field.modelTypeColor}>
-              {field.elementType.name}[]
-            </span>
+            <span key="array-reference" className={MODEL_NODE_CLASSES.field.modelTypeColor}>
+              <TypeNameSpan badgeHubIds={badgeHubIds} refModel={field.elementType} />
+              []
+            </span>,
           );
         } else {
-          // of primitives
+          const elementText = String(field.elementType);
+          const needsParens = elementText.includes("|") || elementText.includes("&");
           typeFragments.push(
-            <span
-              key="array-primitive"
-              className={classes.field.defaultTypeColor}
-            >{`${field.elementType}[]`}</span>
+            <span key="array-primitive" className={MODEL_NODE_CLASSES.field.defaultTypeColor}>
+              {needsParens ? `(${elementText})[]` : `${elementText}[]`}
+            </span>,
           );
         }
       } else if (isGenericSchemaField(field)) {
-        // generics
         const argumentFragments: JSX.Element[] = [];
 
         for (let i = 0; i < field.arguments.length; i++) {
@@ -130,28 +218,25 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
             isModelReference(argument) ? argument.name : argument
           }-${i}`;
 
-          // of model references
           if (isModelReference(argument)) {
-            hasFieldSourceHandle = true;
             argumentFragments.push(
-              <span key={argumentKey} className={classes.field.modelTypeColor}>
-                {argument.name}
-              </span>
+              <TypeNameSpan key={argumentKey} badgeHubIds={badgeHubIds} refModel={argument} />,
             );
           } else {
-            // of primitives
             argumentFragments.push(
-              <span key={argumentKey} className={classes.field.defaultTypeColor}>
+              <span key={argumentKey} className={MODEL_NODE_CLASSES.field.defaultTypeColor}>
                 {argument}
-              </span>
+              </span>,
             );
           }
         }
 
-        // add separated by ", "
         typeFragments.push(
-          <span key="prefix" className={classes.field.defaultTypeColor}>{`${field.genericName}<`}</span>,
-          <span key="generic" className={classes.field.modelTypeColor}>
+          <span
+            key="prefix"
+            className={MODEL_NODE_CLASSES.field.defaultTypeColor}
+          >{`${field.genericName}<`}</span>,
+          <span key="generic" className={MODEL_NODE_CLASSES.field.modelTypeColor}>
             {argumentFragments.map((fragment, index) => (
               <span key={fragment.key}>
                 {fragment}
@@ -159,34 +244,35 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
               </span>
             ))}
           </span>,
-          <span key="suffix" className={classes.field.defaultTypeColor}>
+          <span key="suffix" className={MODEL_NODE_CLASSES.field.defaultTypeColor}>
             {">"}
-          </span>
+          </span>,
         );
       } else if (isFunctionSchemaField(field)) {
-        // change key fragments
         keyFragments.push(
-          <span key={`${model.id}-${field.name}-arguments-start`} className={classes.field.defaultTypeColor}>
+          <span
+            key={`${model.id}-${field.name}-arguments-start`}
+            className={MODEL_NODE_CLASSES.field.defaultTypeColor}
+          >
             (
-          </span>
+          </span>,
         );
 
         const argumentFragments: JSX.Element[] = [];
         for (const argument of field.arguments) {
           const argumentKey = `${model.id}-${field.name}-${argument.name}`;
           if (isModelReference(argument.type)) {
-            hasFieldSourceHandle = true;
-
             argumentFragments.push(
               <span key={argumentKey}>
-                {argument.name}:<span className={classes.field.modelTypeColor}> {argument.type.name}</span>
-              </span>
+                {argument.name}: <TypeNameSpan badgeHubIds={badgeHubIds} refModel={argument.type} />
+              </span>,
             );
           } else {
             argumentFragments.push(
               <span key={argumentKey}>
-                {argument.name}:<span className={classes.field.defaultTypeColor}> {argument.type}</span>
-              </span>
+                {argument.name}:
+                <span className={MODEL_NODE_CLASSES.field.defaultTypeColor}> {argument.type}</span>
+              </span>,
             );
           }
         }
@@ -199,13 +285,16 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
                 {index < argumentFragments.length - 1 && ", "}
               </span>
             ))}
-          </span>
+          </span>,
         );
 
         keyFragments.push(
-          <span key={`${model.id}-${field.name}-arguments-end`} className={classes.field.defaultTypeColor}>
+          <span
+            key={`${model.id}-${field.name}-arguments-end`}
+            className={MODEL_NODE_CLASSES.field.defaultTypeColor}
+          >
             )
-          </span>
+          </span>,
         );
 
         const returnTypeKey = `${model.id}-${field.name}-return`;
@@ -214,32 +303,28 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
           const [returnType] = field.returnType;
 
           if (isModelReference(returnType)) {
-            hasFieldSourceHandle = true;
             typeFragments.push(
-              <span key={returnTypeKey} className={classes.field.modelTypeColor}>
-                {returnType.name}[]
-              </span>
+              <span key={returnTypeKey} className={MODEL_NODE_CLASSES.field.modelTypeColor}>
+                <TypeNameSpan badgeHubIds={badgeHubIds} refModel={returnType} />
+                []
+              </span>,
             );
           } else {
             typeFragments.push(
-              <span key={returnTypeKey} className={classes.field.defaultTypeColor}>
+              <span key={returnTypeKey} className={MODEL_NODE_CLASSES.field.defaultTypeColor}>
                 {returnType}[]
-              </span>
+              </span>,
             );
           }
         } else if (isModelReference(field.returnType)) {
-          hasFieldSourceHandle = true;
-
           typeFragments.push(
-            <span key={returnTypeKey} className={classes.field.modelTypeColor}>
-              {field.returnType.name}
-            </span>
+            <TypeNameSpan key={returnTypeKey} badgeHubIds={badgeHubIds} refModel={field.returnType} />,
           );
         } else {
           typeFragments.push(
-            <span key={returnTypeKey} className={classes.field.defaultTypeColor}>
+            <span key={returnTypeKey} className={MODEL_NODE_CLASSES.field.defaultTypeColor}>
               {field.returnType}
-            </span>
+            </span>,
           );
         }
       } else if (isUnionSchemaField(field)) {
@@ -249,65 +334,57 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
           const type = field.types[i];
           const typeKey = `${model.id}-${field.name}-${isModelReference(type) ? type.name : type}-${i}`;
 
-          // of model references
           if (isModelReference(type)) {
-            hasFieldSourceHandle = true;
-            unionFragments.push(
-              <span key={typeKey} className={classes.field.modelTypeColor}>
-                {type.name}
-              </span>
-            );
+            unionFragments.push(<TypeNameSpan key={typeKey} badgeHubIds={badgeHubIds} refModel={type} />);
           } else {
-            // of primitives
             unionFragments.push(
-              <span key={typeKey} className={classes.field.defaultTypeColor}>
+              <span key={typeKey} className={MODEL_NODE_CLASSES.field.defaultTypeColor}>
                 {type}
-              </span>
+              </span>,
             );
           }
         }
 
-        // add separated by " | "
         typeFragments.push(
-          <span key="union" className={classes.field.defaultTypeColor}>
+          <span key="union" className={MODEL_NODE_CLASSES.field.defaultTypeColor}>
             {unionFragments.map((fragment, index) => (
               <span key={fragment.key}>
                 {fragment}
                 {index < unionFragments.length - 1 && " | "}
               </span>
             ))}
-          </span>
+          </span>,
         );
       } else {
-        // default
         typeFragments.push(
-          <span key={`${model.id}-${field.name}-type`} className={classes.field.defaultTypeColor}>
+          <span key={`${model.id}-${field.name}-type`} className={MODEL_NODE_CLASSES.field.defaultTypeColor}>
             {field.type}
-          </span>
+          </span>,
         );
       }
 
       return (
-        <tr key={`${model.id}-${field.name}`} className={classes.field.root}>
-          <td className={classes.field.keyCell}>{keyFragments}</td>
-          <td align="right" className={classes.field.typeCell}>
+        <tr key={`${model.id}-${field.name}-${fieldIndex}`} className={MODEL_NODE_CLASSES.field.root}>
+          <td className={MODEL_NODE_CLASSES.field.keyCell}>{keyFragments}</td>
+          <td align="right" className={MODEL_NODE_CLASSES.field.typeCell}>
             {typeFragments}
-            <CustomHandle
-              className={classNames(classes.handles.source, {
-                hidden: !hasFieldSourceHandle,
-              })}
-              id={`${model.id}-source-${field.name}`}
-              position={Position.Right}
-              type="source"
-            />
+            {!isDuplicateFieldName && hasFieldSourceHandle && (
+              <Handle id={`${model.id}-source-${field.name}`} position={Position.Right} type="source">
+                <SourcePort portId={`${model.id}-source-${field.name}`} />
+              </Handle>
+            )}
           </td>
         </tr>
       );
     });
-  }, [classes, model.id, model.schema]);
+  }, [badgeHubIds, model.id, model.schema]);
 
   const modelName = useMemo(() => {
     const nameParts = [model.name];
+
+    if (model.type === "class" && model.isAbstract) {
+      nameParts.unshift("abstract ");
+    }
 
     if (model.arguments.length > 0) {
       const argumentsParts = [];
@@ -315,6 +392,9 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
         let argumentStr = argument.name;
         if (argument.extends) {
           argumentStr += ` extends ${argument.extends}`;
+        }
+        if (argument.default) {
+          argumentStr += ` = ${argument.default}`;
         }
         argumentsParts.push(argumentStr);
       }
@@ -345,34 +425,23 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
   }, [model]);
 
   return (
-    <div key={id} className={classes.root}>
-      {/* header */}
-      <div className={classes.header}>
-        {/* target handle */}
-        <CustomHandle
-          className={classNames(classes.handles.target, {
-            hidden: !hasTargetHandle,
-          })}
-          id={`${model.id}-target`}
-          position={Position.Left}
-          type="target"
-        />
-        {/* title */}
+    <div key={id} className={headerClasses.root}>
+      <div className={headerClasses.header}>
+        {hasTargetHandle && (
+          <Handle id={`${model.id}-target`} position={Position.Left} type="target">
+            <TargetPort portId={`${model.id}-target`} />
+          </Handle>
+        )}
         {modelName}
-        {/* source handle */}
-        <CustomHandle
-          className={classNames(classes.handles.source, {
-            hidden: !hasSourceHandle,
-          })}
-          id={`${model.id}-source`}
-          position={Position.Right}
-          type="source"
-        />
+        {hasSourceHandle && (
+          <Handle id={`${model.id}-source`} position={Position.Right} type="source">
+            <SourcePort portId={`${model.id}-source`} />
+          </Handle>
+        )}
       </div>
-      {/* fields */}
       {model.schema.length > 0 && (
-        <div className={classes.fieldsWrapper}>
-          <table cellPadding="3">
+        <div className={headerClasses.fieldsWrapper}>
+          <table>
             <tbody>{fieldRows}</tbody>
           </table>
         </div>
@@ -380,3 +449,9 @@ export const ModelNode = ({ id, data }: ModelNodeProps) => {
     </div>
   );
 };
+
+export const ModelNode = memo(
+  ModelNodeContent,
+  (previous, next) => previous.id === next.id && previous.data === next.data,
+);
+ModelNode.displayName = "ModelNode";

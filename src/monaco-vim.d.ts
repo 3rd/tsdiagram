@@ -5,6 +5,6 @@ declare module "monaco-vim" {
   };
   export function initVimMode(
     editor: monaco.editor.IStandaloneCodeEditor,
-    container: HTMLElement
+    container: HTMLElement,
   ): InitVimModeResult;
 }

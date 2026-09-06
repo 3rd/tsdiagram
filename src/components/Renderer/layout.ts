@@ -1,34 +1,43 @@
-import Elk, { ElkNode, LayoutOptions } from "elkjs";
-import { Edge, Node } from "reactflow";
+import { Edge, Node } from "@xyflow/react";
+import ElkConstructor, { ELK, ElkNode, LayoutOptions } from "elkjs/lib/elk-api";
 import {
   isArraySchemaField,
   isFunctionSchemaField,
   isGenericSchemaField,
   isUnionSchemaField,
   Model,
-} from "../../lib/parser/ModelParser";
+  TypeAliasModel,
+} from "../../lib/parser/model-types";
+import { EMPTY_BADGE_HUB_IDS } from "./badge-hubs";
 
 export const LAYOUT_RESET_NODE_OVERLAP_THRESHOLD = 0.7;
 export const LAYOUT_RESET_NODE_COUNT_CHANGE_THRESHOLD = 0.25;
 
+let elk: ELK | null = null;
+const getElk = () => {
+  elk ??= new ElkConstructor({
+    workerFactory: () => new Worker(new URL("./elk.worker.ts", import.meta.url), { type: "module" }),
+  });
+  return elk;
+};
+
 export type LayoutDirection = "horizontal" | "vertical";
-export type LayoutPreset = "legacy" | "fresh" | "anchored";
-export type ModelNodeState = Node<{ model: Model }>;
+export type LayoutPreset = "anchored" | "fresh" | "legacy";
+export type ModelNodeState = Node<{ model: Model; badgeHubIds: ReadonlySet<string> }>;
 
 type LayoutEdgeKind =
   | "dependency"
   | "extends"
-  | "field"
   | "field-array"
   | "field-function-arg"
   | "field-function-return"
   | "field-generic"
   | "field-union"
+  | "field"
   | "implements";
 
 export type ModelEdgeData = {
   layoutKind: LayoutEdgeKind;
-  rerouteEpoch?: number;
 };
 
 export type ModelEdge = Edge<ModelEdgeData>;
@@ -54,7 +63,7 @@ type LayoutMetricsRelationship = {
 
 type GetLayoutMetricsArgs = {
   edges: Pick<ModelEdge, "source" | "target">[];
-  nodes: Pick<ModelNodeState, "height" | "id" | "position" | "width">[];
+  nodes: Pick<ModelNodeState, "id" | "measured" | "position">[];
 };
 
 type ShouldResetLayoutAnchorsArgs = {
@@ -67,6 +76,7 @@ type ShouldResetLayoutAnchorsArgs = {
 };
 
 type LayoutModelNodesArgs = {
+  compact?: boolean;
   direction: LayoutDirection;
   edges: ModelEdge[];
   manuallyMovedNodesSet: Set<string>;
@@ -94,45 +104,111 @@ const requireLayoutKind = (edge: ModelEdge) => {
   return layoutKind;
 };
 
-export const extractModelNodes = (models: Model[]): ModelNodeState[] => {
-  return models.map((model) => ({
-    data: { model },
-    id: model.id,
-    position: { x: -1, y: -1 },
-    type: "model",
-  }));
+export const UNPLACED_NODE_POSITION = { x: -1, y: -1 } as const;
+
+export const isUnplacedNode = (node: Pick<Node, "position">) =>
+  node.position.x === UNPLACED_NODE_POSITION.x && node.position.y === UNPLACED_NODE_POSITION.y;
+
+export const extractModelNodes = (
+  models: Model[],
+  badgeHubIds: ReadonlySet<string> = EMPTY_BADGE_HUB_IDS,
+): ModelNodeState[] => {
+  return models
+    .filter((model) => !badgeHubIds.has(model.id))
+    .map((model) => ({
+      data: { model, badgeHubIds },
+      id: model.id,
+      position: UNPLACED_NODE_POSITION,
+      type: "model",
+    }));
 };
 
-// eslint-disable-next-line sonarjs/cognitive-complexity
-export const extractModelEdges = (models: Model[]): ModelEdge[] => {
+export const fieldHasSourceEdge = (
+  field: Model["schema"][number],
+  badgeHubIds: ReadonlySet<string>,
+): boolean => {
+  const refersToNode = (value: Model | string | undefined): boolean =>
+    value instanceof Object && !badgeHubIds.has(value.id);
+  if (field.typeRefs?.some((typeRef) => !badgeHubIds.has(typeRef.id))) return true;
+  if (isArraySchemaField(field)) return refersToNode(field.elementType);
+  if (isGenericSchemaField(field)) return field.arguments.some(refersToNode);
+  if (isFunctionSchemaField(field)) {
+    if (field.arguments.some((argument) => refersToNode(argument.type))) return true;
+    return Array.isArray(field.returnType) ?
+        refersToNode(field.returnType[0])
+      : refersToNode(field.returnType);
+  }
+  if (isUnionSchemaField(field)) return field.types.some(refersToNode);
+  return refersToNode(field.type);
+};
+
+export const getTypeAliasHeaderDependencies = (model: TypeAliasModel) => {
+  const fieldTargets = new Set(
+    model.schema.flatMap((field) => {
+      const targets: string[] = [];
+      if (field.type instanceof Object) targets.push(field.type.id);
+      if (isArraySchemaField(field) && field.elementType instanceof Object) {
+        targets.push(field.elementType.id);
+      }
+      if (isGenericSchemaField(field)) {
+        for (const argument of field.arguments) if (argument instanceof Object) targets.push(argument.id);
+      }
+      if (isFunctionSchemaField(field)) {
+        for (const argument of field.arguments) {
+          if (argument.type instanceof Object) targets.push(argument.type.id);
+        }
+        const returnType = Array.isArray(field.returnType) ? field.returnType[0] : field.returnType;
+        if (returnType instanceof Object) targets.push(returnType.id);
+      }
+      if (isUnionSchemaField(field)) {
+        for (const type of field.types) if (type instanceof Object) targets.push(type.id);
+      }
+      for (const typeRef of field.typeRefs ?? []) targets.push(typeRef.id);
+      return targets;
+    }),
+  );
+  return model.dependencies.filter((dependency) => !fieldTargets.has(dependency.id));
+};
+
+export const extractModelEdges = (
+  models: Model[],
+  badgeHubIds: ReadonlySet<string> = EMPTY_BADGE_HUB_IDS,
+): ModelEdge[] => {
   const result: ModelEdge[] = [];
 
-  let count = 1;
+  // stable, content-derived edge ids: a structural edit renumbers nothing, so unchanged
+  // edge objects keep their identity (and their published routes) across reparses
+  const usedEdgeIds = new Map<string, number>();
+  const uniqueEdgeId = (base: string) => {
+    const occurrence = usedEdgeIds.get(base) ?? 0;
+    usedEdgeIds.set(base, occurrence + 1);
+    return occurrence === 0 ? base : `${base}~${occurrence}`;
+  };
   for (const model of models) {
     if (model.type === "interface") {
       for (const extended of model.extends) {
         if (extended instanceof Object) {
           result.push(
             createModelEdge({
-              id: `${count++}-${model.id}-${extended.id}`,
+              id: uniqueEdgeId(`extends-${model.id}-${extended.id}`),
               layoutKind: "extends",
               source: model.id,
               target: extended.id,
-            })
+            }),
           );
         }
       }
     }
 
     if (model.type === "typeAlias") {
-      for (const dependency of model.dependencies) {
+      for (const dependency of getTypeAliasHeaderDependencies(model)) {
         result.push(
           createModelEdge({
-            id: `${count++}-${model.id}-${dependency.id}`,
+            id: uniqueEdgeId(`dep-${model.id}-${dependency.id}`),
             layoutKind: "dependency",
             source: model.id,
             target: dependency.id,
-          })
+          }),
         );
       }
     }
@@ -141,11 +217,11 @@ export const extractModelEdges = (models: Model[]): ModelEdge[] => {
       if (model.extends instanceof Object) {
         result.push(
           createModelEdge({
-            id: `${count++}-${model.id}-${model.extends.id}`,
+            id: uniqueEdgeId(`extends-${model.id}-${model.extends.id}`),
             layoutKind: "extends",
             source: model.id,
             target: model.extends.id,
-          })
+          }),
         );
       }
 
@@ -153,13 +229,26 @@ export const extractModelEdges = (models: Model[]): ModelEdge[] => {
         if (implemented instanceof Object) {
           result.push(
             createModelEdge({
-              id: `${count++}-${model.id}-${implemented.id}`,
+              id: uniqueEdgeId(`implements-${model.id}-${implemented.id}`),
               layoutKind: "implements",
               source: model.id,
               target: implemented.id,
-            })
+            }),
           );
         }
+      }
+    }
+
+    if ((model.type === "class" || model.type === "interface") && model.headerRefs) {
+      for (const headerRef of model.headerRefs) {
+        result.push(
+          createModelEdge({
+            id: uniqueEdgeId(`heritage-${model.id}-${headerRef.id}`),
+            layoutKind: "extends",
+            source: model.id,
+            target: headerRef.id,
+          }),
+        );
       }
     }
 
@@ -167,24 +256,24 @@ export const extractModelEdges = (models: Model[]): ModelEdge[] => {
       if (field.type instanceof Object) {
         result.push(
           createModelEdge({
-            id: `${count++}-${model.id}-${field.name}`,
+            id: uniqueEdgeId(`field-${model.id}-${field.name}`),
             layoutKind: "field",
             source: model.id,
             sourceHandle: `${model.id}-source-${field.name}`,
             target: field.type.id,
-          })
+          }),
         );
       }
 
       if (isArraySchemaField(field) && field.elementType instanceof Object) {
         result.push(
           createModelEdge({
-            id: `${count++}-${model.id}-${field.name}`,
+            id: uniqueEdgeId(`fieldarr-${model.id}-${field.name}`),
             layoutKind: "field-array",
             source: model.id,
             sourceHandle: `${model.id}-source-${field.name}`,
             target: field.elementType.id,
-          })
+          }),
         );
       }
 
@@ -193,12 +282,12 @@ export const extractModelEdges = (models: Model[]): ModelEdge[] => {
           if (argument instanceof Object) {
             result.push(
               createModelEdge({
-                id: `${count++}-${model.id}-${field.name}-${argument.id}`,
+                id: uniqueEdgeId(`fieldgen-${model.id}-${field.name}-${argument.id}`),
                 layoutKind: "field-generic",
                 source: model.id,
                 sourceHandle: `${model.id}-source-${field.name}`,
                 target: argument.id,
-              })
+              }),
             );
           }
         }
@@ -209,38 +298,40 @@ export const extractModelEdges = (models: Model[]): ModelEdge[] => {
           if (argument.type instanceof Object) {
             result.push(
               createModelEdge({
-                id: `${count++}-${model.id}-${field.name}-arg-${argument.type.id}`,
+                id: uniqueEdgeId(`fnarg-${model.id}-${field.name}-${argument.type.id}`),
                 layoutKind: "field-function-arg",
                 source: model.id,
                 sourceHandle: `${model.id}-source-${field.name}`,
                 target: argument.type.id,
-              })
+              }),
             );
           }
         }
 
-        if (Array.isArray(field.returnType)) {
-          const returnType = field.returnType[0];
-          if (returnType instanceof Object) {
-            result.push(
-              createModelEdge({
-                id: `${count++}-${model.id}-${field.name}-${returnType.id}`,
-                layoutKind: "field-function-return",
-                source: model.id,
-                sourceHandle: `${model.id}-source-${field.name}`,
-                target: returnType.id,
-              })
-            );
-          }
-        } else if (field.returnType instanceof Object) {
+        const returnType = Array.isArray(field.returnType) ? field.returnType[0] : field.returnType;
+        if (returnType instanceof Object) {
           result.push(
             createModelEdge({
-              id: `${count++}-${model.id}-${field.name}-${field.returnType.id}`,
+              id: uniqueEdgeId(`fnret-${model.id}-${field.name}-${returnType.id}`),
               layoutKind: "field-function-return",
               source: model.id,
               sourceHandle: `${model.id}-source-${field.name}`,
-              target: field.returnType.id,
-            })
+              target: returnType.id,
+            }),
+          );
+        }
+      }
+
+      if (field.typeRefs) {
+        for (const typeRef of field.typeRefs) {
+          result.push(
+            createModelEdge({
+              id: uniqueEdgeId(`fieldref-${model.id}-${field.name}-${typeRef.id}`),
+              layoutKind: "field",
+              source: model.id,
+              sourceHandle: `${model.id}-source-${field.name}`,
+              target: typeRef.id,
+            }),
           );
         }
       }
@@ -250,24 +341,25 @@ export const extractModelEdges = (models: Model[]): ModelEdge[] => {
           if (unionType instanceof Object) {
             result.push(
               createModelEdge({
-                id: `${count++}-${model.id}-${field.name}-${unionType.id}`,
+                id: uniqueEdgeId(`fieldunion-${model.id}-${field.name}-${unionType.id}`),
                 layoutKind: "field-union",
                 source: model.id,
                 sourceHandle: `${model.id}-source-${field.name}`,
                 target: unionType.id,
-              })
+              }),
             );
           }
         }
       }
     }
   }
-  return result;
+  // badge hubs have no node; every edge touching one is represented by its inline pill
+  return result.filter((edge) => !badgeHubIds.has(edge.source) && !badgeHubIds.has(edge.target));
 };
 
 export const decorateModelEdges = (
   edges: ModelEdge[],
-  sharedEdgeProps: SharedModelEdgeProps = {}
+  sharedEdgeProps: SharedModelEdgeProps = {},
 ): ModelEdge[] => {
   return edges.map((edge) => ({
     ...edge,
@@ -275,17 +367,6 @@ export const decorateModelEdges = (
     data: {
       ...edge.data,
       layoutKind: requireLayoutKind(edge),
-    },
-  }));
-};
-
-export const bumpModelEdgeRerouteEpoch = (edges: ModelEdge[]): ModelEdge[] => {
-  return edges.map((edge) => ({
-    ...edge,
-    data: {
-      ...edge.data,
-      layoutKind: requireLayoutKind(edge),
-      rerouteEpoch: (edge.data?.rerouteEpoch ?? 0) + 1,
     },
   }));
 };
@@ -307,20 +388,20 @@ export const normalizeLayoutEdges = (edges: ModelEdge[]): ModelEdge[] => {
     }
   >();
 
-  edges.forEach((edge, index) => {
+  for (const [index, edge] of edges.entries()) {
     const key = `${edge.source}=>${edge.target}`;
     const priority = getLayoutEdgePriority(edge);
     const existing = edgesByPair.get(key);
 
     if (!existing) {
       edgesByPair.set(key, { edge, firstIndex: index, priority });
-      return;
+      continue;
     }
 
     if (priority > existing.priority) {
       edgesByPair.set(key, { edge, firstIndex: existing.firstIndex, priority });
     }
-  });
+  }
 
   return Array.from(edgesByPair.values())
     .sort((a, b) => a.firstIndex - b.firstIndex)
@@ -348,14 +429,20 @@ const getLayoutOptions = (direction: LayoutDirection, preset: LayoutPreset): Lay
 
   const compactOptions: LayoutOptions = {
     "elk.algorithm": "layered",
+    "elk.aspectRatio": "1.6",
     "elk.direction": direction === "horizontal" ? "RIGHT" : "DOWN",
-    "elk.edgeRouting": "ORTHOGONAL",
+    "elk.edgeRouting": "POLYLINE",
     "elk.insideSelfLoops.activate": "false",
+    "elk.layered.mergeEdges": "true",
+    "elk.layered.compaction.postCompaction.strategy": "LEFT",
     "elk.layered.nodePlacement.strategy": "LINEAR_SEGMENTS",
-    "elk.layered.spacing.edgeNodeBetweenLayers": "12",
-    "elk.layered.spacing.nodeNodeBetweenLayers": "24",
-    "elk.spacing.componentComponent": "48",
-    "elk.spacing.nodeNode": "24",
+    "elk.layered.spacing.edgeEdgeBetweenLayers": "10",
+    "elk.layered.spacing.edgeNodeBetweenLayers": "20",
+    "elk.layered.spacing.nodeNodeBetweenLayers": "80",
+    "elk.spacing.componentComponent": "64",
+    "elk.spacing.edgeEdge": "10",
+    "elk.spacing.edgeNode": "20",
+    "elk.spacing.nodeNode": "72",
   };
 
   if (preset === "anchored") {
@@ -382,7 +469,10 @@ export const getLayoutPreset = (manuallyMovedNodesSet: Set<string>): LayoutPrese
   return manuallyMovedNodesSet.size > 0 ? "anchored" : "fresh";
 };
 
+const NO_PINNED_IDS: ReadonlySet<string> = new Set();
+
 export const layoutModelNodes = async ({
+  compact,
   direction,
   edges,
   manuallyMovedNodesSet,
@@ -391,31 +481,36 @@ export const layoutModelNodes = async ({
 }: LayoutModelNodesArgs): Promise<ModelNodeState[]> => {
   const resolvedPreset = preset ?? getLayoutPreset(manuallyMovedNodesSet);
   const elkOptions = getLayoutOptions(direction, resolvedPreset);
-  const elk = new Elk({
-    defaultLayoutOptions: elkOptions,
-  });
 
   const graph: ElkNode = {
     children: nodes.map((node) => {
       const isPinned = manuallyMovedNodesSet.has(node.id);
 
-      return {
-        height: node.height ?? 0,
-        id: node.id,
-        ports: node.data.model.schema.map((field, index) => ({
-          id: `${node.id}-source-${field.name}`,
+      // overload rows share a field name, so ports are deduped by id
+      const ports = new Map<string, { id: string; order: number; properties: Record<string, string> }>();
+      for (const [index, field] of node.data.model.schema.entries()) {
+        const portId = `${node.id}-source-${field.name}`;
+        if (ports.has(portId)) continue;
+        ports.set(portId, {
+          id: portId,
           order: index,
           properties: {
             "port.side": "EAST",
           },
-        })),
-        ...(resolvedPreset === "anchored" && isPinned
-          ? {
-              x: node.position.x,
-              y: node.position.y,
-            }
-          : {}),
-        width: node.width ?? 0,
+        });
+      }
+
+      return {
+        height: node.measured?.height ?? 0,
+        id: node.id,
+        ports: [...ports.values()],
+        ...(resolvedPreset === "anchored" && isPinned ?
+          {
+            x: node.position.x,
+            y: node.position.y,
+          }
+        : {}),
+        width: node.measured?.width ?? 0,
       };
     }),
     edges: edges.map((edge) => ({
@@ -427,34 +522,171 @@ export const layoutModelNodes = async ({
     layoutOptions: elkOptions,
   };
 
-  const layoutedGraph = await elk.layout(graph);
+  const layoutedGraph = await getElk().layout(graph, { layoutOptions: elkOptions });
   const layoutedNodesMap = new Map(layoutedGraph.children?.map((node) => [node.id, node]) ?? []);
 
-  return nodes.map((node) => {
+  const layoutedNodes = nodes.map((node) => {
     const layoutedNode = layoutedNodesMap.get(node.id);
     if (!layoutedNode) return node;
 
     const isPinned = resolvedPreset === "anchored" && manuallyMovedNodesSet.has(node.id);
-    const width = layoutedNode.width ?? node.width;
-    const height = layoutedNode.height ?? node.height;
 
     return {
       ...node,
-      ...(typeof height === "number" ? { height } : {}),
       position: {
-        x: isPinned ? node.position.x : layoutedNode.x ?? node.position.x,
-        y: isPinned ? node.position.y : layoutedNode.y ?? node.position.y,
+        x: isPinned ? node.position.x : (layoutedNode.x ?? node.position.x),
+        y: isPinned ? node.position.y : (layoutedNode.y ?? node.position.y),
       },
-      ...(typeof width === "number" ? { width } : {}),
     };
+  });
+
+  if (!compact) return layoutedNodes;
+  return compactLayoutedNodes({
+    direction,
+    nodes: layoutedNodes,
+    pinnedIds: resolvedPreset === "anchored" ? manuallyMovedNodesSet : NO_PINNED_IDS,
   });
 };
 
-const toNodeIdSet = (nodeIds: Iterable<string>) => new Set(nodeIds);
+const COMPACT_PAD_PX = 72;
+const COMPACT_ASPECT_CAP = 1.7;
+
+type CompactBox = {
+  h: number;
+  id: string;
+  pinned: boolean;
+  w: number;
+  x: number;
+  y: number;
+};
+
+const transposeBoxes = (boxes: CompactBox[]) => {
+  for (const box of boxes) {
+    [box.x, box.y] = [box.y, box.x];
+    [box.w, box.h] = [box.h, box.w];
+  }
+};
+
+const groupLayers = (boxes: CompactBox[]) => {
+  const ordered = [...boxes].sort((a, b) => a.x - b.x);
+  const layers: CompactBox[][] = [];
+  let right = -Infinity;
+  for (const box of ordered) {
+    if (layers.length === 0 || box.x >= right) layers.push([]);
+    layers[layers.length - 1].push(box);
+    right = Math.max(right, box.x + box.w);
+  }
+  return layers;
+};
+
+const slideUp = (boxes: CompactBox[], pad: number, layoutTop: number): Map<string, number> => {
+  const shifts = new Map<string, number>();
+  const ordered = [...boxes].sort((a, b) => a.y - b.y || a.x - b.x);
+  for (const box of ordered) {
+    if (box.pinned) continue;
+    let ceiling = layoutTop;
+    for (const other of ordered) {
+      if (other === box) continue;
+      const overlapsX = other.x < box.x + box.w + pad && box.x < other.x + other.w + pad;
+      if (!overlapsX) continue;
+      if (other.y + other.h <= box.y) ceiling = Math.max(ceiling, other.y + other.h + pad);
+    }
+    const shift = box.y - ceiling;
+    if (shift <= 0) continue;
+    box.y = ceiling;
+    shifts.set(box.id, shift);
+  }
+  return shifts;
+};
+
+const getBoxBounds = (boxes: CompactBox[]) => {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const box of boxes) {
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+    maxX = Math.max(maxX, box.x + box.w);
+    maxY = Math.max(maxY, box.y + box.h);
+  }
+  return { height: maxY - minY, top: minY, width: maxX - minX };
+};
+
+type CompactLayoutedNodesArgs = {
+  aspectCap?: number;
+  direction: LayoutDirection;
+  nodes: ModelNodeState[];
+  pad?: number;
+  pinnedIds: ReadonlySet<string>;
+};
+
+export const compactLayoutedNodes = ({
+  aspectCap = COMPACT_ASPECT_CAP,
+  direction,
+  nodes,
+  pad = COMPACT_PAD_PX,
+  pinnedIds,
+}: CompactLayoutedNodesArgs): ModelNodeState[] => {
+  if (nodes.length < 2) return nodes;
+  if (nodes.some((node) => !node.measured?.width || !node.measured.height)) return nodes;
+
+  const boxes: CompactBox[] = nodes.map((node) => ({
+    h: node.measured?.height ?? 0,
+    id: node.id,
+    pinned: pinnedIds.has(node.id),
+    w: node.measured?.width ?? 0,
+    x: node.position.x,
+    y: node.position.y,
+  }));
+
+  // vertical layouts flow down; transposing makes the same pass (and the same aspect
+  // cap, now on height/width) apply to their in-layer axis
+  if (direction === "vertical") transposeBoxes(boxes);
+
+  const originalY = new Map(boxes.map((box) => [box.id, box.y]));
+  const { top, width } = getBoxBounds(boxes);
+  const shifts = new Map<string, number>();
+  for (const layer of groupLayers(boxes)) {
+    for (const [id, shift] of slideUp(layer, pad, top)) shifts.set(id, shift);
+  }
+  const heightAt = (scale: number) => {
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const box of boxes) {
+      const y = (originalY.get(box.id) ?? box.y) - scale * (shifts.get(box.id) ?? 0);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y + box.h);
+    }
+    return maxY - minY;
+  };
+  if (width / heightAt(1) > aspectCap) {
+    let low = 0;
+    let high = 1;
+    for (let i = 0; i < 24; i++) {
+      const mid = (low + high) / 2;
+      if (width / heightAt(mid) > aspectCap) high = mid;
+      else low = mid;
+    }
+    for (const box of boxes) {
+      const shift = shifts.get(box.id);
+      if (shift) box.y = (originalY.get(box.id) ?? box.y) - low * shift;
+    }
+  }
+
+  if (direction === "vertical") transposeBoxes(boxes);
+
+  const boxById = new Map(boxes.map((box) => [box.id, box]));
+  return nodes.map((node) => {
+    const box = boxById.get(node.id);
+    if (!box || (box.x === node.position.x && box.y === node.position.y)) return node;
+    return { ...node, position: { x: box.x, y: box.y } };
+  });
+};
 
 export const getNodeIdOverlapRatio = (previousNodeIds: Iterable<string>, nextNodeIds: Iterable<string>) => {
-  const previousNodeIdSet = toNodeIdSet(previousNodeIds);
-  const nextNodeIdSet = toNodeIdSet(nextNodeIds);
+  const previousNodeIdSet = new Set(previousNodeIds);
+  const nextNodeIdSet = new Set(nextNodeIds);
   const denominator = Math.max(previousNodeIdSet.size, nextNodeIdSet.size);
   if (denominator === 0) return 1;
 
@@ -467,8 +699,8 @@ export const getNodeIdOverlapRatio = (previousNodeIds: Iterable<string>, nextNod
 };
 
 export const getNodeCountChangeRatio = (previousNodeIds: Iterable<string>, nextNodeIds: Iterable<string>) => {
-  const previousNodeIdSet = toNodeIdSet(previousNodeIds);
-  const nextNodeIdSet = toNodeIdSet(nextNodeIds);
+  const previousNodeIdSet = new Set(previousNodeIds);
+  const nextNodeIdSet = new Set(nextNodeIds);
   const denominator = Math.max(previousNodeIdSet.size, nextNodeIdSet.size);
   if (denominator === 0) return 0;
   return Math.abs(previousNodeIdSet.size - nextNodeIdSet.size) / denominator;
@@ -508,10 +740,10 @@ export const getLayoutMetrics = ({ edges, nodes }: GetLayoutMetricsArgs) => {
     const targetNode = nodesById.get(edge.target);
     if (!sourceNode || !targetNode) continue;
 
-    const sourceWidth = sourceNode.width ?? 0;
-    const sourceHeight = sourceNode.height ?? 0;
-    const targetWidth = targetNode.width ?? 0;
-    const targetHeight = targetNode.height ?? 0;
+    const sourceWidth = sourceNode.measured?.width ?? 0;
+    const sourceHeight = sourceNode.measured?.height ?? 0;
+    const targetWidth = targetNode.measured?.width ?? 0;
+    const targetHeight = targetNode.measured?.height ?? 0;
     const horizontalDistance =
       targetNode.position.x + targetWidth / 2 - (sourceNode.position.x + sourceWidth / 2);
     const verticalDistance =
@@ -530,8 +762,8 @@ export const getLayoutMetrics = ({ edges, nodes }: GetLayoutMetricsArgs) => {
   const manhattanDistances = relationships.map((relationship) => relationship.manhattanDistance);
   const minX = Math.min(...nodes.map((node) => node.position.x));
   const minY = Math.min(...nodes.map((node) => node.position.y));
-  const maxX = Math.max(...nodes.map((node) => node.position.x + (node.width ?? 0)));
-  const maxY = Math.max(...nodes.map((node) => node.position.y + (node.height ?? 0)));
+  const maxX = Math.max(...nodes.map((node) => node.position.x + (node.measured?.width ?? 0)));
+  const maxY = Math.max(...nodes.map((node) => node.position.y + (node.measured?.height ?? 0)));
 
   return {
     averageManhattanDistance:

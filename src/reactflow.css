@@ -1,1 +1,90 @@
-@import "reactflow/dist/style.css";
+@import "@xyflow/react/dist/style.css";
+
+.renderer-moving .react-flow__viewport {
+  will-change: transform;
+}
+
+.renderer-loading .react-flow__viewport,
+.renderer-loading .react-flow__minimap {
+  opacity: 0;
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border: none;
+  background: none;
+}
+
+.model-node-port {
+  display: block;
+  width: 8px;
+  height: 8px;
+  overflow: visible;
+}
+
+.model-node-fields .react-flow__handle-right {
+  right: -1px;
+}
+
+.renderer-controls {
+  overflow: hidden;
+  border: 1px solid;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+}
+
+.renderer-controls-light {
+  border-color: var(--color-gray-200);
+}
+
+.renderer-controls-dark {
+  border-color: var(--color-gray-700);
+}
+
+.renderer-controls .react-flow__controls-button {
+  width: 2rem;
+  height: 2rem;
+  border-right: 0;
+  border-bottom-width: 1px;
+  transition:
+    color 150ms,
+    background-color 150ms;
+}
+
+.renderer-controls .react-flow__controls-button:last-child {
+  border-bottom: 0;
+}
+
+.renderer-controls-light .react-flow__controls-button {
+  color: var(--color-gray-600);
+  background: rgb(255 255 255 / 0.95);
+  border-color: var(--color-gray-200);
+}
+
+.renderer-controls-light .react-flow__controls-button:hover {
+  color: var(--color-blue-600);
+  background: var(--color-gray-100);
+}
+
+.renderer-controls-dark .react-flow__controls-button {
+  color: var(--color-gray-300);
+  background: rgb(15 23 42 / 0.9);
+  border-color: var(--color-gray-700);
+}
+
+.renderer-controls-dark .react-flow__controls-button:hover {
+  color: #fff;
+  background: var(--color-gray-800);
+}
+
+.renderer-controls .react-flow__controls-button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--color-blue-600);
+  outline-offset: -2px;
+}
+
+.react-flow__edge-interaction {
+  stroke: transparent;
+}

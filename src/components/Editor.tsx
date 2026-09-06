@@ -1,10 +1,19 @@
 import { ComponentProps, memo, useCallback, useEffect, useRef } from "react";
-import MonacoEditor, { useMonaco } from "@monaco-editor/react";
+import MonacoEditor, { loader, useMonaco } from "@monaco-editor/react";
+import * as monacoRuntime from "monaco-editor";
+import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
 import { initVimMode, InitVimModeResult } from "monaco-vim";
 import { useStore } from "statelift";
 import { documentsStore } from "../stores/documents";
 import { useUserOptions } from "../stores/user-options";
 import { themes } from "../themes";
+
+self.MonacoEnvironment = {
+  getWorker: (_workerId, label) =>
+    label === "typescript" || label === "javascript" ? new TsWorker() : new EditorWorker(),
+};
+loader.config({ monaco: monacoRuntime });
 
 type MonacoMountHandler = ComponentProps<typeof MonacoEditor>["onMount"];
 type IStandaloneCodeEditor = Parameters<Exclude<MonacoMountHandler, undefined>>[0];
@@ -13,6 +22,7 @@ const editorOptions: ComponentProps<typeof MonacoEditor>["options"] = {
   minimap: { enabled: false },
   renderLineHighlight: "none",
   fontSize: 15,
+  scrollBeyondLastLine: false,
   scrollbar: {
     vertical: "auto",
     horizontal: "auto",
@@ -32,7 +42,6 @@ export const Editor = memo(() => {
 
   const handleSourceChange = useCallback((value: string | undefined) => {
     documentsStore.state.setCurrentDocumentSource(value ?? "");
-    documentsStore.state.save();
   }, []);
 
   useEffect(() => {
@@ -88,7 +97,12 @@ export const Editor = memo(() => {
         onChange={handleSourceChange}
         onMount={handleMount}
       />
-      {isVimMode && <div ref={vimStatusLineRef} className="text-sm text-gray-900 bg-gray-100 vim-status" />}
+      {isVimMode && (
+        <div
+          ref={vimStatusLineRef}
+          className="border-t border-gray-200 bg-gray-100 px-2 py-1 text-sm text-gray-900 vim-status"
+        />
+      )}
     </div>
   );
 });

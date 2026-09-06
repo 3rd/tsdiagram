@@ -1,6 +1,11 @@
 import {
+  CallSignatureDeclaration,
   ClassDeclaration,
+  ConstructSignatureDeclaration,
+  EnumDeclaration,
+  EnumMember,
   ExpressionWithTypeArguments,
+  IndexSignatureDeclaration,
   InterfaceDeclaration,
   MethodDeclaration,
   MethodSignature,
@@ -10,6 +15,8 @@ import {
   PropertySignature,
   ScriptTarget,
   SourceFile,
+  SyntaxKind,
+  Symbol as TsMorphSymbol,
   Type,
   TypeAliasDeclaration,
 } from "ts-morph";
@@ -20,7 +27,10 @@ export type ParsedInterface = {
   extends: ExpressionWithTypeArguments[];
   properties: PropertySignature[];
   methods: MethodSignature[];
-  members: (MethodSignature | PropertySignature)[];
+  members: (MethodSignature | PropertySignature | TsMorphSymbol)[];
+  callSignatures: CallSignatureDeclaration[];
+  constructSignatures: ConstructSignatureDeclaration[];
+  indexSignatures: IndexSignatureDeclaration[];
 };
 
 export type ParsedTypeAlias = {
@@ -38,6 +48,51 @@ export type ParsedClass = {
   methods: (MethodDeclaration | MethodSignature)[];
 };
 
+export type ParsedEnum = {
+  name: string;
+  declaration: EnumDeclaration;
+  members: EnumMember[];
+};
+
+type QualifiedModule = {
+  module: ModuleDeclaration;
+  name: string;
+};
+
+type QualifiedDeclaration<T> = {
+  declaration: T;
+  moduleName: string | null;
+};
+
+const collectQualifiedModules = (modules: ModuleDeclaration[], parentName = ""): QualifiedModule[] => {
+  const result: QualifiedModule[] = [];
+
+  for (const module of modules) {
+    const name = parentName ? `${parentName}.${module.getName()}` : module.getName();
+    result.push({ module, name });
+    result.push(...collectQualifiedModules(module.getModules(), name));
+  }
+
+  return result;
+};
+
+const collectQualifiedDeclarations = <T>(
+  declarations: T[],
+  modules: ModuleDeclaration[],
+  getModuleDeclarations: (module: ModuleDeclaration) => T[],
+): QualifiedDeclaration<T>[] => {
+  const result: QualifiedDeclaration<T>[] = declarations.map((declaration) => ({
+    declaration,
+    moduleName: null,
+  }));
+
+  for (const { module, name: moduleName } of collectQualifiedModules(modules)) {
+    result.push(...getModuleDeclarations(module).map((declaration) => ({ declaration, moduleName })));
+  }
+
+  return result;
+};
+
 export class Parser {
   project: Project;
   sourceFile: SourceFile;
@@ -51,14 +106,12 @@ export class Parser {
       },
     });
     const sourceFile = project.createSourceFile("source.ts", code);
-    // sourceFile.saveSync();
     this.project = project;
     this.sourceFile = sourceFile;
   }
 
   setSource(code: string) {
     this.sourceFile.replaceWithText(code);
-    // this.sourceFile.saveSync();
   }
 
   get fs() {
@@ -90,20 +143,15 @@ export class Parser {
         methodNames: Set<string>;
       }
     >();
-    const declarations: { declaration: InterfaceDeclaration; module: ModuleDeclaration | null }[] =
-      this.source.getInterfaces().map((declaration) => ({
-        declaration,
-        module: null,
-      }));
+    const declarations = collectQualifiedDeclarations(
+      this.source.getInterfaces(),
+      this.source.getModules(),
+      (module) => module.getInterfaces(),
+    );
     const declarationMembersMap = new Map<string, Set<string>>();
 
-    for (const module of this.source.getModules()) {
-      const moduleDeclarations = module.getInterfaces();
-      declarations.push(...moduleDeclarations.map((declaration) => ({ declaration, module })));
-    }
-
-    for (const { module, declaration } of declarations) {
-      const name = module ? `${module.getName()}.${declaration.getName()}` : declaration.getName();
+    for (const { moduleName, declaration } of declarations) {
+      const name = moduleName ? `${moduleName}.${declaration.getName()}` : declaration.getName();
 
       const declarationMembers = declarationMembersMap.get(name) ?? new Set<string>();
       for (const member of declaration.getProperties()) {
@@ -122,20 +170,32 @@ export class Parser {
           properties: [],
           methods: [],
           members: [],
+          callSignatures: [],
+          constructSignatures: [],
+          indexSignatures: [],
         },
         propertyNames: new Set(),
         methodNames: new Set(),
       };
 
       item.interface.extends.push(...declaration.getExtends());
+      item.interface.callSignatures.push(...declaration.getCallSignatures());
+      item.interface.constructSignatures.push(...declaration.getConstructSignatures());
+      item.interface.indexSignatures.push(...declaration.getIndexSignatures());
+      result.set(name, item);
 
       const checkerType = this.checker.getTypeAtLocation(declaration);
-      if (!checkerType.isInterface()) continue;
-
-      for (const property of checkerType.getProperties()) {
+      const checkerProperties = checkerType.getProperties();
+      for (const property of checkerProperties) {
         const propertyName = property.getName();
         const valueDeclaration = property.getValueDeclaration();
-        if (!valueDeclaration) continue;
+        if (!valueDeclaration) {
+          if (item.propertyNames.has(propertyName)) continue;
+          item.interface.members.push(property);
+          item.propertyNames.add(propertyName);
+          continue;
+        }
+        if (!checkerType.isInterface()) continue;
 
         if (valueDeclaration.getKindName() === "PropertySignature") {
           if (item.propertyNames.has(propertyName)) {
@@ -151,12 +211,8 @@ export class Parser {
           item.interface.methods.push(valueDeclaration as MethodSignature);
           item.interface.members.push(valueDeclaration as MethodSignature);
           item.methodNames.add(propertyName);
-        } else {
-          // console.error("Unexpected interface property kind", valueDeclaration.getKindName());
         }
       }
-
-      result.set(name, item);
     }
 
     // move declaration members after other members
@@ -164,14 +220,31 @@ export class Parser {
     for (const item of items) {
       const declarationMembers = declarationMembersMap.get(item.name);
       if (!declarationMembers) continue;
+      const inheritedMemberOrder = new Map<string, number>();
+      for (const extended of item.extends) {
+        for (const property of extended.getType().getProperties()) {
+          const propertyName = property.getName();
+          if (!inheritedMemberOrder.has(propertyName)) {
+            inheritedMemberOrder.set(propertyName, inheritedMemberOrder.size);
+          }
+        }
+      }
       item.members.sort((a, b) => {
         const aName = a.getName();
         const bName = b.getName();
-        if (declarationMembers.has(aName) && !declarationMembers.has(bName)) {
+        const aIsDeclarationMember = declarationMembers.has(aName);
+        const bIsDeclarationMember = declarationMembers.has(bName);
+        if (aIsDeclarationMember && !bIsDeclarationMember) {
           return 1;
-        } else if (!declarationMembers.has(aName) && declarationMembers.has(bName)) {
+        } else if (!aIsDeclarationMember && bIsDeclarationMember) {
           return -1;
         }
+        if (aIsDeclarationMember && bIsDeclarationMember) return 0;
+        const aOrder = inheritedMemberOrder.get(aName);
+        const bOrder = inheritedMemberOrder.get(bName);
+        if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
+        if (aOrder !== undefined) return -1;
+        if (bOrder !== undefined) return 1;
         return 0;
       });
     }
@@ -179,20 +252,34 @@ export class Parser {
     return items;
   }
 
-  get typeAliases(): ParsedTypeAlias[] {
-    const result: ParsedTypeAlias[] = [];
-    const declarations: {
-      declaration: TypeAliasDeclaration;
-      module: ModuleDeclaration | null;
-    }[] = this.source.getTypeAliases().map((declaration) => ({ declaration, module: null }));
+  get enums(): ParsedEnum[] {
+    const result = new Map<string, ParsedEnum>();
+    const declarations = collectQualifiedDeclarations(
+      this.source.getEnums(),
+      this.source.getModules(),
+      (module) => module.getEnums(),
+    );
 
-    for (const module of this.source.getModules()) {
-      const moduleDeclarations = module.getTypeAliases();
-      declarations.push(...moduleDeclarations.map((declaration) => ({ declaration, module })));
+    for (const { moduleName, declaration } of declarations) {
+      const name = moduleName ? `${moduleName}.${declaration.getName()}` : declaration.getName();
+      const item = result.get(name) ?? { name, declaration, members: [] };
+      item.members.push(...declaration.getMembers());
+      result.set(name, item);
     }
 
-    for (const { declaration, module } of declarations) {
-      const name = module ? `${module.getName()}.${declaration.getName()}` : declaration.getName();
+    return Array.from(result.values());
+  }
+
+  get typeAliases(): ParsedTypeAlias[] {
+    const result: ParsedTypeAlias[] = [];
+    const declarations = collectQualifiedDeclarations(
+      this.source.getTypeAliases(),
+      this.source.getModules(),
+      (module) => module.getTypeAliases(),
+    );
+
+    for (const { declaration, moduleName } of declarations) {
+      const name = moduleName ? `${moduleName}.${declaration.getName()}` : declaration.getName();
       const type = declaration.getType();
 
       result.push({ name, declaration, type });
@@ -210,20 +297,14 @@ export class Parser {
         methodNames: Set<string>;
       }
     >();
-    const declarations: { declaration: ClassDeclaration; module: ModuleDeclaration | null }[] = this.source
-      .getClasses()
-      .map((declaration) => ({
-        declaration,
-        module: null,
-      }));
+    const declarations = collectQualifiedDeclarations(
+      this.source.getClasses(),
+      this.source.getModules(),
+      (module) => module.getClasses(),
+    );
 
-    for (const module of this.source.getModules()) {
-      const moduleDeclarations = module.getClasses();
-      declarations.push(...moduleDeclarations.map((declaration) => ({ declaration, module })));
-    }
-
-    for (const { declaration, module } of declarations) {
-      const name = module ? `${module.getName()}.${declaration.getName()}` : declaration.getName();
+    for (const { declaration, moduleName } of declarations) {
+      const name = moduleName ? `${moduleName}.${declaration.getName()}` : declaration.getName();
       if (!name) continue;
 
       const item = result.get(name) ?? {
@@ -260,9 +341,21 @@ export class Parser {
           if (item.methodNames.has(propertyName)) continue;
           item.class.methods.push(valueDeclaration as MethodSignature);
           item.methodNames.add(propertyName);
-        } else {
-          // console.error("Unexpected class property kind", valueDeclaration.getKindName());
         }
+      }
+
+      for (const staticProperty of declaration.getStaticProperties()) {
+        if (!staticProperty.isKind(SyntaxKind.PropertyDeclaration)) continue;
+        const key = `static:${staticProperty.getName()}`;
+        if (item.propertyNames.has(key)) continue;
+        item.class.properties.push(staticProperty);
+        item.propertyNames.add(key);
+      }
+      for (const staticMethod of declaration.getStaticMethods()) {
+        const key = `static:${staticMethod.getName()}`;
+        if (item.methodNames.has(key)) continue;
+        item.class.methods.push(staticMethod);
+        item.methodNames.add(key);
       }
 
       result.set(name, item);

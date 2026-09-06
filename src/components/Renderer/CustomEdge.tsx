@@ -1,200 +1,44 @@
 import { memo, useMemo } from "react";
-import { getSmartEdge, PathFindingFunction, SVGDrawFunction } from "@tisoap/react-flow-smart-edge";
-import { DiagonalMovement, JumpPointFinder } from "pathfinding";
-import { EdgeProps, Position, useStoreApi, XYPosition } from "reactflow";
+import { EdgeProps, getSmoothStepPath, useStore } from "@xyflow/react";
 import { useIsEdgeDecorated } from "../../stores/graph";
-import { Direction } from "../../types";
-// import { edgeSegmentCache } from "../../edge-segment-cache";
+import { EDGE_CORNER_RADIUS, EDGE_NODE_CLEARANCE, RoutingPoint } from "./edge-routing";
+import { useModelEdgeRoute } from "./EdgeRoutingProvider";
+import { ModelEdge } from "./layout";
 
-const toPoint = ([x, y]: number[]): XYPosition => ({ x, y });
-// const toXYPosition = ({ x, y }: XYPosition): [number, number] => [x, y];
-
-const getDirection = (a: XYPosition, b: XYPosition) => {
-  if (a.x === b.x) {
-    if (a.y > b.y) return Direction.Top;
-    return Direction.Bottom;
-  } else if (a.y === b.y) {
-    if (a.x > b.x) return Direction.Left;
-    return Direction.Right;
-  }
-  return Direction.None;
-};
-
-const processSegments = (points: XYPosition[]) => {
-  const segments: { start: XYPosition; end: XYPosition; direction: Direction }[] = [];
-  const directions = points
-    .map((_, index) => {
-      if (index === 0) return Direction.None;
-      return getDirection(points[index - 1], points[index]);
-    })
-    .slice(1);
-
-  let [prev, curr] = points;
-  let prevDirection = directions[0];
-
-  // align first segment
-  if (prevDirection === Direction.None) {
-    const nextDirection = directions[1];
-    if (nextDirection !== Direction.None) {
-      prevDirection = nextDirection;
-      if (nextDirection === Direction.Right || nextDirection === Direction.Left) {
-        curr.x = prev.x;
-      } else {
-        curr.y = prev.y;
-      }
-    }
-  }
-
-  for (const next of points.slice(2)) {
-    const nextDirection = getDirection(curr, next);
-    if (nextDirection !== prevDirection) {
-      segments.push({ start: prev, end: curr, direction: prevDirection });
-      prev = curr;
-      prevDirection = nextDirection;
-    }
-    curr = next;
-  }
-
-  const lastSegment = { start: prev, end: curr, direction: prevDirection };
-
-  // align last segment (works, but the arrow goes crazy)
-  // if (lastSegment.direction === Direction.None) {
-  //   const prevSegment = segments[segments.length - 1];
-  //   if (prevSegment.direction === Direction.Right || prevSegment.direction === Direction.Left) {
-  //     lastSegment.start.x = lastSegment.end.x;
-  //   } else {
-  //     lastSegment.start.y = lastSegment.end.y;
-  //   }
-  // }
-
-  segments.push(lastSegment);
-  return segments;
-};
-
-const drawEdge: SVGDrawFunction = (source, target, path) => {
-  const points = [
-    [Math.floor(source.x), Math.floor(source.y)],
-    ...path,
-    [Math.floor(target.x), Math.floor(target.y)],
-  ].map(toPoint);
-
-  try {
-    processSegments(points);
-    // edgeSegmentCache.set(edge.id, {});
-  } catch (error) {
-    console.error(error);
-  }
-
-  const first = points[0];
-  let svgPath = `M${first.x},${first.y}M`;
-
-  let prev = first;
-
-  for (const next of points) {
-    const midPoint = { x: (prev.x - next.x) / 2 + next.x, y: (prev.y - next.y) / 2 + next.y };
-    svgPath += ` ${midPoint.x},${midPoint.y}`;
-    svgPath += `Q${next.x},${next.y}`;
-    prev = next;
-  }
-
-  const last = points[points.length - 1];
-  svgPath += ` ${last.x},${last.y}`;
-
-  return svgPath;
-};
-
-const generatePath: PathFindingFunction = (grid, start, end) => {
-  try {
-    // @ts-ignore
-    const finder = new JumpPointFinder({ diagonalMovement: DiagonalMovement.Never });
-    const fullPath = finder.findPath(start.x, start.y, end.x, end.y, grid);
-    if (fullPath.length === 0) return null;
-    return { fullPath, smoothedPath: fullPath };
-  } catch {
-    return null;
-  }
-};
+const ROUTE_ENDPOINT_TOLERANCE_PX = 1;
+const ROUTE_STRETCH_LIMIT_PX = EDGE_NODE_CLEARANCE * 2;
+const EDGE_INTERACTION_WIDTH = 20;
+export const LOW_DETAIL_ZOOM = 0.5;
+export const selectLowDetail = (state: { transform: [number, number, number] }) =>
+  state.transform[2] < LOW_DETAIL_ZOOM;
 
 const styles = {
   selfLoop: {
     strokeDasharray: "5, 5",
-    stroke: "#a9b2bc",
   },
   highlighted: {
-    strokeWidth: 1,
+    strokeWidth: 1.5,
   },
   faded: {
-    stroke: "#cad0d6",
-    strokeOpacity: 0.5,
+    strokeOpacity: 0.35,
   },
 };
 
-const FALLBACK_HANDLE_OFFSET = 24;
+const pointDistance = (point: RoutingPoint | undefined, x: number, y: number) =>
+  point === undefined ? Infinity : Math.max(Math.abs(point.x - x), Math.abs(point.y - y));
 
-const isHorizontalPosition = (position: Position) =>
-  position === Position.Left || position === Position.Right;
-
-const offsetPointFromHandle = (
-  point: XYPosition,
-  position: Position,
-  offset = FALLBACK_HANDLE_OFFSET
-): XYPosition => {
-  switch (position) {
-    case Position.Left:
-      return { x: point.x - offset, y: point.y };
-    case Position.Right:
-      return { x: point.x + offset, y: point.y };
-    case Position.Top:
-      return { x: point.x, y: point.y - offset };
-    case Position.Bottom:
-      return { x: point.x, y: point.y + offset };
-  }
-};
-
-const dedupeConsecutivePoints = (points: XYPosition[]) => {
-  return points.filter((point, index) => {
-    if (index === 0) return true;
-    const previousPoint = points[index - 1];
-    return previousPoint.x !== point.x || previousPoint.y !== point.y;
-  });
-};
-
-// Preserve the same edge renderer when smart routing temporarily fails during live drag.
-const getFallbackEdgePath = ({
-  sourcePosition,
-  sourceX,
-  sourceY,
-  targetPosition,
-  targetX,
-  targetY,
-}: Pick<EdgeProps, "sourcePosition" | "sourceX" | "sourceY" | "targetPosition" | "targetX" | "targetY">) => {
-  const resolvedSourcePosition = sourcePosition ?? Position.Right;
-  const resolvedTargetPosition = targetPosition ?? Position.Left;
-  const source = { x: sourceX, y: sourceY };
-  const target = { x: targetX, y: targetY };
-  const sourceAnchor = offsetPointFromHandle(source, resolvedSourcePosition);
-  const targetAnchor = offsetPointFromHandle(target, resolvedTargetPosition);
-  const fallbackPoints = [sourceAnchor];
-
-  if (isHorizontalPosition(resolvedSourcePosition) && isHorizontalPosition(resolvedTargetPosition)) {
-    const midX = Math.round((sourceAnchor.x + targetAnchor.x) / 2);
-    fallbackPoints.push({ x: midX, y: sourceAnchor.y }, { x: midX, y: targetAnchor.y });
-  } else if (!isHorizontalPosition(resolvedSourcePosition) && !isHorizontalPosition(resolvedTargetPosition)) {
-    const midY = Math.round((sourceAnchor.y + targetAnchor.y) / 2);
-    fallbackPoints.push({ x: sourceAnchor.x, y: midY }, { x: targetAnchor.x, y: midY });
-  } else if (isHorizontalPosition(resolvedSourcePosition)) {
-    fallbackPoints.push({ x: targetAnchor.x, y: sourceAnchor.y });
-  } else {
-    fallbackPoints.push({ x: sourceAnchor.x, y: targetAnchor.y });
-  }
-
-  fallbackPoints.push(targetAnchor);
-
-  return drawEdge(
-    source,
-    target,
-    dedupeConsecutivePoints(fallbackPoints).map((point) => [point.x, point.y])
-  );
+const stretchToPorts = (path: string, points: RoutingPoint[], edge: EdgeProps) => {
+  const first = points[0];
+  const last = points[points.length - 1];
+  const sourceStub =
+    pointDistance(first, edge.sourceX, edge.sourceY) > ROUTE_ENDPOINT_TOLERANCE_PX ?
+      `M ${edge.sourceX} ${edge.sourceY} L ${first.x} ${first.y} `
+    : "";
+  const targetStub =
+    pointDistance(last, edge.targetX, edge.targetY) > ROUTE_ENDPOINT_TOLERANCE_PX ?
+      ` M ${last.x} ${last.y} L ${edge.targetX} ${edge.targetY}`
+    : "";
+  return `${sourceStub}${path}${targetStub}`;
 };
 
 const useDecoratedEdgeStyle = (edge: EdgeProps) => {
@@ -210,70 +54,51 @@ const useDecoratedEdgeStyle = (edge: EdgeProps) => {
   }, [edge.source, edge.style, edge.target, faded, highlighted]);
 };
 
-export const CustomEdge = memo((edge: EdgeProps) => {
-  const store = useStoreApi();
+export const CustomEdge = memo((edge: EdgeProps<ModelEdge>) => {
   const edgeStyle = useDecoratedEdgeStyle(edge);
-  const rerouteEpoch = edge.data?.rerouteEpoch ?? 0;
+  const route = useModelEdgeRoute(edge.id);
+  const lowDetail = useStore(selectLowDetail);
+  const routeDrift =
+    route === undefined ? Infinity : (
+      Math.max(
+        pointDistance(route.points[0], edge.sourceX, edge.sourceY),
+        pointDistance(route.points[route.points.length - 1], edge.targetX, edge.targetY),
+      )
+    );
 
-  const getSmartEdgeResponse = useMemo(() => {
-    const nodes = store.getState().getNodes();
-
-    return getSmartEdge({
+  let path: string;
+  if (route !== undefined && routeDrift <= ROUTE_ENDPOINT_TOLERANCE_PX) {
+    path = lowDetail ? route.simplePath : route.path;
+  } else if (route !== undefined && routeDrift <= ROUTE_STRETCH_LIMIT_PX) {
+    path = stretchToPorts(lowDetail ? route.simplePath : route.path, route.points, edge);
+  } else {
+    [path] = getSmoothStepPath({
+      borderRadius: EDGE_CORNER_RADIUS,
+      offset: EDGE_NODE_CLEARANCE,
       sourcePosition: edge.sourcePosition,
-      targetPosition: edge.targetPosition,
       sourceX: edge.sourceX,
       sourceY: edge.sourceY,
+      targetPosition: edge.targetPosition,
       targetX: edge.targetX,
       targetY: edge.targetY,
-      nodes,
-      options: {
-        drawEdge,
-        generatePath,
-        nodePadding: 6,
-        gridRatio: 10,
-      },
     });
-  }, [
-    edge.sourcePosition,
-    edge.targetPosition,
-    edge.sourceX,
-    edge.sourceY,
-    edge.targetX,
-    edge.targetY,
-    rerouteEpoch,
-    store,
-  ]);
-
-  const svgPathString = useMemo(() => {
-    return (
-      getSmartEdgeResponse?.svgPathString ??
-      getFallbackEdgePath({
-        sourcePosition: edge.sourcePosition,
-        sourceX: edge.sourceX,
-        sourceY: edge.sourceY,
-        targetPosition: edge.targetPosition,
-        targetX: edge.targetX,
-        targetY: edge.targetY,
-      })
-    );
-  }, [
-    edge.sourcePosition,
-    edge.sourceX,
-    edge.sourceY,
-    edge.targetPosition,
-    edge.targetX,
-    edge.targetY,
-    getSmartEdgeResponse?.svgPathString,
-  ]);
+  }
 
   return (
     <>
       <path
         className="react-flow__edge-path"
-        d={svgPathString}
+        d={path}
         markerEnd={edge.markerEnd}
         markerStart={edge.markerStart}
         style={edgeStyle}
+      />
+      <path
+        className="react-flow__edge-interaction"
+        d={path}
+        fill="none"
+        strokeOpacity={0}
+        strokeWidth={EDGE_INTERACTION_WIDTH}
       />
     </>
   );

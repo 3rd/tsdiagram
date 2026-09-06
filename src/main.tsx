@@ -6,10 +6,10 @@ import "./index.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>
+  </React.StrictMode>,
 );
 
-if (process.env.NODE_ENV !== "development") {
+if (import.meta.env.PROD) {
   document.addEventListener("DOMContentLoaded", () => {
     const umamiScript = document.createElement("script");
     umamiScript.src = "https://umami.dev.pet/script.js";

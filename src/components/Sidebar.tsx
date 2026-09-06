@@ -13,11 +13,13 @@ type SidebarItemProps = {
 };
 const SidebarItem = memo(({ id, title, onClick, onDelete, isActive }: SidebarItemProps) => {
   const [deleteConfirmationState, setDeleteConfirmationState] = useState<"confirm" | "default">("default");
+  const displayTitle = title || "Untitled";
+  const deleteButtonLabel =
+    deleteConfirmationState === "default" ? `Delete ${displayTitle}` : `Confirm deletion of ${displayTitle}`;
 
   const handleClick = () => onClick(id);
 
-  const handleDeleteClick = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
-    e.stopPropagation();
+  const handleDeleteClick = () => {
     if (deleteConfirmationState === "default") {
       setDeleteConfirmationState("confirm");
     } else {
@@ -32,21 +34,26 @@ const SidebarItem = memo(({ id, title, onClick, onDelete, isActive }: SidebarIte
   return (
     <li
       key={id}
-      className={classNames(
-        "flex justify-between items-center py-1 px-2 rounded focus:outline-none hover:bg-gray-900/20",
-        { "bg-gray-500/20": isActive }
-      )}
-      role="button"
-      onClick={handleClick}
+      className={classNames("flex items-center rounded-lg transition-colors hover:bg-gray-500/10", {
+        "bg-gray-500/20": isActive,
+      })}
     >
-      <span className="truncate">{title || "Untitled"}</span>
       <button
-        className="flex justify-center items-center px-1.5 h-7 leading-none rounded focus:outline-none hover:bg-gray-900/20"
+        className="flex min-w-0 flex-1 items-center self-stretch rounded-lg px-2 text-left font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600"
+        onClick={handleClick}
+      >
+        <span className="truncate">{displayTitle}</span>
+      </button>
+      <button
+        aria-label={deleteButtonLabel}
+        className="my-1 mr-1 flex size-7 items-center justify-center rounded-md leading-none opacity-60 transition-colors hover:bg-gray-500/15 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
         onClick={handleDeleteClick}
         onMouseLeave={handleMouseLeave}
       >
         {deleteConfirmationState === "default" && <Cross2Icon />}
-        {deleteConfirmationState === "confirm" && <span className="text-xs text-red-500">Sure?</span>}
+        {deleteConfirmationState === "confirm" && (
+          <span className="text-xs font-medium text-red-600">Sure?</span>
+        )}
       </button>
     </li>
   );
@@ -81,13 +88,13 @@ export const Sidebar = memo(() => {
 
   return (
     <div
-      className={classNames("flex flex-col flex-shrink-0 w-64 h-full border-r", {
-        "bg-gray-50": options.renderer.theme === "light",
-        "bg-stone-900 text-stone-200": options.renderer.theme === "dark",
+      className={classNames("flex h-full w-64 shrink-0 flex-col border-r", {
+        "border-gray-200 bg-white text-gray-800": options.renderer.theme === "light",
+        "border-gray-800 bg-gray-950 text-gray-200": options.renderer.theme === "dark",
       })}
     >
       <div className="flex overflow-y-auto flex-col flex-1">
-        <ul className="flex flex-col gap-2 p-2 text-sm">{sidebarItems}</ul>
+        <ul className="flex flex-col gap-1 p-2 text-sm">{sidebarItems}</ul>
       </div>
     </div>
   );

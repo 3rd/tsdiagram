@@ -14,7 +14,7 @@ const documentSchema = z.object({
 export type Document = z.infer<typeof documentSchema>;
 
 const documentStateSchema = z.object({
-  documents: z.array(documentSchema),
+  documents: z.array(documentSchema).min(1),
   currentDocumentId: z.string(),
 });
 export type DocumentsState = z.infer<typeof documentStateSchema>;
@@ -41,6 +41,13 @@ const defaultState: DocumentsState = {
   currentDocumentId: "default",
 };
 
+const parseDocumentState = (data: unknown) => {
+  const state = documentStateSchema.parse(data);
+  if (state.documents.some((document) => document.id === state.currentDocumentId)) return state;
+
+  return { ...state, currentDocumentId: state.documents[0].id };
+};
+
 const serializeState = (state: DocumentsState) => {
   return JSON.stringify({
     documents: state.documents,
@@ -58,13 +65,59 @@ const saveURLState = (state: DocumentsState) => {
     currentDocumentId: state.currentDocumentId,
   };
   const compressed = compressToEncodedURIComponent(serializeState(monoState));
-  location.hash = `#/${compressed}`;
+  history.replaceState(null, "", `#/${compressed}`);
+};
+
+const SAVE_LOCAL_STORAGE_DELAY_MS = 300;
+const SAVE_URL_DELAY_MS = 500;
+
+let localStorageSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let urlSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+const cancelScheduledURLSave = () => {
+  if (urlSaveTimer !== null) {
+    clearTimeout(urlSaveTimer);
+    urlSaveTimer = null;
+  }
+};
+
+const cancelScheduledSaves = () => {
+  if (localStorageSaveTimer !== null) {
+    clearTimeout(localStorageSaveTimer);
+    localStorageSaveTimer = null;
+  }
+  cancelScheduledURLSave();
+};
+
+const scheduleSave = () => {
+  if (localStorageSaveTimer !== null) clearTimeout(localStorageSaveTimer);
+  localStorageSaveTimer = setTimeout(() => {
+    localStorageSaveTimer = null;
+    saveLocalStorageState(documentsStore.state);
+  }, SAVE_LOCAL_STORAGE_DELAY_MS);
+
+  if (urlSaveTimer !== null) clearTimeout(urlSaveTimer);
+  urlSaveTimer = setTimeout(() => {
+    urlSaveTimer = null;
+    saveURLState(documentsStore.state);
+  }, SAVE_URL_DELAY_MS);
+};
+
+const saveImmediately = (state: DocumentsState) => {
+  cancelScheduledSaves();
+  saveLocalStorageState(state);
+  saveURLState(state);
+};
+
+export const flushDocumentURL = () => {
+  cancelScheduledURLSave();
+  saveURLState(documentsStore.state);
 };
 
 const localStorageState = (() => {
   try {
     const data = JSON.parse(localStorage.getItem("documents") ?? "");
-    return documentStateSchema.parse(data);
+    return parseDocumentState(data);
   } catch {}
   return null;
 })();
@@ -75,7 +128,7 @@ const urlState = (() => {
       const encoded = location.hash.slice(2);
       const decompressed = decompressFromEncodedURIComponent(encoded);
       const parsed = JSON.parse(decompressed);
-      return { string: decompressed, state: documentStateSchema.parse(parsed) };
+      return { string: decompressed, state: parseDocumentState(parsed) };
     }
   } catch {}
   return null;
@@ -92,14 +145,12 @@ if (localStorageState && !urlState) {
   saveURLState(localStorageState);
 }
 
-// merge url state into local state
 let hasIngestedForeignState = false;
 if (localStorageState && urlState) {
   const urlDocumentId = urlState.state.currentDocumentId;
   const urlDocument = urlState.state.documents.find((d) => d.id === urlDocumentId);
   const localStorageDocument = localStorageState?.documents.find((d) => d.id === urlDocumentId);
 
-  // if we've seen this document before, update it
   if (urlDocument && localStorageDocument) {
     if (!isEqual(urlDocument, localStorageDocument)) {
       localStorageDocument.title = urlDocument.title;
@@ -109,7 +160,6 @@ if (localStorageState && urlState) {
     combinedState.currentDocumentId = urlDocumentId;
   }
 
-  // if it's a new document, ingest it
   if (urlDocument && !localStorageDocument) {
     combinedState.documents.unshift(urlDocument);
     combinedState.currentDocumentId = urlDocumentId;
@@ -117,16 +167,15 @@ if (localStorageState && urlState) {
   }
 }
 
-export const documentsStore = createStore<DocumentsStore>({
+export const documentsStore = createStore<DocumentsStore>((root) => ({
   ...combinedState,
   get currentDocument() {
-    const document = this.documents.find((doc: Document) => doc.id === this.currentDocumentId);
+    const document = root.documents.find((doc) => doc.id === root.currentDocumentId);
     if (!document) throw new Error("Document not found");
     return document;
   },
   save() {
-    saveLocalStorageState(this);
-    saveURLState(this);
+    scheduleSave();
   },
   create() {
     const id = nanoid();
@@ -138,7 +187,7 @@ export const documentsStore = createStore<DocumentsStore>({
     });
     this.currentDocumentId = id;
     this.sortByLastModified();
-    this.save();
+    saveImmediately(this);
   },
   delete(id: string) {
     if (this.documents.length === 1) {
@@ -159,11 +208,11 @@ export const documentsStore = createStore<DocumentsStore>({
       }
     }
     this.documents = this.documents.filter((d) => d.id !== id);
-    this.save();
+    saveImmediately(this);
   },
   setCurrentDocumentId(id: string) {
     this.currentDocumentId = id;
-    this.save();
+    saveImmediately(this);
   },
   setCurrentDocumentTitle(title: string) {
     this.currentDocument.title = title;
@@ -180,11 +229,17 @@ export const documentsStore = createStore<DocumentsStore>({
   sortByLastModified() {
     this.documents.sort((a, b) => b.lastModified - a.lastModified);
   },
-});
+}));
 
 if (hasIngestedForeignState) {
   documentsStore.state.sortByLastModified();
-  documentsStore.state.save();
+  saveImmediately(documentsStore.state);
 }
+
+window.addEventListener("beforeunload", () => saveImmediately(documentsStore.state));
+window.addEventListener("pagehide", () => saveImmediately(documentsStore.state));
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveImmediately(documentsStore.state);
+});
 
 export const useDocuments = () => useStore(documentsStore);
