@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { Editor } from "./components/Editor";
 import { Header } from "./components/Header";
@@ -14,6 +14,13 @@ function App() {
   const [showPreferences, setShowPreferences] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const options = useUserOptions();
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = options.renderer.theme;
+    const canvasColor = getComputedStyle(document.documentElement).getPropertyValue("--color-canvas");
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    themeColorMeta?.setAttribute("content", canvasColor);
+  }, [options.renderer.theme]);
 
   const handlePreferencesClick = useCallback(() => {
     setShowPreferences((value) => !value);

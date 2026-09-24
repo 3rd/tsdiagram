@@ -2,31 +2,124 @@
 
 @import "tailwindcss";
 
-@theme {
-  --color-gray-50: #f8fafc;
-  --color-gray-100: #f1f5f9;
-  --color-gray-200: #e2e8f0;
-  --color-gray-300: #cbd5e1;
-  --color-gray-400: #94a3b8;
-  --color-gray-500: #64748b;
-  --color-gray-600: #475569;
-  --color-gray-700: #334155;
-  --color-gray-800: #1e293b;
-  --color-gray-900: #0f172a;
-  --color-gray-950: #020617;
+/* tokens */
 
-  --color-primary-50: #f2f7fd;
-  --color-primary-100: #e5edf9;
-  --color-primary-200: #c5d9f2;
-  --color-primary-300: #91b9e8;
-  --color-primary-400: #5795d9;
-  --color-primary-500: #3178c6;
-  --color-primary-600: #215da8;
-  --color-primary-700: #1c4b88;
-  --color-primary-800: #1b4171;
-  --color-primary-900: #1c385e;
-  --color-primary-950: #12233f;
+@theme static {
+  --color-canvas: oklch(97.4% 0 0);
+  --color-pane: oklch(100% 0 0);
+  --color-inset: oklch(95.8% 0 0);
+  --color-raised: oklch(100% 0 0);
+  --color-text: oklch(23% 0 0);
+  --color-text-muted: oklch(43% 0 0);
+  --color-text-faint: oklch(50% 0 0);
+  --color-border: oklch(88.5% 0 0);
+  --color-border-strong: oklch(78% 0 0);
+  --color-overlay: oklch(0% 0 0 / 0.42);
+
+  --color-accent: oklch(52% 0.19 255);
+  --color-accent-hover: oklch(46% 0.19 255);
+  --color-accent-fg: oklch(100% 0 0);
+  --color-selection: oklch(93% 0.04 255);
+  --color-selection-hover: oklch(90.5% 0.055 255);
+
+  --color-error: oklch(52% 0.18 25);
+
+  --color-brand: oklch(52% 0.19 255);
+  --color-brand-strong: oklch(46% 0.19 255);
+  --color-brand-fg: oklch(100% 0 0);
+
+  --color-header: oklch(36% 0.12 255);
+  --color-header-fg: oklch(97% 0.01 255);
+  --color-header-fg-muted: oklch(84% 0.05 255);
+  --color-header-control: oklch(100% 0 0 / 0.1);
+  --color-header-control-hover: oklch(100% 0 0 / 0.18);
+  --color-header-border: oklch(100% 0 0 / 0.14);
+
+  --color-node-selected: color-mix(in oklab, var(--color-brand) 6%, var(--color-pane));
+  --color-divider: color-mix(in oklab, var(--color-text) 11%, transparent);
+
+  --color-code-literal: oklch(55% 0.15 50);
+  --color-edge: oklch(72% 0 0);
+
+  --font-sans:
+    Inter, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue",
+    "Noto Sans", "Liberation Sans", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-weight-strong: 600;
+
+  --text-micro: 11px;
+  --text-micro--line-height: 14px;
+  --text-ui: 12px;
+  --text-ui--line-height: 16px;
+  --text-body: 13px;
+  --text-body--line-height: 18px;
+  --text-title: 14px;
+  --text-title--line-height: 20px;
+  --text-title--letter-spacing: -0.01em;
+
+  --radius-sm: 4px;
+  --radius-control: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-fade: cubic-bezier(0, 0, 0.58, 1);
 }
+
+@theme inline {
+  --color-control-hover: var(--color-inset);
+}
+
+:root {
+  color-scheme: light;
+
+  --shadow-card: 0 1px 1px oklch(0% 0 0 / 0.03);
+  --shadow-popover: 0 12px 32px oklch(0% 0 0 / 0.14);
+
+  --duration-instant: 0ms;
+  --duration-hover: 120ms;
+  --duration-quick: 140ms;
+  --duration-fade: 180ms;
+  --duration-enter: 200ms;
+  --duration-walk: 220ms;
+  --duration-move: 300ms;
+}
+
+:root[data-theme="dark"],
+.theme-dark {
+  color-scheme: dark;
+
+  --color-canvas: oklch(19% 0 0);
+  --color-pane: oklch(26% 0 0);
+  --color-inset: oklch(30% 0 0);
+  --color-raised: oklch(28.5% 0 0);
+  --color-text: oklch(93% 0 0);
+  --color-text-muted: oklch(79% 0 0);
+  --color-text-faint: oklch(68% 0 0);
+  --color-border: oklch(34.5% 0 0);
+  --color-border-strong: oklch(43% 0 0);
+  --color-overlay: oklch(0% 0 0 / 0.62);
+
+  --color-accent: oklch(74% 0.15 255);
+  --color-accent-hover: oklch(80% 0.15 255);
+  --color-accent-fg: oklch(16.5% 0 0);
+  --color-selection: oklch(34% 0.065 255);
+  --color-selection-hover: oklch(37.5% 0.08 255);
+
+  --color-error: oklch(74% 0.13 22);
+
+  --color-node-selected: color-mix(in oklab, var(--color-brand) 16%, var(--color-pane));
+  --color-divider: color-mix(in oklab, var(--color-text) 12%, transparent);
+
+  --color-code-literal: oklch(78% 0.12 60);
+  --color-edge: oklch(58% 0 0);
+
+  --shadow-card: none;
+  --shadow-popover: 0 14px 36px oklch(0% 0 0 / 0.5);
+}
+
+/* base */
 
 @layer base {
   *,
@@ -34,19 +127,67 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: var(--color-border, currentcolor);
   }
-}
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: var(--font-weight-strong);
+  }
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  th,
+  b,
+  strong {
+    font-weight: 500;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  select {
+    background-color: var(--color-pane);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: var(--color-border-strong);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-faint);
+  }
 }
 
 html {
@@ -59,67 +200,132 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  color: var(--color-gray-950);
-  background: var(--color-gray-50);
+  font: 13px/18px var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--color-text);
+  background: var(--color-canvas);
 }
+
+code,
+pre {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root,
+  :root[data-theme="dark"],
+  .theme-dark {
+    --color-border: var(--color-border-strong);
+    --color-text-faint: var(--color-text-muted);
+  }
+
+  :focus-visible {
+    outline-width: 3px;
+  }
+}
+
+/* primitives */
 
 @layer components {
   .dialog-backdrop {
-    @apply fixed inset-0 bg-gray-950/60 backdrop-blur-[2px] transition-opacity;
+    @apply fixed inset-0 bg-overlay backdrop-blur-[4px];
   }
 
   .dialog-panel {
-    @apply flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-left shadow-2xl;
+    @apply flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border-strong bg-raised text-left text-text shadow-(--shadow-popover);
   }
 
   .dialog-title {
-    @apply border-b border-blue-900 bg-blue-800 px-5 py-3 text-lg font-semibold leading-6 text-white;
+    @apply px-5 pt-5 text-title font-strong text-text;
   }
 
   .dialog-body {
-    @apply flex flex-col gap-5 overflow-y-auto px-5 py-5;
+    @apply flex flex-col gap-4 overflow-y-auto px-5 py-4;
   }
 
   .dialog-footer {
-    @apply flex justify-end border-t border-gray-200 bg-gray-50 px-5 py-3;
+    @apply flex justify-end gap-2 border-t border-border px-5 py-3;
   }
 
   .field-group {
-    @apply flex flex-col gap-1.5;
+    @apply flex flex-col gap-1;
   }
 
   .field-label {
-    @apply block text-sm font-medium leading-5 text-gray-950;
+    @apply block text-ui font-medium text-text-muted;
   }
 
   .field-control {
-    @apply block h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-950 shadow-sm outline-none transition-colors focus:border-blue-600 focus:ring-2 focus:ring-blue-100;
+    @apply block h-7 w-full rounded-control border border-border bg-pane px-2 text-body text-text transition-[border-color] duration-(--duration-hover) ease-out placeholder:text-text-faint hover:border-border-strong focus:border-accent;
   }
 
   .check-row {
-    @apply flex items-center gap-2.5;
+    @apply flex items-center gap-2;
   }
 
   .check-input {
-    @apply size-4 shrink-0 accent-blue-600;
+    @apply size-3.5 shrink-0 accent-accent;
   }
 
   .check-label {
-    @apply select-none text-base font-normal leading-6 text-gray-950;
+    @apply select-none text-body text-text;
+  }
+
+  .switch-input {
+    @apply relative my-[5px] h-3.5 w-6 shrink-0 cursor-pointer appearance-none rounded-full bg-inset shadow-[inset_0_0_0_1px_var(--color-border-strong)] transition-[background-color,box-shadow] duration-(--duration-quick) ease-out checked:bg-accent checked:shadow-none;
+  }
+
+  .switch-input::before {
+    @apply absolute top-0.5 left-0.5 size-2.5 rounded-full bg-text-faint transition-[transform,background-color] duration-(--duration-quick) ease-out content-[''];
+  }
+
+  .switch-input:checked::before {
+    @apply translate-x-2.5 bg-accent-fg;
   }
 
   .button-primary {
-    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-700/90 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600;
+    @apply inline-flex h-7 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-control bg-accent px-[9px] text-ui font-medium text-accent-fg transition-[color,background-color,border-color,box-shadow] duration-(--duration-hover) ease-out hover:bg-accent-hover active:duration-(--duration-instant) [&_svg]:size-3.5;
   }
 
   .button-secondary {
-    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600;
+    @apply inline-flex h-7 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-control border border-border bg-pane px-[9px] text-ui font-medium text-text transition-[color,background-color,border-color,box-shadow] duration-(--duration-hover) ease-out hover:border-border-strong hover:bg-control-hover active:duration-(--duration-instant) [&_svg]:size-3.5;
   }
 }
 
 .checkered {
-  background-image: linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee 100%),
-    linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee 100%);
+  background-color: var(--color-pane);
+  background-image:
+    linear-gradient(
+      45deg,
+      var(--color-inset) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-inset) 75%,
+      var(--color-inset) 100%
+    ),
+    linear-gradient(
+      45deg,
+      var(--color-inset) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-inset) 75%,
+      var(--color-inset) 100%
+    );
   background-size: 20px 20px;
   background-position:
     0 0,
@@ -127,5 +333,5 @@ body {
 }
 
 .vim-status input {
-  @apply bg-gray-100;
+  @apply bg-inset;
 }

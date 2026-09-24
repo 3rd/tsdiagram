@@ -1,5 +1,5 @@
 import { ComponentProps, memo, useCallback, useEffect, useRef } from "react";
-import MonacoEditor, { loader, useMonaco } from "@monaco-editor/react";
+import MonacoEditor, { loader } from "@monaco-editor/react";
 import * as monacoRuntime from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
@@ -7,7 +7,6 @@ import { initVimMode, InitVimModeResult } from "monaco-vim";
 import { useStore } from "statelift";
 import { documentsStore } from "../stores/documents";
 import { useUserOptions } from "../stores/user-options";
-import { themes } from "../themes";
 
 self.MonacoEnvironment = {
   getWorker: (_workerId, label) =>
@@ -17,6 +16,11 @@ loader.config({ monaco: monacoRuntime });
 
 type MonacoMountHandler = ComponentProps<typeof MonacoEditor>["onMount"];
 type IStandaloneCodeEditor = Parameters<Exclude<MonacoMountHandler, undefined>>[0];
+
+const EDITOR_THEME_NAMES = {
+  light: "vs",
+  dark: "vs-dark",
+} as const;
 
 const editorOptions: ComponentProps<typeof MonacoEditor>["options"] = {
   minimap: { enabled: false },
@@ -33,7 +37,6 @@ export const Editor = memo(() => {
   const options = useUserOptions();
   const currentDocumentSource = useStore(documentsStore, (state) => state.currentDocument.source);
 
-  const monaco = useMonaco();
   const editorRef = useRef<IStandaloneCodeEditor | null>(null);
   const vimModeRef = useRef<InitVimModeResult | null>(null);
   const vimStatusLineRef = useRef<HTMLDivElement>(null);
@@ -43,15 +46,6 @@ export const Editor = memo(() => {
   const handleSourceChange = useCallback((value: string | undefined) => {
     documentsStore.state.setCurrentDocumentSource(value ?? "");
   }, []);
-
-  useEffect(() => {
-    if (!monaco) return;
-    const themeConfig = themes[(options.editor.theme as keyof typeof themes) ?? "vsLight"] as Parameters<
-      typeof monaco.editor.defineTheme
-    >[1];
-    monaco.editor.defineTheme("theme", themeConfig);
-    monaco.editor.setTheme("theme");
-  }, [monaco, options.editor.theme]);
 
   const handleMount: MonacoMountHandler = (mountedEditor, mountedMonaco) => {
     editorRef.current = mountedEditor;
@@ -93,6 +87,7 @@ export const Editor = memo(() => {
       <MonacoEditor
         defaultLanguage="typescript"
         options={editorOptions}
+        theme={EDITOR_THEME_NAMES[options.renderer.theme]}
         value={currentDocumentSource}
         onChange={handleSourceChange}
         onMount={handleMount}
@@ -100,7 +95,7 @@ export const Editor = memo(() => {
       {isVimMode && (
         <div
           ref={vimStatusLineRef}
-          className="border-t border-gray-200 bg-gray-100 px-2 py-1 text-sm text-gray-900 vim-status"
+          className="border-t border-border bg-inset px-2 py-1 font-mono text-ui text-text vim-status"
         />
       )}
     </div>

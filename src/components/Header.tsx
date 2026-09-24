@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { flushSync } from "react-dom";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -8,7 +9,6 @@ import {
   GearIcon,
   Share1Icon,
 } from "@radix-ui/react-icons";
-import classNames from "classnames";
 import { useStore } from "statelift";
 import { documentsStore, flushDocumentURL } from "../stores/documents";
 import { optionsStore, useUserOptions } from "../stores/user-options";
@@ -25,6 +25,21 @@ const RELATED_SITES = [
     href: "https://sneakydomains.com",
   },
 ] as const;
+
+const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const supportsViewTransitionTypes = () =>
+  typeof ViewTransition !== "undefined" && "types" in ViewTransition.prototype;
+
+const animateLayoutChange = (update: () => void) => {
+  const canAnimateLayout = supportsViewTransitionTypes() && !prefersReducedMotion();
+  if (!canAnimateLayout) {
+    update();
+    return;
+  }
+
+  document.startViewTransition({ update: () => flushSync(update), types: ["layout"] });
+};
 
 type HeaderProps = {
   onPreferencesClick?: () => void;
@@ -45,8 +60,10 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
   };
 
   const handleSidebarButtonClick = () => {
-    optionsStore.state.general.sidebarOpen = !optionsStore.state.general.sidebarOpen;
-    optionsStore.state.save();
+    animateLayoutChange(() => {
+      optionsStore.state.general.sidebarOpen = !optionsStore.state.general.sidebarOpen;
+      optionsStore.state.save();
+    });
   };
 
   const handleNewDocumentClick = () => {
@@ -54,19 +71,14 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
   };
 
   return (
-    <header className="flex h-10 shrink-0 bg-blue-900 text-gray-50 shadow-sm">
+    <header className="relative z-10 box-content flex h-9 shrink-0 border-b border-header-border bg-header text-header-fg">
       {options.general.sidebarOpen && (
-        <div
-          className={classNames("flex h-10 w-64 shrink-0 items-center px-2.5", {
-            "bg-white text-gray-950": options.renderer.theme === "light",
-            "bg-gray-950 text-gray-100": options.renderer.theme === "dark",
-          })}
-        >
+        <div className="-mb-px flex h-[calc(--spacing(9)+1px)] w-64 shrink-0 items-center [view-transition-name:sidebar-header] border-r border-b border-border bg-pane px-2.5 text-text">
           <div className="flex w-full items-center justify-between gap-2">
-            <span className="text-sm font-semibold leading-none">Documents</span>
+            <span className="text-title font-strong">Documents</span>
             <button
               aria-label="Create new document"
-              className="flex size-7 items-center justify-center rounded-md transition-colors hover:bg-gray-500/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="flex size-7 items-center justify-center rounded-control text-text-muted transition-[color,background-color] duration-(--duration-hover) ease-out hover:bg-control-hover hover:text-text active:duration-(--duration-instant)"
               onClick={handleNewDocumentClick}
             >
               <FilePlusIcon />
@@ -75,44 +87,42 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2">
+      <div className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2 [view-transition-name:toolbar]">
         <div className="flex items-center gap-1.5">
           <button
             aria-label={options.general.sidebarOpen ? "Hide document sidebar" : "Show document sidebar"}
-            className="flex size-7 items-center justify-center rounded-md transition-colors hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="flex size-7 items-center justify-center rounded-control text-header-fg-muted transition-[color,background-color] duration-(--duration-hover) ease-out hover:bg-header-control-hover hover:text-header-fg focus-visible:outline-header-fg active:duration-(--duration-instant)"
             onClick={handleSidebarButtonClick}
           >
-            {options.general.sidebarOpen ?
-              <ArrowLeftIcon />
-            : <ArrowRightIcon />}
+            {options.general.sidebarOpen ? <ArrowLeftIcon /> : <ArrowRightIcon />}
           </button>
 
           <div className="hidden items-center sm:flex">
             <div className="relative group">
-              <div className="flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-base font-bold leading-none transition-colors hover:bg-white/10">
-                <span className="mr-0.5 rounded-sm px-1 py-0.5" style={{ background: "#3178c6" }}>
-                  TS
+              <div className="flex h-7 cursor-pointer items-center gap-1.5 rounded-control px-1.5 text-body font-strong transition-[background-color] duration-(--duration-hover) ease-out hover:bg-header-control">
+                <span className="flex h-5 items-center rounded-sm bg-brand px-1 text-brand-fg">
+                  <span className="[text-box:trim-both_cap_alphabetic]">TS</span>
                 </span>
-                <span>Diagram</span>
-                <ChevronDownIcon className="size-3.5 opacity-60" />
+                <span className="[text-box:trim-both_cap_alphabetic]">Diagram</span>
+                <ChevronDownIcon className="size-3.5 -translate-y-px text-header-fg-muted" />
               </div>
 
-              <div className="absolute left-0 top-full invisible z-50 pt-2 w-64 opacity-0 transition-all duration-150 ease-out origin-top-left scale-95 group-hover:visible group-hover:opacity-100 group-hover:scale-100">
-                <div className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-blue-950 shadow-xl">
+              <div className="invisible absolute top-full left-0 z-50 w-64 -translate-y-[3px] pt-1.5 opacity-0 transition-[opacity,transform,visibility] duration-(--duration-quick) ease-out group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
+                <div className="flex flex-col gap-0.5 rounded-lg border border-border-strong bg-raised p-1 text-text shadow-(--shadow-popover)">
                   {RELATED_SITES.map((site) => (
                     <a
                       key={site.name}
-                      className="flex gap-2 items-center py-2.5 px-3 transition-colors hover:bg-white/10"
+                      className="flex items-center gap-2 rounded-[5px] px-2 py-1.5 transition-[background-color] duration-(--duration-hover) ease-out hover:bg-selection"
                       href={site.href}
                       rel="noopener noreferrer"
                       target="_blank"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex gap-1.5 items-center">
-                          <span className="font-medium text-white">{site.name}</span>
-                          <ExternalLinkIcon className="w-3 h-3 text-blue-300" />
+                          <span className="text-ui font-medium text-text">{site.name}</span>
+                          <ExternalLinkIcon className="size-3 text-text-faint" />
                         </div>
-                        <p className="mt-0.5 text-xs text-blue-200">{site.description}</p>
+                        <p className="text-ui text-text-faint">{site.description}</p>
                       </div>
                     </a>
                   ))}
@@ -121,7 +131,7 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
             </div>
 
             <iframe
-              className="ml-3 opacity-40 transition-opacity hover:opacity-100"
+              className="ml-3 opacity-40 scheme-light transition-opacity duration-(--duration-hover) ease-out hover:opacity-100"
               height="20"
               sandbox="allow-scripts allow-popups"
               src="https://ghbtns.com/github-btn.html?user=3rd&repo=tsdiagram&type=star&count=true"
@@ -132,7 +142,7 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
         </div>
 
         <input
-          className="h-7 min-w-0 flex-1 truncate rounded-md bg-transparent px-2 text-left text-sm font-medium outline-none transition-colors hover:text-blue-200 focus:bg-white/10 focus:text-white sm:text-center"
+          className="h-7 min-w-0 flex-1 truncate rounded-control bg-transparent px-2 text-left text-body font-medium text-header-fg outline-none transition-[background-color] duration-(--duration-hover) ease-out placeholder:text-header-fg-muted hover:bg-header-control focus:bg-header-control-hover sm:text-center"
           placeholder="Untitled"
           type="text"
           value={documentTitle}
@@ -142,7 +152,7 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
         <div className="flex shrink-0 items-center gap-1">
           <button
             aria-label="Share"
-            className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/10 px-2 text-sm font-medium leading-none shadow-sm transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-control border border-header-border bg-header-control px-[9px] text-ui font-medium text-header-fg transition-[background-color] duration-(--duration-hover) ease-out hover:bg-header-control-hover focus-visible:outline-header-fg active:duration-(--duration-instant) [&_svg]:size-3.5"
             onClick={handleShareClick}
           >
             <Share1Icon /> <span className="hidden sm:inline">Share</span>
@@ -150,7 +160,7 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
 
           <button
             aria-label="Preferences"
-            className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/10 px-2 text-sm font-medium leading-none shadow-sm transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-control border border-header-border bg-header-control px-[9px] text-ui font-medium text-header-fg transition-[background-color] duration-(--duration-hover) ease-out hover:bg-header-control-hover focus-visible:outline-header-fg active:duration-(--duration-instant) [&_svg]:size-3.5"
             onClick={onPreferencesClick}
           >
             <GearIcon /> <span className="hidden sm:inline">Preferences</span>

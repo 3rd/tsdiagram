@@ -10,3 +10,75 @@
 .panels-vertical > #editor {
   order: 1;
 }
+
+.panel-separator {
+  position: relative;
+}
+
+.panel-separator::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  transition: background-color var(--duration-hover) var(--ease-out);
+}
+
+.panels-vertical > .panel-separator::after {
+  inset: 2px 0;
+}
+
+.panel-separator[data-separator="hover"]::after {
+  background-color: var(--color-border-strong);
+}
+
+.panel-separator[data-separator="active"]::after {
+  background-color: var(--color-accent);
+}
+
+@keyframes sidebar-leave {
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+@keyframes sidebar-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+:root:active-view-transition-type(layout)::view-transition-group(root) {
+  animation: none;
+}
+
+:root:active-view-transition-type(layout)::view-transition-old(sidebar),
+:root:active-view-transition-type(layout)::view-transition-old(sidebar-header) {
+  animation: sidebar-leave var(--duration-walk) var(--ease-out) both;
+}
+
+:root:active-view-transition-type(layout)::view-transition-new(sidebar),
+:root:active-view-transition-type(layout)::view-transition-new(sidebar-header) {
+  animation: sidebar-enter var(--duration-move) var(--ease-out) both;
+}
+
+:root:active-view-transition-type(layout)::view-transition-group(main),
+:root:active-view-transition-type(layout)::view-transition-group(toolbar) {
+  animation-duration: var(--duration-move);
+  animation-timing-function: var(--ease-out);
+}
+
+:root:active-view-transition-type(layout)::view-transition-old(main),
+:root:active-view-transition-type(layout)::view-transition-old(toolbar) {
+  animation: none;
+  opacity: 0;
+}
+
+:root:active-view-transition-type(layout)::view-transition-new(main),
+:root:active-view-transition-type(layout)::view-transition-new(toolbar) {
+  width: 100%;
+  height: 100%;
+  animation: none;
+  object-fit: none;
+  object-position: left top;
+}

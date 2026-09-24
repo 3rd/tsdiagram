@@ -2,7 +2,6 @@ import { Fragment, useRef } from "react";
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { optionsStore, useUserOptions } from "../stores/user-options";
-import { themes } from "../themes";
 
 export type PreferencesProps = {
   isOpen: boolean;
@@ -14,13 +13,9 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
   const options = useUserOptions();
   const isMobile = useIsMobile();
 
-  const handleEditorThemeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    optionsStore.state.editor.theme = event.target.value as keyof typeof themes;
-    optionsStore.state.save();
-  };
-
-  const handleRendererThemeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    optionsStore.state.renderer.theme = event.target.value as "dark" | "light";
+  const handleDarkThemeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const isDark = event.target.checked;
+    optionsStore.state.renderer.theme = isDark ? "dark" : "light";
     optionsStore.state.save();
   };
 
@@ -63,10 +58,10 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
       <Dialog as="div" className="relative z-50" initialFocus={cancelButtonRef} onClose={onClose}>
         <TransitionChild
           as={Fragment}
-          enter="ease-out duration-300"
+          enter="ease-fade duration-(--duration-fade)"
           enterFrom="opacity-0"
           enterTo="opacity-100"
-          leave="ease-in duration-200"
+          leave="ease-fade duration-(--duration-quick)"
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
@@ -77,12 +72,12 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
           <div className="flex justify-center items-end p-4 min-h-full text-center sm:items-center sm:p-0">
             <TransitionChild
               as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              enter="ease-out duration-(--duration-enter)"
+              enterFrom="opacity-0 translate-y-4 sm:translate-y-1 sm:scale-98"
               enterTo="opacity-100 translate-y-0 sm:scale-100"
-              leave="ease-in duration-200"
+              leave="ease-out duration-(--duration-quick)"
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
-              leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              leaveTo="opacity-0 translate-y-4 sm:translate-y-1 sm:scale-98"
             >
               <DialogPanel className="dialog-panel">
                 <DialogTitle as="h3" className="dialog-title">
@@ -122,42 +117,21 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="field-group min-w-0">
-                      <label className="field-label" htmlFor="editor-theme">
-                        Editor theme
-                      </label>
-                      <select
-                        className="field-control"
-                        id="editor-theme"
-                        value={options.editor.theme}
-                        onChange={handleEditorThemeChange}
-                      >
-                        {Object.keys(themes).map((theme) => (
-                          <option key={theme} value={theme}>
-                            {themes[theme as keyof typeof themes].name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="field-group min-w-0">
-                      <label className="field-label" htmlFor="renderer-theme">
-                        Renderer theme
-                      </label>
-                      <select
-                        className="field-control"
-                        id="renderer-theme"
-                        value={options.renderer.theme}
-                        onChange={handleRendererThemeChange}
-                      >
-                        <option value="light">Light</option>
-                        <option value="dark">Dark</option>
-                      </select>
-                    </div>
+                  <div className="check-row">
+                    <input
+                      checked={options.renderer.theme === "dark"}
+                      className="switch-input"
+                      id="dark-theme"
+                      role="switch"
+                      type="checkbox"
+                      onChange={handleDarkThemeChange}
+                    />
+                    <label className="check-label" htmlFor="dark-theme">
+                      Dark theme
+                    </label>
                   </div>
 
-                  <div className="flex flex-col gap-3 border-t border-gray-200 pt-4">
+                  <div className="flex flex-col gap-2 border-t border-dashed border-border pt-4">
                     {!isMobile && (
                       <div className="check-row">
                         <input
@@ -168,7 +142,7 @@ export const Preferences = ({ isOpen, onClose }: PreferencesProps) => {
                           onChange={handleMinimapChange}
                         />
                         <label className="check-label" htmlFor="enable-minimap">
-                          Enable Minimap
+                          Show minimap
                         </label>
                       </div>
                     )}

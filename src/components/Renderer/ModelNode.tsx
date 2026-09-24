@@ -10,7 +10,6 @@ import {
   TypeTextSegment,
 } from "../../lib/parser/model-types";
 import { graphStore, useIsBadgeHubHovered, useNodeDecoration } from "../../stores/graph";
-import { useUserOptions } from "../../stores/user-options";
 import { fieldHasSourceEdge, getTypeAliasHeaderDependencies } from "./layout";
 import { usePortColor } from "./port-colors";
 
@@ -26,34 +25,33 @@ const isModelReference = (value: unknown): value is Model => {
 };
 
 const MODEL_NODE_CLASSES = {
-  root: "max-w-md rounded-t-lg shadow-md",
+  root: "max-w-md rounded-lg border shadow-(--shadow-card)",
   field: {
-    root: "odd:bg-white even:bg-gray-50 text-sm leading-5",
-    keyCell: "py-1 pr-4 pl-2 text-gray-950 align-top",
-    inheritedName: "text-gray-500",
-    accessorPrefix: "text-xs text-gray-500",
+    root: "text-body [&+tr>td]:border-t [&+tr>td]:border-divider",
+    keyCell: "py-1 pr-4 pl-2 text-text align-top",
+    inheritedName: "text-text-faint",
     typeCell: "relative py-1 pr-2 break-words",
-    defaultTypeColor: "text-gray-600",
-    modelTypeColor: "text-blue-700",
-    primitiveTypeColor: "text-gray-700",
-    literalTypeColor: "text-orange-700",
+    defaultTypeColor: "text-text-faint",
+    modelTypeColor: "text-accent",
+    primitiveTypeColor: "text-text-muted",
+    literalTypeColor: "text-code-literal",
   },
 } as const;
 
 const SourcePort = ({ portId }: { portId: string }) => {
-  const color = usePortColor(portId) ?? "var(--color-blue-700)";
+  const color = usePortColor(portId) ?? "var(--color-accent)";
   return (
     <svg className="model-node-port" aria-hidden>
-      <circle cx="4" cy="4" fill="#fff" r="3.6" />
-      <circle cx="4" cy="4" fill="#fff" r="2.4" stroke={color} strokeWidth="1.2" />
+      <circle className="fill-pane" cx="4" cy="4" r="3.6" />
+      <circle className="fill-pane" cx="4" cy="4" r="2.4" stroke={color} strokeWidth="1.2" />
     </svg>
   );
 };
 const TargetPort = ({ portId }: { portId: string }) => {
-  const color = usePortColor(portId) ?? "var(--color-blue-700)";
+  const color = usePortColor(portId) ?? "var(--color-accent)";
   return (
     <svg className="model-node-port" aria-hidden>
-      <circle cx="4" cy="4" fill="#fff" r="3.6" />
+      <circle className="fill-pane" cx="4" cy="4" r="3.6" />
       <circle cx="4" cy="4" fill={color} r="3" />
     </svg>
   );
@@ -78,9 +76,9 @@ const HubBadgePill = ({ refModel }: { refModel: Model }) => {
   return (
     <span
       className={classNames(
-        "cursor-default rounded-md px-1.5 py-0.5 text-xs font-medium",
-        isHovered ? "bg-blue-200 text-blue-900" : "bg-gray-200",
-        !isHovered && MODEL_NODE_CLASSES.field.modelTypeColor
+        "cursor-default rounded-sm px-[5px] py-px text-micro font-medium",
+        isHovered ? "bg-selection-hover" : "bg-inset",
+        MODEL_NODE_CLASSES.field.modelTypeColor
       )}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -116,7 +114,6 @@ const TypeText = ({ segments }: { segments: TypeTextSegment[] }) => (
 
 const ModelNodeContent = ({ id, data }: ModelNodeProps) => {
   const { model, badgeHubIds } = data;
-  const options = useUserOptions();
   const decoration = useNodeDecoration(model);
 
   const hasSourceHandle = useMemo(() => {
@@ -163,31 +160,24 @@ const ModelNodeContent = ({ id, data }: ModelNodeProps) => {
   }, [id, renderedHandleKey, updateNodeInternals]);
 
   const headerClasses = useMemo(() => {
-    const isDarkTheme = options.renderer.theme === "dark";
-    const isLightTheme = options.renderer.theme === "light";
     const selected = decoration === "selected";
     const highlighted = decoration === "highlighted";
+    const isHot = selected || highlighted;
     return {
       root: classNames(
         MODEL_NODE_CLASSES.root,
-        model.schema.length === 0 && "rounded-b-lg",
+        selected ? "bg-node-selected" : "bg-pane",
+        isHot ? "border-accent" : "border-border",
         decoration === "dimmed" && "opacity-50"
       ),
       header: classNames(
-        "relative rounded-t-lg px-2 py-1 font-medium text-white",
-        selected && "bg-indigo-600",
-        isLightTheme && !selected && (highlighted ? "bg-blue-500" : "bg-blue-700"),
-        isDarkTheme && !selected && (highlighted ? "bg-blue-500" : "bg-blue-600"),
-        model.schema.length === 0 ? "rounded-b-lg" : "svg-export-header"
+        "relative -mx-px -mt-px rounded-t-lg px-2 py-1 text-title font-strong text-brand-fg",
+        selected ? "bg-brand-strong" : "bg-brand",
+        model.schema.length === 0 ? "-mb-px rounded-b-lg" : "svg-export-header"
       ),
-      fieldsWrapper: classNames(
-        "model-node-fields flex flex-col border-x border-b bg-white",
-        selected && "border-indigo-600",
-        highlighted && "border-blue-500",
-        !selected && !highlighted && "border-gray-300"
-      ),
+      fieldsWrapper: "model-node-fields flex flex-col",
     };
-  }, [decoration, model.schema.length, options.renderer.theme]);
+  }, [decoration, model.schema.length]);
 
   const fieldRows = useMemo(() => {
     return model.schema.map((field, fieldIndex) => {
@@ -206,7 +196,7 @@ const ModelNodeContent = ({ id, data }: ModelNodeProps) => {
         keyFragments.push(
           <span
             key={`${model.id}-${field.name}-accessor`}
-            className={MODEL_NODE_CLASSES.field.accessorPrefix}
+            className={MODEL_NODE_CLASSES.field.defaultTypeColor}
           >
             {field.accessor}{" "}
           </span>

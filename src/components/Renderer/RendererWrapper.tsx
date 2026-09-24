@@ -50,7 +50,7 @@ export const RendererWrapper = () => {
         handleWorkerFailure(worker);
       }
     },
-    [handleWorkerFailure],
+    [handleWorkerFailure]
   );
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export const RendererWrapper = () => {
         // keep the previous diagram when a parse fails instead of tearing down the canvas
         console.error(`[parser.worker] ${error}`);
         setParsed((previous) =>
-          previous?.documentId === documentId ? previous : { documentId, models: EMPTY_MODELS },
+          previous?.documentId === documentId ? previous : { documentId, models: EMPTY_MODELS }
         );
       }
       const pendingRequest = pendingRequestRef.current;
@@ -89,7 +89,7 @@ export const RendererWrapper = () => {
     worker.onerror = () => {
       if (active) handleWorkerFailure(worker);
     };
-    worker.addEventListener('messageerror', () => {
+    worker.addEventListener("messageerror", () => {
       if (active) handleWorkerFailure(worker);
     });
     workerRef.current = worker;
@@ -108,7 +108,10 @@ export const RendererWrapper = () => {
 
   if (workerError !== null) {
     return (
-      <div className="flex flex-1 justify-center items-center p-4 text-red-700" role="alert">
+      <div
+        className="flex flex-1 items-center justify-center bg-canvas p-4 text-body text-error"
+        role="alert"
+      >
         {workerError}
       </div>
     );

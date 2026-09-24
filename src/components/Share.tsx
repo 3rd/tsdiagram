@@ -107,7 +107,7 @@ const ShareContent = memo(() => {
         if (exportDepthRef.current === 0) graphStore.state.svgExportMode = false;
       }
     },
-    [reactFlowStore],
+    [reactFlowStore]
   );
 
   const getCurrentSVGSource = useCallback(async () => {
@@ -226,7 +226,7 @@ const ShareContent = memo(() => {
   return (
     <>
       {previewImageURL && (
-        <div className="flex justify-center border-b border-gray-200 bg-gray-50 p-3 checkered">
+        <div className="checkered mt-4 flex justify-center border-y border-border p-3">
           <img alt="diagram" className="h-auto max-h-[22vh] w-auto max-w-full" src={previewImageURL} />
         </div>
       )}
@@ -234,7 +234,7 @@ const ShareContent = memo(() => {
       <div className="dialog-body">
         <div className="field-group">
           <label className="field-label" htmlFor="share-link">
-            Share a link to this diagram:
+            Link
           </label>
           <div className="flex">
             <div className="relative flex min-w-0 grow items-stretch focus-within:z-10">
@@ -259,9 +259,9 @@ const ShareContent = memo(() => {
         </div>
 
         <div className="field-group">
-          <label className="field-label">Export as SVG:</label>
+          <label className="field-label">Export SVG</label>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button className="button-primary" type="button" onClick={handleCopySVG}>
+            <button className="button-secondary" type="button" onClick={handleCopySVG}>
               <CopyIcon />
               {hasCopiedSVG ? "Copied" : "Copy to clipboard"}
             </button>
@@ -272,7 +272,7 @@ const ShareContent = memo(() => {
             </button>
           </div>
           {exportError && (
-            <p className="text-sm text-red-600" role="alert">
+            <p className="text-ui text-error" role="alert">
               {exportError}
             </p>
           )}
@@ -290,10 +290,10 @@ export const Share = ({ isOpen, onClose }: ShareProps) => {
       <Dialog as="div" className="relative z-50" initialFocus={cancelButtonRef} onClose={onClose}>
         <TransitionChild
           as={Fragment}
-          enter="ease-out duration-300"
+          enter="ease-fade duration-(--duration-fade)"
           enterFrom="opacity-0"
           enterTo="opacity-100"
-          leave="ease-in duration-200"
+          leave="ease-fade duration-(--duration-quick)"
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
@@ -304,12 +304,12 @@ export const Share = ({ isOpen, onClose }: ShareProps) => {
           <div className="flex justify-center items-end p-4 min-h-full text-center sm:items-center sm:p-0">
             <TransitionChild
               as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              enter="ease-out duration-(--duration-enter)"
+              enterFrom="opacity-0 translate-y-4 sm:translate-y-1 sm:scale-98"
               enterTo="opacity-100 translate-y-0 sm:scale-100"
-              leave="ease-in duration-200"
+              leave="ease-out duration-(--duration-quick)"
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
-              leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              leaveTo="opacity-0 translate-y-4 sm:translate-y-1 sm:scale-98"
             >
               <DialogPanel className="dialog-panel">
                 <DialogTitle as="h3" className="dialog-title">

@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  ComponentNoneIcon,
   EnterFullScreenIcon,
   ExitFullScreenIcon,
   HeightIcon,
@@ -91,13 +92,13 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
   const options = useUserOptions();
   const lowDetail = useStore(selectLowDetail);
   const previousBadgeHubIdsRef = useRef<{ documentId: string; ids: ReadonlySet<string> } | undefined>(
-    undefined,
+    undefined
   );
   const badgeHubIds = useMemo(() => {
     const previousBadgeHubIds =
-      previousBadgeHubIdsRef.current?.documentId === documentId ?
-        previousBadgeHubIdsRef.current.ids
-      : EMPTY_BADGE_HUB_IDS;
+      previousBadgeHubIdsRef.current?.documentId === documentId
+        ? previousBadgeHubIdsRef.current.ids
+        : EMPTY_BADGE_HUB_IDS;
     return options.renderer.badgeHubs ? computeBadgeHubIds(models, previousBadgeHubIds) : EMPTY_BADGE_HUB_IDS;
   }, [documentId, models, options.renderer.badgeHubs]);
   useEffect(() => {
@@ -112,19 +113,18 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
       padding: 0.3,
       duration: shouldAnimate ? 500 : 0,
     }),
-    [shouldAnimate],
+    [shouldAnimate]
   );
   const sharedEdgeProps = useMemo<Omit<Partial<ModelEdge>, "data">>(
     () => ({
       type: "custom",
       markerEnd: { type: MarkerType.ArrowClosed },
       style: {
-        stroke: options.renderer.theme === "light" ? "#94a3b8" : "#64748b",
         strokeWidth: 1,
         markerEndId: "arrow",
       },
     }),
-    [options.renderer.theme],
+    []
   );
   const getEdgeColorProps = useMemo(() => {
     const propsByColor = new Map<string, Pick<ModelEdge, "markerEnd" | "style">>();
@@ -140,10 +140,6 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
       return props;
     };
   }, [sharedEdgeProps]);
-  const backgroundForeground = useMemo(() => {
-    if (options.renderer.theme === "dark") return "#475569";
-    return "#cbd5e1";
-  }, [options.renderer.theme]);
 
   const parsedNodes = useMemo(() => extractModelNodes(models, badgeHubIds), [models, badgeHubIds]);
   const modelEdges = useMemo(() => extractModelEdges(models, badgeHubIds), [models, badgeHubIds]);
@@ -175,10 +171,10 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
   }, [documentId]);
   const edgeColors = useMemo(
     () =>
-      options.renderer.colorizeEdges ?
-        assignEdgeColors(modelEdges, EDGE_COLOR_PALETTES[options.renderer.theme])
-      : null,
-    [modelEdges, options.renderer.colorizeEdges, options.renderer.theme],
+      options.renderer.colorizeEdges
+        ? assignEdgeColors(modelEdges, EDGE_COLOR_PALETTES[options.renderer.theme])
+        : null,
+    [modelEdges, options.renderer.colorizeEdges, options.renderer.theme]
   );
   // ports read this through context; an unchanged map keeps its identity so they skip rendering
   const previousPortColorsRef = useRef<ReadonlyMap<string, string>>(EMPTY_PORT_COLORS);
@@ -193,9 +189,9 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
   const parsedEdges = useMemo(() => {
     const decorated = decorateModelEdges(modelEdges, sharedEdgeProps);
     const colored =
-      edgeColors === null ? decorated : (
-        decorated.map((edge, index) => ({ ...edge, ...getEdgeColorProps(edgeColors.edges[index]) }))
-      );
+      edgeColors === null
+        ? decorated
+        : decorated.map((edge, index) => ({ ...edge, ...getEdgeColorProps(edgeColors.edges[index]) }));
     const previous = previousParsedEdgesRef.current;
     const reused = colored.map((edge) => {
       const previousEdge = previous.get(edge.id);
@@ -228,7 +224,7 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
         if (currentNodes.length === 0) return;
         const currentEdges = normalizeLayoutEdges(getEdges());
         const hasSizeForAllNodes = currentNodes.every(
-          (node) => node.measured?.width && node.measured?.height,
+          (node) => node.measured?.width && node.measured?.height
         );
         if (!hasSizeForAllNodes) return;
         const currentRunId = ++autoLayoutRunId.current;
@@ -263,7 +259,7 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
           });
       },
       AUTO_LAYOUT_THROTTLE_MS,
-      { leading: true, trailing: true },
+      { leading: true, trailing: true }
     );
   }, [
     fitView,
@@ -311,15 +307,16 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
     ) {
       manuallyMovedNodesSet.current.clear();
       cachedNodesMap.current.clear();
+      const hasNodesToPlace = currentNodeIds.size > 0;
       optionsStore.state.renderer.autoFitView = true;
-      snapFitPendingRef.current = true;
-      setIsPlacing(true);
+      snapFitPendingRef.current = hasNodesToPlace;
+      setIsPlacing(hasNodesToPlace);
     } else {
       manuallyMovedNodesSet.current = new Set(
-        [...manuallyMovedNodesSet.current].filter((nodeId) => currentNodeIds.has(nodeId)),
+        [...manuallyMovedNodesSet.current].filter((nodeId) => currentNodeIds.has(nodeId))
       );
       cachedNodesMap.current = new Map(
-        [...cachedNodesMap.current.entries()].filter(([nodeId]) => currentNodeIds.has(nodeId)),
+        [...cachedNodesMap.current.entries()].filter(([nodeId]) => currentNodeIds.has(nodeId))
       );
     }
 
@@ -357,7 +354,7 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
     // if there's a single node that missed the cache and a single cache miss we're probably editing a node's name
     if (nodesThatMissedCache.length === 1 && hitCachedNodeSet.size === cachedNodesMap.current.size - 1) {
       const missedCachedNode = [...cachedNodesMap.current.values()].find(
-        (cachedNode) => !hitCachedNodeSet.has(cachedNode),
+        (cachedNode) => !hitCachedNodeSet.has(cachedNode)
       );
       const updatedNode = nodesThatMissedCache.values().next().value;
 
@@ -484,7 +481,7 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
       if (event.target && panelRef.current?.contains(event.target as HTMLElement)) return;
       if (options.renderer.autoFitView) options.renderer.autoFitView = false;
     },
-    [options.renderer],
+    [options.renderer]
   );
   const pointerPanZoomRef = useRef<number | null>(null);
   const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
@@ -511,7 +508,7 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
       reactFlowStore.getState().panZoom?.syncViewport({ x, y, zoom: viewport.zoom });
       reactFlowStore.setState({ transform: [x, y, viewport.zoom] });
     },
-    [options.renderer, reactFlowStore],
+    [options.renderer, reactFlowStore]
   );
   const handleNodeDragStop = useCallback((_event: MouseEvent | TouchEvent, node: ModelNodeState) => {
     manuallyMovedNodesSet.current.add(node.id);
@@ -546,31 +543,37 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
 
   const { isFullscreen, toggleFullscreen } = useFullscreen(containerRef);
   const isLoading = isParsing || isPlacing;
+  const isEmpty = !isLoading && models.length === 0;
 
   return (
     <div
       ref={containerRef}
-      className={classNames("relative flex h-full w-full flex-1", {
-        "bg-gray-50": options.renderer.theme === "light",
-        "bg-gray-900": options.renderer.theme === "dark",
+      className={classNames("relative flex h-full w-full flex-1 bg-canvas", {
         "renderer-loading": isLoading,
       })}
     >
       {isLoading && (
         <div
-          className={classNames(
-            "pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 text-sm",
-            options.renderer.theme === "light" ? "text-gray-500" : "text-gray-400",
-          )}
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 text-ui text-text-muted"
           role="status"
         >
-          <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          <span className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
           Loading diagram…
+        </div>
+      )}
+      {isEmpty && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-6 text-center">
+          <ComponentNoneIcon className="mb-3 size-8 text-text-faint" />
+          <p className="text-title font-strong text-text">No types to diagram</p>
+          <p className="mt-1 text-ui text-text-muted">
+            Declare an interface, type alias, or class in the editor.
+          </p>
         </div>
       )}
       <EdgeRoutingProvider>
         <PortColorsContext.Provider value={portColors}>
           <ReactFlow
+            className={options.renderer.theme === "dark" ? "theme-dark" : undefined}
             autoPanOnNodeDrag={false}
             deleteKeyCode={null}
             panActivationKeyCode={null}
@@ -601,28 +604,14 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
             <Panel position="top-center">
               <div
                 ref={panelRef}
-                className={classNames(
-                  "mt-1 flex h-9 flex-nowrap overflow-hidden whitespace-nowrap rounded-lg border shadow-sm backdrop-blur-sm",
-                  {
-                    "border-gray-200 bg-white/95 text-gray-700": options.renderer.theme === "light",
-                    "border-gray-700 bg-gray-900/90 text-gray-200": options.renderer.theme === "dark",
-                  },
-                )}
+                className="mt-1 flex flex-nowrap items-center gap-0.5 whitespace-nowrap rounded-lg border border-border bg-pane p-0.5 text-text-muted shadow-(--shadow-card)"
               >
                 <button
                   className={classNames(
-                    "flex h-full items-center gap-1.5 border-r px-3 text-sm font-medium transition-colors focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-blue-600",
-                    options.renderer.theme === "light" ? "border-gray-200" : "border-gray-700",
-                    {
-                      "bg-blue-50 text-blue-700":
-                        options.renderer.autoFitView && options.renderer.theme === "light",
-                      "bg-blue-950/60 text-blue-200":
-                        options.renderer.autoFitView && options.renderer.theme === "dark",
-                      "hover:bg-gray-100 hover:text-gray-950":
-                        !options.renderer.autoFitView && options.renderer.theme === "light",
-                      "hover:bg-white/10 hover:text-white":
-                        !options.renderer.autoFitView && options.renderer.theme === "dark",
-                    },
+                    "flex h-7 items-center gap-1.5 rounded-control px-2 text-ui font-medium transition-[color,background-color] duration-(--duration-hover) ease-out active:duration-(--duration-instant) [&_svg]:size-3.5",
+                    options.renderer.autoFitView
+                      ? "bg-selection text-text hover:bg-selection-hover"
+                      : "hover:bg-control-hover hover:text-text"
                   )}
                   onClick={handleAutoFitToggle}
                 >
@@ -630,55 +619,42 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
                   <span>Auto-fit</span>
                 </button>
 
+                <span className="h-4 w-px bg-border" />
+
                 <button
-                  className="flex h-full items-center gap-1.5 px-3 text-sm font-medium transition-colors hover:bg-gray-500/10 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-blue-600"
+                  className="flex h-7 items-center gap-1.5 rounded-control px-2 text-ui font-medium transition-[color,background-color] duration-(--duration-hover) ease-out hover:bg-control-hover hover:text-text active:duration-(--duration-instant) [&_svg]:size-3.5"
                   onClick={handleDirectionToggle}
                 >
                   <span>Orientation:</span>{" "}
-                  {options.renderer.direction === "vertical" ?
-                    <HeightIcon />
-                  : <WidthIcon />}
+                  {options.renderer.direction === "vertical" ? <HeightIcon /> : <WidthIcon />}
                 </button>
               </div>
             </Panel>
 
             <Panel position="top-right">
-              <div className="flex flex-nowrap overflow-hidden text-gray-800 whitespace-nowrap rounded-sm">
+              <div className="flex flex-nowrap whitespace-nowrap">
                 <button
                   aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  className={classNames(
-                    "flex size-9 items-center justify-center rounded-lg border shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
-                    {
-                      "border-gray-200 bg-white/95 text-gray-600 hover:bg-gray-100 hover:text-blue-600":
-                        options.renderer.theme === "light",
-                      "border-gray-700 bg-gray-900/90 text-gray-300 hover:bg-gray-800 hover:text-white":
-                        options.renderer.theme === "dark",
-                    },
-                  )}
+                  className="flex size-8 items-center justify-center rounded-lg border border-border bg-pane text-text-muted shadow-(--shadow-card) transition-[color,background-color,border-color] duration-(--duration-hover) ease-out hover:border-border-strong hover:bg-control-hover hover:text-text active:duration-(--duration-instant)"
                   onClick={toggleFullscreen}
                 >
-                  {isFullscreen ?
-                    <ExitFullScreenIcon height={18} width={18} />
-                  : <EnterFullScreenIcon height={18} width={18} />}
+                  {isFullscreen ? (
+                    <ExitFullScreenIcon height={16} width={16} />
+                  ) : (
+                    <EnterFullScreenIcon height={16} width={16} />
+                  )}
                 </button>
               </div>
             </Panel>
 
-            <Controls
-              className={classNames("renderer-controls", {
-                "renderer-controls-light": options.renderer.theme === "light",
-                "renderer-controls-dark": options.renderer.theme === "dark",
-              })}
-            />
+            <Controls className="renderer-controls" />
 
             {!disableMiniMap && options.renderer.enableMinimap && (
               <MiniMap
-                bgColor={options.renderer.theme === "light" ? "#ffffff" : "#0f172a"}
-                className={classNames("overflow-hidden rounded-lg border shadow-sm", {
-                  "border-gray-200": options.renderer.theme === "light",
-                  "border-gray-700": options.renderer.theme === "dark",
-                })}
-                maskColor={backgroundForeground}
+                bgColor="var(--color-pane)"
+                className="overflow-hidden rounded-lg border border-border shadow-(--shadow-card)"
+                maskColor="var(--color-border)"
+                nodeColor="var(--color-border-strong)"
                 style={minimapStyle}
                 zoomStep={1}
                 pannable
@@ -686,7 +662,12 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
               />
             )}
             {!lowDetail && (
-              <Background color={backgroundForeground} gap={12} size={1} variant={BackgroundVariant.Dots} />
+              <Background
+                color="color-mix(in oklab, var(--color-border-strong) 80%, transparent)"
+                gap={12}
+                size={1}
+                variant={BackgroundVariant.Dots}
+              />
             )}
           </ReactFlow>
         </PortColorsContext.Provider>

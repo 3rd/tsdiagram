@@ -33,10 +33,8 @@ export const Panels = ({ editorChildren, rendererChildren }: PanelsProps) => {
       <Separator
         key="panel-resize-handle"
         className={classNames(
-          "transition-colors hover:bg-blue-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600",
-          isVertical ? "h-1.5" : "w-1.5",
-          { "bg-gray-700": options.renderer.theme === "dark" },
-          { "bg-gray-100": options.renderer.theme === "light" }
+          "panel-separator bg-canvas focus-visible:-outline-offset-2",
+          isVertical ? "h-1.5" : "w-1.5"
         )}
       />,
       <Panel key="panel-renderer" id="renderer">
@@ -44,11 +42,11 @@ export const Panels = ({ editorChildren, rendererChildren }: PanelsProps) => {
       </Panel>,
     ];
     return members;
-  }, [isMobile, isVertical, editorChildren, options.renderer.theme, rendererChildren]);
+  }, [isMobile, isVertical, editorChildren, rendererChildren]);
 
   return (
     <Group
-      className={isVertical ? "panels-vertical" : undefined}
+      className={classNames("[view-transition-name:main]", { "panels-vertical": isVertical })}
       defaultLayout={defaultLayout}
       orientation={direction}
       onLayoutChanged={onLayoutChanged}

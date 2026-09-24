@@ -1,6 +1,5 @@
 import { createStore, useStore } from "statelift";
 import { z } from "zod";
-import { themes } from "../themes";
 
 const userOptionsSchema = z.object({
   general: z.object({
@@ -10,7 +9,6 @@ const userOptionsSchema = z.object({
     splitDirection: z.enum(["horizontal", "vertical"]).default("horizontal"),
   }),
   editor: z.object({
-    theme: z.enum(Object.keys(themes) as [string, ...string[]]).default("vsLight"),
     editingMode: z.enum(["default", "vim"]).default("default"),
   }),
   renderer: z.object({
@@ -36,7 +34,6 @@ export const optionsStore = createStore<UserOptions>({
     splitDirection: "horizontal",
   },
   editor: {
-    theme: "vsLight",
     editingMode: "default",
   },
   renderer: {
@@ -64,7 +61,7 @@ export const optionsStore = createStore<UserOptions>({
         panels: this.panels,
         editor: this.editor,
         renderer: this.renderer,
-      }),
+      })
     );
   },
 });
