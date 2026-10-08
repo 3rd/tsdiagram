@@ -52,4 +52,4 @@ pnpm dev                                   # or pnpm preview after pnpm build
 node bin/tsdiagram-export.mjs src/domain.ts docs/domain.svg --png --url http://localhost:5173
 ```
 
-Options: `--png` also writes `<output>.png`, `--scale 2` sets the PNG resolution, `--url` is where the app runs (default `http://localhost:5173`), `--chrome <path>` or `CHROME=` points at the browser, `--timeout 60` is the wait in seconds, `--verbose` logs each step. It needs Node 22 or later and Google Chrome or Chromium. No other dependency.
+Options: `--png` also writes `<output>.png`, `--scale 2` sets the PNG resolution and `--max-side 4096` caps its longer side (Chrome paints only part of a larger page), `--url` is where the app runs (default `http://localhost:5173`), `--chrome <path>` or `CHROME=` points at the browser, `--timeout 60` is the wait in seconds, `--verbose` logs each step. It needs Node 22 or later and Google Chrome or Chromium. No other dependency.

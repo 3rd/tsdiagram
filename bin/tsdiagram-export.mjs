@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Export a TypeScript file to SVG (and PNG) from the command line.
 //
-// Usage: tsdiagram-export <input.ts> [output.svg] [--png] [--scale 2]
-//          [--url http://localhost:5173] [--chrome <path>] [--timeout 60]
+// Usage: tsdiagram-export <input.ts> [output.svg] [--png] [--scale 2] [--max-side 4096]
+//          [--url http://localhost:5173] [--chrome <path>] [--timeout 60] [--verbose]
 //
 // It opens the app in headless Chrome with the file as the current document
 // and `?export=svg`, waits until the page publishes the SVG, and writes it.
@@ -29,7 +29,14 @@ const CHROME_CANDIDATES = [
 ].filter(Boolean);
 
 const parseArgs = (argv) => {
-  const options = { url: "http://localhost:5173", png: false, scale: 2, timeout: 60, chrome: null };
+  const options = {
+    url: "http://localhost:5173",
+    png: false,
+    scale: 2,
+    maxSide: 4096,
+    timeout: 60,
+    chrome: null,
+  };
   const positional = [];
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
@@ -37,6 +44,7 @@ const parseArgs = (argv) => {
     else if (argument === "--url") options.url = argv[++index];
     else if (argument === "--chrome") options.chrome = argv[++index];
     else if (argument === "--scale") options.scale = Number(argv[++index]);
+    else if (argument === "--max-side") options.maxSide = Number(argv[++index]);
     else if (argument === "--timeout") options.timeout = Number(argv[++index]);
     else if (argument === "--help" || argument === "-h") options.help = true;
     else if (argument === "--verbose") options.verbose = true;
@@ -162,28 +170,49 @@ const exportSvg = async ({ chrome, pageUrl, timeout }) => {
   }
 };
 
-const renderPng = async ({ chrome, svgPath, pngPath, scale }) => {
+/**
+ * Renders the SVG to PNG. Chrome paints only part of a page wider than a few
+ * thousand pixels, so the SVG goes into a small HTML page as an image that is
+ * scaled to fit a window of at most `maxSide` pixels on its longer side.
+ */
+const renderPng = async ({ chrome, svgPath, pngPath, scale, maxSide }) => {
   const svg = await readFile(svgPath, "utf8");
   const size = readSvgSize(svg) ?? { width: 1600, height: 1000 };
-  await new Promise((resolve, reject) => {
-    const child = spawn(
-      chrome,
-      [
-        "--headless=new",
-        "--disable-gpu",
-        "--hide-scrollbars",
-        `--force-device-scale-factor=${scale}`,
-        `--window-size=${size.width},${size.height}`,
-        `--screenshot=${pngPath}`,
-        `file://${path.resolve(svgPath)}`,
-      ],
-      { stdio: "ignore" }
-    );
-    child.on("exit", (code) =>
-      code === 0 ? resolve() : reject(new Error(`Chrome exited with code ${code}`))
-    );
-    child.on("error", reject);
-  });
+  const factor = Math.min(scale, maxSide / Math.max(size.width, size.height));
+  const width = Math.max(1, Math.round(size.width * factor));
+  const height = Math.max(1, Math.round(size.height * factor));
+  const wrapperDir = await mkdtemp(path.join(tmpdir(), "tsdiagram-png-"));
+  const wrapperPath = path.join(wrapperDir, "render.html");
+  const svgUrl = new URL(`file://${path.resolve(svgPath)}`).href;
+  await writeFile(
+    wrapperPath,
+    `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff}img{display:block;width:${width}px;height:${height}px}</style></head><body><img src="${svgUrl}"></body></html>`
+  );
+  try {
+    await new Promise((resolve, reject) => {
+      const child = spawn(
+        chrome,
+        [
+          "--headless=new",
+          "--disable-gpu",
+          "--hide-scrollbars",
+          "--virtual-time-budget=10000",
+          "--force-device-scale-factor=1",
+          `--window-size=${width},${height}`,
+          `--screenshot=${pngPath}`,
+          `file://${wrapperPath}`,
+        ],
+        { stdio: "ignore" }
+      );
+      child.on("exit", (code) =>
+        code === 0 ? resolve() : reject(new Error(`Chrome exited with code ${code}`))
+      );
+      child.on("error", reject);
+    });
+  } finally {
+    await rm(wrapperDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  }
+  return { width, height };
 };
 
 const main = async () => {
@@ -202,8 +231,14 @@ const main = async () => {
   console.log(`wrote ${options.output}`);
   if (options.png) {
     const pngPath = options.output.replace(/\.svg$/, "") + ".png";
-    await renderPng({ chrome, svgPath: options.output, pngPath, scale: options.scale });
-    console.log(`wrote ${pngPath}`);
+    const { width, height } = await renderPng({
+      chrome,
+      svgPath: options.output,
+      pngPath,
+      scale: options.scale,
+      maxSide: options.maxSide,
+    });
+    console.log(`wrote ${pngPath} (${width}x${height})`);
   }
 };
 
