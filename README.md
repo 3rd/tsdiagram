@@ -42,3 +42,14 @@
 - [Monaco](https://github.com/microsoft/monaco-editor)
 - [elkjs](https://github.com/kieler/elkjs)
 - [dom-to-svg](https://github.com/felixfbecker/dom-to-svg)
+
+## Command line export
+
+`bin/tsdiagram-export.mjs` renders a TypeScript file to SVG, and to PNG with `--png`, without the browser UI. It opens the app in headless Chrome with the file as the current document and `?export=svg`, waits until the page publishes the SVG, and writes it. The output is the same SVG that the share dialog exports.
+
+```sh
+pnpm dev                                   # or pnpm preview after pnpm build
+node bin/tsdiagram-export.mjs src/domain.ts docs/domain.svg --png --url http://localhost:5173
+```
+
+Options: `--png` also writes `<output>.png`, `--scale 2` sets the PNG resolution, `--url` is where the app runs (default `http://localhost:5173`), `--chrome <path>` or `CHROME=` points at the browser, `--timeout 60` is the wait in seconds, `--verbose` logs each step. It needs Node 22 or later and Google Chrome or Chromium. No other dependency.
