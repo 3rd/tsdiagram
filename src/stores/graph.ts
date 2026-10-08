@@ -16,6 +16,8 @@ type GraphState = {
   selectedEdgeId: string | null;
   focusedNodeId: string | null;
   svgExportMode: boolean;
+  /** True while the layout places nodes. The headless export waits for it. */
+  isPlacing: boolean;
   hoveredBadgeHubId: string | null;
   hoveredBadgePillId: string | null;
   highlightedNodeIds: Record<string, true>;
@@ -71,9 +73,9 @@ export const graphStore = createStore((): GraphState => {
     const focusedNode = hoveredNode ?? selectedNode;
     state.focusedNodeId = focusedNode?.id ?? null;
     const next =
-      focusedNode === null && selectedEdge !== null ?
-        computeEdgeEndIds(selectedEdge)
-      : computeHighlightedNodeIds(focusedNode);
+      focusedNode === null && selectedEdge !== null
+        ? computeEdgeEndIds(selectedEdge)
+        : computeHighlightedNodeIds(focusedNode);
     reconcileHighlightedNodeIds(state.highlightedNodeIds, next);
   };
 
@@ -89,6 +91,7 @@ export const graphStore = createStore((): GraphState => {
     selectedEdgeId: null,
     focusedNodeId: null,
     svgExportMode: false,
+    isPlacing: false,
     hoveredBadgeHubId: null,
     hoveredBadgePillId: null,
     setHoveredBadgeHub(hubId, pillId) {
@@ -147,7 +150,7 @@ export const getNodeDecoration = (state: GraphState, modelId: string): NodeDecor
 
 export const getEdgeDecoration = (
   state: GraphState,
-  edge: Pick<EdgeProps, "id" | "source" | "target">,
+  edge: Pick<EdgeProps, "id" | "source" | "target">
 ): EdgeDecoration => {
   if (state.svgExportMode) return "none";
   if (state.selectedEdgeId === edge.id) return "highlighted";
@@ -165,6 +168,6 @@ export const useIsEdgeDecorated = (edge: EdgeProps): { highlighted: boolean; fad
   const decoration = useStore(graphStore, (state) => getEdgeDecoration(state, edge));
   return useMemo(
     () => ({ highlighted: decoration === "highlighted", faded: decoration === "faded" }),
-    [decoration],
+    [decoration]
   );
 };

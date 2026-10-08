@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo } from "react";
 import { useStoreApi } from "@xyflow/react";
+import { graphStore } from "../stores/graph";
 import { createSVGExporter } from "../utils/svg-export-flow";
 
 export type HeadlessExportResult =
@@ -28,15 +29,25 @@ export const HeadlessExport = memo(() => {
   useEffect(() => {
     if (!isHeadlessExportRequested()) return;
     window.__tsdiagramExport = { status: "pending" };
-    // the parser runs in a worker, so the graph starts empty; wait for nodes
-    // before the export, and give an empty document a short grace period
+    // the parser runs in a worker and elk places the nodes afterwards, so wait
+    // until nodes exist, the layout is done, and the positions stayed the same
+    // over 2 checks; an empty document gets a short grace period
+    const positionsKey = () =>
+      reactFlowStore
+        .getState()
+        .nodes.map((node) => `${node.id}:${Math.round(node.position.x)},${Math.round(node.position.y)}`)
+        .join("|");
     const waitForNodes = () =>
       new Promise<void>((resolve) => {
         const startedAt = Date.now();
+        let previousKey = "";
         const check = () => {
-          if (reactFlowStore.getState().nodes.length > 0 || Date.now() - startedAt > EMPTY_GRACE_MS)
-            resolve();
-          else window.setTimeout(check, 100);
+          const { nodes } = reactFlowStore.getState();
+          const key = positionsKey();
+          const placed = nodes.length > 0 && !graphStore.state.isPlacing && key === previousKey;
+          previousKey = key;
+          if (placed || Date.now() - startedAt > EMPTY_GRACE_MS) resolve();
+          else window.setTimeout(check, 250);
         };
         check();
       });

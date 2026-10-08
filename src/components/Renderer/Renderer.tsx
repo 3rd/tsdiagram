@@ -81,7 +81,12 @@ export const Renderer = memo(({ documentId, models, isParsing, disableMiniMap }:
   const manuallyMovedNodesSet = useRef<Set<string>>(new Set());
   const autoLayoutRunId = useRef(0);
   const snapFitPendingRef = useRef(false);
-  const [isPlacing, setIsPlacing] = useState(false);
+  const [isPlacing, setIsPlacingState] = useState(false);
+  // mirrored into the graph store so code outside the renderer can wait for the layout
+  const setIsPlacing = useCallback((value: boolean) => {
+    setIsPlacingState(value);
+    graphStore.state.isPlacing = value;
+  }, []);
   const previousParsedGraphRef = useRef<
     | {
         documentId: string;
