@@ -249,6 +249,14 @@ const classifyTypeText = (text: string) => {
   return segments;
 };
 
+const isPrimitiveLikeType = (type: Type) =>
+  type.isString() ||
+  type.isNumber() ||
+  type.isBoolean() ||
+  type.isBigInt() ||
+  type.isStringLiteral() ||
+  type.isNumberLiteral();
+
 export class ModelParser extends Parser {
   private readonly setterTypeLocation = this.project
     .createSourceFile("setter-type.ts", '({ property: 0 })["property"] = 0;')
@@ -1281,12 +1289,18 @@ export class ModelParser extends Parser {
         }
 
         // tuples render as their type text instead of dumping Array.prototype members
-        if (item.node.type.isTuple()) {
+        const isTupleOrBrandedPrimitive =
+          item.node.type.isTuple() ||
+          (item.node.type.isIntersection() &&
+            item.node.type.getIntersectionTypes().some(isPrimitiveLikeType));
+        if (isTupleOrBrandedPrimitive) {
           registerDeclaredTypeDependencies();
-          const tupleText =
+
+          const typeText =
             typeNode?.getText() ??
-            item.node.type.getText(item.node.declaration, ts.TypeFormatFlags.InTypeAlias);
-          model.schema.push({ name: "==>", type: trimImport(tupleText), optional: false });
+            trimImport(item.node.type.getText(item.node.declaration, ts.TypeFormatFlags.InTypeAlias));
+
+          model.schema.push({ name: "==>", type: typeText, optional: false });
           dependencyMap.set(item.name, dependencies);
           continue;
         }
