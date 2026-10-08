@@ -249,6 +249,14 @@ const classifyTypeText = (text: string) => {
   return segments;
 };
 
+const isPrimitiveLikeType = (type: Type) =>
+  type.isString() ||
+  type.isNumber() ||
+  type.isBoolean() ||
+  type.isBigInt() ||
+  type.isStringLiteral() ||
+  type.isNumberLiteral();
+
 export class ModelParser extends Parser {
   private readonly setterTypeLocation = this.project
     .createSourceFile("setter-type.ts", '({ property: 0 })["property"] = 0;')
@@ -1287,6 +1295,21 @@ export class ModelParser extends Parser {
             typeNode?.getText() ??
             item.node.type.getText(item.node.declaration, ts.TypeFormatFlags.InTypeAlias);
           model.schema.push({ name: "==>", type: trimImport(tupleText), optional: false });
+          dependencyMap.set(item.name, dependencies);
+          continue;
+        }
+
+        // a branded primitive (`string & { __brand: ... }`) renders as its declared type
+        // instead of dumping the members of String or Number
+        if (
+          item.node.type.isIntersection() &&
+          item.node.type.getIntersectionTypes().some(isPrimitiveLikeType)
+        ) {
+          registerDeclaredTypeDependencies();
+          const brandedText =
+            typeNode?.getText() ??
+            item.node.type.getText(item.node.declaration, ts.TypeFormatFlags.InTypeAlias);
+          model.schema.push({ name: "==>", type: trimImport(brandedText), optional: false });
           dependencyMap.set(item.name, dependencies);
           continue;
         }

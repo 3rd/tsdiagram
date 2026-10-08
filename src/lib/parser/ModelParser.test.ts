@@ -3083,3 +3083,26 @@ it("does not display checker-added undefined for optional generic fields", () =>
     typeRefs: [expect.objectContaining({ name: "User" })],
   });
 });
+
+it("renders a branded primitive as its declared type, not as the members of String", () => {
+  const parser = new ModelParser(`
+    declare const brand: unique symbol;
+    type Brand<T, Name extends string> = T & { readonly [brand]: Name };
+    type EmployeeId = Brand<string, "EmployeeId">;
+    type Count = number & { readonly __unit: "count" };
+    interface Employee { id: EmployeeId; head: Count }
+  `);
+
+  const models = parser.getModels();
+  const employeeId = models.find((m) => m.name === "EmployeeId");
+  const count = models.find((m) => m.name === "Count");
+  const employee = models.find((m) => m.name === "Employee");
+
+  expect(employeeId?.schema).toEqual([{ name: "==>", type: 'Brand<string, "EmployeeId">', optional: false }]);
+  expect(count?.schema).toEqual([
+    { name: "==>", type: 'number & { readonly __unit: "count" }', optional: false },
+  ]);
+  expect(employeeId?.schema.some((field) => field.name === "charAt")).toBe(false);
+  expect(employee?.schema.map((field) => field.name)).toEqual(["id", "head"]);
+  expect(employee?.dependencies.map((m) => m.name).sort()).toEqual(["Count", "EmployeeId"]);
+});
