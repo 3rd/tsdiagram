@@ -3,6 +3,7 @@ import {
   ConstructSignatureDeclaration,
   ConstructorTypeNode,
   ExpressionWithTypeArguments,
+  FunctionDeclaration,
   FunctionTypeNode,
   GetAccessorDeclaration,
   IndexedAccessTypeNode,
@@ -23,6 +24,7 @@ import {
 } from "ts-morph";
 import {
   ClassModel,
+  FunctionModel,
   EnumModel,
   GenericSchemaField,
   InterfaceModel,
@@ -36,7 +38,7 @@ import {
   TypeTextSegment,
 } from "./model-types";
 
-import { ParsedClass, ParsedInterface, ParsedTypeAlias, Parser } from "./Parser";
+import { ParsedClass, ParsedFunction, ParsedInterface, ParsedTypeAlias, Parser } from "./Parser";
 
 export * from "./model-types";
 
@@ -338,6 +340,7 @@ export class ModelParser extends Parser {
       | { type: "class"; model: ClassModel; node: ParsedClass }
       | { type: "interface"; model: InterfaceModel; node: ParsedInterface }
       | { type: "typeAlias"; model: TypeAliasModel; node: ParsedTypeAlias }
+      | { type: "function"; model: FunctionModel; node: ParsedFunction }
     ) & { name: string })[] = [];
 
     for (const _interface of this.interfaces) {
@@ -398,6 +401,35 @@ export class ModelParser extends Parser {
         type: "typeAlias",
         name,
         node: typeAlias,
+        model,
+      });
+    }
+
+    for (const currentFunction of this.functions) {
+      const name = sanitizePropertyName(currentFunction.name);
+      const typeParameters = currentFunction.declaration.getTypeParameters();
+      modelTypeParameterNames.set(name, new Set(typeParameters.map((parameter) => parameter.getName())));
+
+      const model: FunctionModel = {
+        id: name,
+        name,
+        schema: [],
+        typeTextSegments: {},
+        dependencies: [],
+        dependants: [],
+        type: "function",
+        arguments: [],
+      };
+
+      for (const parameter of typeParameters) model.arguments.push(toModelArgument(parameter));
+
+      models.push(model);
+      modelNameToModelMap.set(model.id, model);
+
+      items.push({
+        type: "function",
+        name,
+        node: currentFunction,
         model,
       });
     }
@@ -1187,7 +1219,11 @@ export class ModelParser extends Parser {
 
       const addSignatureProp = (
         signature:
-          CallSignatureDeclaration | ConstructSignatureDeclaration | FunctionTypeNode | ConstructorTypeNode,
+          | CallSignatureDeclaration
+          | ConstructSignatureDeclaration
+          | FunctionDeclaration
+          | FunctionTypeNode
+          | ConstructorTypeNode,
         displayName: string
       ) => {
         addSignatureRow({
@@ -1533,6 +1569,14 @@ export class ModelParser extends Parser {
             valueTypeNode: indexSignature.getReturnTypeNode(),
           });
         }
+      }
+
+      if (item.type === "function") {
+        for (const constraintRef of collectConstraintRefs(item.node.declaration, item.name)) {
+          dependencies.add(constraintRef);
+        }
+        // 1 row per overload, with no name: the header carries the name
+        for (const signature of item.node.signatures) addSignatureProp(signature, "");
       }
 
       if (item.type === "class") {

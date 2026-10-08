@@ -435,6 +435,10 @@ const ModelNodeContent = ({ id, data }: ModelNodeProps) => {
       nameParts.unshift("abstract ");
     }
 
+    if (model.type === "function") {
+      nameParts.unshift("\u0192 ");
+    }
+
     if (model.arguments.length > 0) {
       const argumentsParts = [];
       for (const argument of model.arguments) {

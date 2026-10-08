@@ -3114,3 +3114,60 @@ it.each([`number & { readonly __brand: 'import("/source").Id' }`, `['import("/so
     expect(model.schema).toEqual([{ name: "==>", type: declaredType, optional: false }]);
   }
 );
+
+it("models a top-level function with its parameters and return type", () => {
+  const parser = new ModelParser(`
+    interface Order { id: string }
+    interface Receipt { total: number }
+    type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+    type Failure = { kind: "declined" };
+    export declare function charge(order: Order, amount: number): Result<Receipt, Failure>;
+  `);
+
+  const models = parser.getModels();
+  const charge = models.find((m) => m.name === "charge");
+  const order = models.find((m) => m.name === "Order");
+  const receipt = models.find((m) => m.name === "Receipt");
+
+  expect(charge?.type).toBe("function");
+  expect(charge?.schema).toHaveLength(1);
+  const [row] = charge!.schema;
+  expect(row.name).toBe("");
+  expect(isFunctionSchemaField(row)).toBe(true);
+  if (!isFunctionSchemaField(row)) return;
+  expect(row.arguments.map((argument) => argument.name)).toEqual(["order", "amount"]);
+  expect(row.arguments[0].type).toBe(order);
+  expect(row.arguments[1].type).toBe("number");
+  expect(row.returnType).toBe("Result<Receipt, Failure>");
+  expect(charge?.dependencies.map((m) => m.name).sort()).toEqual(["Failure", "Order", "Receipt", "Result"]);
+  expect(order?.dependants.map((m) => m.name)).toContain("charge");
+  expect(receipt?.dependants.map((m) => m.name)).toContain("charge");
+});
+
+it("shows each overload of a function as 1 row and skips the implementation", () => {
+  const parser = new ModelParser(`
+    interface User { id: string }
+    function find(id: string): User;
+    function find(ids: string[]): User[];
+    function find(idOrIds: string | string[]): User | User[] { return [] as never; }
+  `);
+
+  const find = parser.getModels().find((m) => m.name === "find");
+  expect(find?.type).toBe("function");
+  expect(find?.schema).toHaveLength(2);
+  expect(find?.schema.every((row) => isFunctionSchemaField(row) && row.name === "")).toBe(true);
+});
+
+it("qualifies a function inside a namespace and keeps its type parameters", () => {
+  const parser = new ModelParser(`
+    interface Box<T> { value: T }
+    namespace Util {
+      export declare function wrap<T extends object>(value: T): Box<T>;
+    }
+  `);
+
+  const wrap = parser.getModels().find((m) => m.name === "Util.wrap");
+  expect(wrap?.type).toBe("function");
+  expect(wrap?.arguments).toEqual([{ name: "T", extends: "object" }]);
+  expect(wrap?.dependencies.map((m) => m.name)).toEqual(["Box"]);
+});

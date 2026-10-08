@@ -5,6 +5,7 @@ import {
   EnumDeclaration,
   EnumMember,
   ExpressionWithTypeArguments,
+  FunctionDeclaration,
   GetAccessorDeclaration,
   IndexSignatureDeclaration,
   InterfaceDeclaration,
@@ -51,6 +52,14 @@ export type ParsedClass = {
   getAccessors: GetAccessorDeclaration[];
   setAccessors: SetAccessorDeclaration[];
   synthesizedProperties: TsMorphSymbol[];
+};
+
+export type ParsedFunction = {
+  name: string;
+  /** The first declaration. Closures that need a location use it. */
+  declaration: FunctionDeclaration;
+  /** The signatures to show: the overloads without a body, or the implementation when it is the only declaration. */
+  signatures: FunctionDeclaration[];
 };
 
 export type ParsedEnum = {
@@ -270,6 +279,36 @@ export class Parser {
       const item = result.get(name) ?? { name, declaration, members: [] };
       item.members.push(...declaration.getMembers());
       result.set(name, item);
+    }
+
+    return Array.from(result.values());
+  }
+
+  get functions(): ParsedFunction[] {
+    const result = new Map<string, ParsedFunction>();
+    const declarations = collectQualifiedDeclarations(
+      this.source.getFunctions(),
+      this.source.getModules(),
+      (module) => module.getFunctions()
+    );
+
+    for (const { moduleName, declaration } of declarations) {
+      const baseName = declaration.getName();
+      if (!baseName) continue;
+      const name = moduleName ? `${moduleName}.${baseName}` : baseName;
+      const item = result.get(name) ?? { name, declaration, signatures: [] };
+      // ts-morph lists only the implementation of an overloaded function; the
+      // overloads hang off it. An ambient function has no implementation.
+      for (const candidate of [...declaration.getOverloads(), declaration]) {
+        if (item.signatures.some((signature) => signature.getPos() === candidate.getPos())) continue;
+        item.signatures.push(candidate);
+      }
+      result.set(name, item);
+    }
+
+    for (const item of result.values()) {
+      const overloads = item.signatures.filter((signature) => !signature.hasBody());
+      if (overloads.length > 0) item.signatures = overloads;
     }
 
     return Array.from(result.values());
