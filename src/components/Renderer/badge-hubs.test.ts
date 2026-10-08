@@ -6,6 +6,16 @@ const consumersOf = (typeName: string, count: number) =>
   Array.from({ length: count }, (_, i) => `interface Consumer${i} { ref: ${typeName} }`).join("\n");
 
 describe("computeBadgeHubIds", () => {
+  it("keeps a generic default visible when other consumers could badge it", () => {
+    const models = new ModelParser(`
+      type Id = string;
+      ${consumersOf("Id", 6)}
+      declare function find<T = Id>(value: T): T;
+    `).getModels();
+
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+  });
+
   it("badges a simple leaf alias at the enter threshold", () => {
     const models = new ModelParser(`type Id = string;\n${consumersOf("Id", 6)}`).getModels();
     const badgeHubIds = computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS);
@@ -48,7 +58,7 @@ describe("computeBadgeHubIds", () => {
   it("never badges aliases whose relationships render only as text", () => {
     const anonymousUnionConsumers = Array.from(
       { length: 6 },
-      (_, i) => `type Consumer${i} = { ref: Id } | { empty: true }`,
+      (_, i) => `type Consumer${i} = { ref: Id } | { empty: true }`
     ).join("\n");
     const models = new ModelParser(`type Id = string;\n${anonymousUnionConsumers}`).getModels();
     expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
@@ -57,7 +67,7 @@ describe("computeBadgeHubIds", () => {
   it("never badges aliases nested inside generic field text", () => {
     const consumers = Array.from(
       { length: 6 },
-      (_, i) => `interface Consumer${i} { ref: Promise<Array<Id>> }`,
+      (_, i) => `interface Consumer${i} { ref: Promise<Array<Id>> }`
     ).join("\n");
     const models = new ModelParser(`type Id = string;\n${consumers}`).getModels();
     expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
@@ -65,7 +75,7 @@ describe("computeBadgeHubIds", () => {
 
   it("never badges aliases referenced through extends text", () => {
     const consumers = Array.from({ length: 6 }, (_, i) => `interface Consumer${i} extends Empty {}`).join(
-      "\n",
+      "\n"
     );
     const models = new ModelParser(`type Empty = {};\n${consumers}`).getModels();
     expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);

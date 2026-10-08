@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import { isDefaultSchemaField, isFunctionSchemaField, ModelParser } from "./ModelParser";
 
 it.each([
@@ -3131,10 +3131,11 @@ it("models a top-level function with its parameters and return type", () => {
 
   expect(charge?.type).toBe("function");
   expect(charge?.schema).toHaveLength(1);
-  const [row] = charge!.schema;
+  assert(charge);
+
+  const [row] = charge.schema;
   expect(row.name).toBe("");
-  expect(isFunctionSchemaField(row)).toBe(true);
-  if (!isFunctionSchemaField(row)) return;
+  assert(isFunctionSchemaField(row));
   expect(row.arguments.map((argument) => argument.name)).toEqual(["order", "amount"]);
   expect(row.arguments[0].type).toBe(order);
   expect(row.arguments[1].type).toBe("number");
@@ -3168,6 +3169,137 @@ it("qualifies a function inside a namespace and keeps its type parameters", () =
 
   const wrap = parser.getModels().find((m) => m.name === "Util.wrap");
   expect(wrap?.type).toBe("function");
-  expect(wrap?.arguments).toEqual([{ name: "T", extends: "object" }]);
+  expect(wrap?.schema).toMatchObject([{ typeParameters: [{ name: "T", extends: "object" }] }]);
   expect(wrap?.dependencies.map((m) => m.name)).toEqual(["Box"]);
+});
+
+it("keeps same-named types and functions distinct in schemas and references", () => {
+  const models = new ModelParser(`
+    namespace N {
+      export interface User { id: string }
+      export declare function User(id: string): User;
+      export interface Consumer { value: User; factory: typeof User }
+    }
+    type Factory = typeof N.User;
+  `).getModels();
+  const user = models.find((model) => model.name === "N.User" && model.type === "interface");
+  const factory = models.find((model) => model.name === "N.User" && model.type === "function");
+  const consumer = models.find((model) => model.name === "N.Consumer");
+  const alias = models.find((model) => model.name === "Factory");
+  assert(user);
+  assert(factory);
+  assert(consumer);
+  assert(alias);
+
+  expect(new Set(models.map((model) => model.id)).size).toBe(models.length);
+  expect(user.schema).toEqual([{ name: "id", type: "string", optional: false }]);
+  expect(factory.schema).toHaveLength(1);
+  expect(factory.dependencies).toEqual([user]);
+  expect(user.dependants).toContain(factory);
+  expect(consumer.schema[0].type).toBe(user);
+  expect(alias.dependencies).toContain(factory);
+});
+
+it("keeps each displayed overload's generic constraints and defaults", () => {
+  const models = new ModelParser(`
+    interface User { id: string }
+    interface Team { members: User[] }
+    function choose<T extends User = User>(value: T): T;
+    function choose<U extends Team = Team>(value: U[]): U;
+    function choose(value: unknown): unknown { return value; }
+  `).getModels();
+  const choose = models.find((model) => model.name === "choose");
+  assert(choose);
+
+  expect(choose.arguments).toEqual([]);
+  expect(choose.schema).toMatchObject([
+    { typeParameters: [{ name: "T", extends: "User", default: "User" }], returnType: "T" },
+    { typeParameters: [{ name: "U", extends: "Team", default: "Team" }], returnType: "U" },
+  ]);
+  expect(choose.dependencies.map((model) => model.name)).toEqual(["User", "Team"]);
+  expect(choose.schema.map((field) => field.typeRefs?.map((model) => model.name))).toEqual([
+    ["User"],
+    ["Team"],
+  ]);
+});
+
+it("keeps type parameter scopes separate for same-named types and functions", () => {
+  const models = new ModelParser(`
+    interface Value { id: string }
+    interface create<Value> { value: Value }
+    declare function create(value: Value): Value;
+  `).getModels();
+  const value = models.find((model) => model.name === "Value");
+  const create = models.find((model) => model.type === "function");
+  assert(create);
+  assert(value);
+
+  expect(create.dependencies).toEqual([value]);
+});
+
+it("substitutes inherited signature constraints and defaults", () => {
+  const models = new ModelParser(`
+    interface Item { id: string }
+    interface Provider<T> { <U extends T = T>(value: U): U }
+    interface Concrete extends Provider<Item> {}
+  `).getModels();
+  const concrete = models.find((model) => model.name === "Concrete");
+  assert(concrete);
+
+  expect(concrete.schema).toMatchObject([
+    { typeParameters: [{ name: "U", extends: "Item", default: "Item" }] },
+  ]);
+});
+
+it("preserves import-like literal text in a signature's generic default", () => {
+  const [model] = new ModelParser(`declare function create<T = 'import("/source").Id'>(): T;`).getModels();
+
+  expect(model.schema).toMatchObject([
+    { typeParameters: [{ name: "T", default: `'import("/source").Id'` }] },
+  ]);
+});
+
+it("preserves optional and rest parameters across callable paths", () => {
+  const models = new ModelParser(`
+    declare function log(message?: string, ...tags: string[]): void;
+    interface Logger {
+      (message?: string, ...tags: string[]): void;
+      new (message?: string, ...tags: string[]): Logger;
+      log(message?: string, ...tags: string[]): void;
+      callback: (message?: string, ...tags: string[]) => void;
+    }
+    interface Child extends Logger {}
+    type Callback = (message?: string, ...tags: string[]) => void;
+    class Console {
+      log(message?: string, ...tags: string[]): void {}
+    }
+  `).getModels();
+
+  for (const model of models) {
+    expect(model.schema.length).toBeGreaterThan(0);
+
+    for (const field of model.schema) {
+      assert(isFunctionSchemaField(field));
+      expect(field.arguments).toEqual([
+        { name: "message", type: "string", isOptional: true },
+        { name: "tags", type: "string[]", isRest: true },
+      ]);
+    }
+  }
+});
+
+it("preserves initializers on function and method parameters", () => {
+  const models = new ModelParser(`
+    function print(message = "ready", count: number): void {}
+    class Console { log(message = "ready", count: number): void {} }
+  `).getModels();
+
+  for (const model of models) {
+    const [field] = model.schema;
+    assert(isFunctionSchemaField(field));
+    expect(field.arguments).toEqual([
+      { name: "message", type: "string", initializer: '"ready"' },
+      { name: "count", type: "number" },
+    ]);
+  }
 });

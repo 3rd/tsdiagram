@@ -9,6 +9,24 @@ const SOURCE = `
 `;
 
 describe("reuseUnchangedModels", () => {
+  it.each([
+    ["<T>(value: T): T", "<T = string>(value: T): T"],
+    ["(value: string): void", "(value?: string): void"],
+    ["(values: string[]): void", "(...values: string[]): void"],
+  ])("replaces a function when its signature changes from %s to %s", (before, after) => {
+    const previous = new ModelParser(`declare function run${before};`).getModels();
+    const next = new ModelParser(`declare function run${after};`).getModels();
+
+    expect(reuseUnchangedModels(previous, next)[0]).toBe(next[0]);
+  });
+
+  it("replaces a function when only a parameter initializer changes", () => {
+    const previous = new ModelParser('function run(value = "before"): void {}').getModels();
+    const next = new ModelParser('function run(value = "after"): void {}').getModels();
+
+    expect(reuseUnchangedModels(previous, next)[0]).toBe(next[0]);
+  });
+
   it("returns the previous array identity when nothing changed", () => {
     const previous = new ModelParser(SOURCE).getModels();
     const next = new ModelParser(SOURCE).getModels();

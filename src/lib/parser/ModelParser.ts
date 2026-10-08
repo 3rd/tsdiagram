@@ -25,6 +25,7 @@ import {
 import {
   ClassModel,
   FunctionModel,
+  FunctionSchemaField,
   EnumModel,
   GenericSchemaField,
   InterfaceModel,
@@ -56,6 +57,11 @@ type AddIndexSignatureRowArgs = {
   keyTypeName: string;
   valueType?: Type;
   valueTypeNode?: TypeNode;
+};
+
+type SignatureParameter = Omit<FunctionSchemaField["arguments"][number], "type"> & {
+  type: Type;
+  typeNode?: TypeNode;
 };
 
 type Prop =
@@ -111,6 +117,17 @@ const toModelArgument = (parameter: TypeParameterDeclaration) => {
     name,
     extends: constraint,
     ...(defaultType ? { default: defaultType } : {}),
+  };
+};
+
+const getParameterModifiers = (parameter: ParameterDeclaration | undefined) => {
+  if (!parameter) return {};
+
+  const initializer = parameter.getInitializer()?.getText();
+  return {
+    ...(parameter.hasQuestionToken() ? { isOptional: true } : {}),
+    ...(parameter.isRestParameter() ? { isRest: true } : {}),
+    ...(initializer ? { initializer } : {}),
   };
 };
 
@@ -267,24 +284,37 @@ export class ModelParser extends Parser {
   getModels() {
     const models: Model[] = [];
     const modelNameToModelMap = new Map<string, Model>();
-    const dependencyMap = new Map<string, Set<Model>>();
+    const functionNameToModelMap = new Map<string, FunctionModel>();
+    const dependencyMap = new Map<Model, Set<Model>>();
     const classMergedInterfaces = new Map<string, ParsedInterface>();
     const modelTypeParameterNames = new Map<string, Set<string>>();
 
-    const findModelOrQualifier = (referenceName: string, ownerSegmentCount: number) => {
-      const directModel = modelNameToModelMap.get(referenceName);
+    const findReferenceModel = (referenceName: string, referenceSpace: "type" | "value") => {
+      if (referenceSpace === "value") {
+        return functionNameToModelMap.get(referenceName) ?? modelNameToModelMap.get(referenceName);
+      }
+
+      return modelNameToModelMap.get(referenceName);
+    };
+
+    const findModelOrQualifier = (
+      referenceName: string,
+      ownerSegmentCount: number,
+      referenceSpace: "type" | "value"
+    ) => {
+      const directModel = findReferenceModel(referenceName, referenceSpace);
       if (directModel) return directModel;
 
       const segments = referenceName.split(".");
       for (let i = segments.length - 1; i > ownerSegmentCount; i--) {
-        const qualifierModel = modelNameToModelMap.get(segments.slice(0, i).join("."));
+        const qualifierModel = findReferenceModel(segments.slice(0, i).join("."), referenceSpace);
         if (qualifierModel) return qualifierModel;
       }
     };
 
-    const getScopedReferenceNames = (referenceName: string, ownerName?: string) => {
+    const getScopedReferenceNames = (referenceName: string, ownerModel?: Model) => {
       const scopedNames: string[] = [];
-      const ownerSegments = ownerName?.split(".").slice(0, -1) ?? [];
+      const ownerSegments = ownerModel?.name.split(".").slice(0, -1) ?? [];
       while (ownerSegments.length > 0) {
         scopedNames.push(`${ownerSegments.join(".")}.${referenceName}`);
         ownerSegments.pop();
@@ -299,38 +329,45 @@ export class ModelParser extends Parser {
       for (const symbol of [type?.getAliasSymbol(), type?.getSymbol()]) {
         if (!symbol) continue;
         const qualifiedName = sanitizePropertyName(trimImport(this.checker.getFullyQualifiedName(symbol)));
-        const model = modelNameToModelMap.get(qualifiedName);
+        const referenceSpace = type?.getText().startsWith("typeof ") ? "value" : "type";
+        const model = findReferenceModel(qualifiedName, referenceSpace);
         if (model) return model;
       }
     };
 
-    const isTypeParameterReference = (referenceName: string, ownerName?: string, type?: Type) => {
-      return Boolean(
-        type?.isTypeParameter() || (ownerName && modelTypeParameterNames.get(ownerName)?.has(referenceName))
-      );
+    const isTypeParameterReference = (referenceName: string, ownerModel?: Model, type?: Type) => {
+      if (type) return type.isTypeParameter();
+
+      return Boolean(ownerModel && modelTypeParameterNames.get(ownerModel.id)?.has(referenceName));
     };
 
-    const resolveExactModelReference = (text: string, ownerName?: string, type?: Type) => {
+    const resolveExactModelReference = (text: string, ownerModel?: Model, type?: Type) => {
       const referenceName = trimImport(text);
-      if (isTypeParameterReference(referenceName, ownerName, type)) return;
+      if (isTypeParameterReference(referenceName, ownerModel, type)) return;
       const typeModel = resolveTypeModelReference(referenceName, type);
       if (typeModel) return typeModel;
-      for (const scopedName of getScopedReferenceNames(referenceName, ownerName)) {
+      for (const scopedName of getScopedReferenceNames(referenceName, ownerModel)) {
         const model = modelNameToModelMap.get(scopedName);
         if (model) return model;
       }
     };
 
-    const resolveModelReference = (text: string, ownerName?: string, type?: Type): Model | undefined => {
+    const resolveModelReference = (text: string, ownerModel?: Model, type?: Type): Model | undefined => {
       const referenceName = trimImport(text);
-      const baseName = stripTypeArguments(referenceName);
-      if (isTypeParameterReference(baseName, ownerName, type)) return;
+      const referenceSpace = referenceName.startsWith("typeof ") ? "value" : "type";
+      const baseName = stripTypeArguments(
+        referenceSpace === "value" ? referenceName.slice(7) : referenceName
+      );
+      const isTypeParameter =
+        referenceSpace === "type" && isTypeParameterReference(baseName, ownerModel, type);
+      if (isTypeParameter) return;
+
       const typeModel = resolveTypeModelReference(baseName, type);
       if (typeModel) return typeModel;
       const referenceSegmentCount = baseName.split(".").length;
-      for (const scopedName of getScopedReferenceNames(baseName, ownerName)) {
+      for (const scopedName of getScopedReferenceNames(baseName, ownerModel)) {
         const ownerSegmentCount = scopedName.split(".").length - referenceSegmentCount;
-        const model = findModelOrQualifier(scopedName, ownerSegmentCount);
+        const model = findModelOrQualifier(scopedName, ownerSegmentCount, referenceSpace);
         if (model) return model;
       }
     };
@@ -407,11 +444,8 @@ export class ModelParser extends Parser {
 
     for (const currentFunction of this.functions) {
       const name = sanitizePropertyName(currentFunction.name);
-      const typeParameters = currentFunction.declaration.getTypeParameters();
-      modelTypeParameterNames.set(name, new Set(typeParameters.map((parameter) => parameter.getName())));
-
       const model: FunctionModel = {
-        id: name,
+        id: `function:${name}`,
         name,
         schema: [],
         typeTextSegments: {},
@@ -421,10 +455,8 @@ export class ModelParser extends Parser {
         arguments: [],
       };
 
-      for (const parameter of typeParameters) model.arguments.push(toModelArgument(parameter));
-
       models.push(model);
-      modelNameToModelMap.set(model.id, model);
+      functionNameToModelMap.set(name, model);
 
       items.push({
         type: "function",
@@ -494,16 +526,16 @@ export class ModelParser extends Parser {
 
     const collectHeaderExpressionRefs = (
       expression: ExpressionWithTypeArguments,
-      ownerName: string
+      ownerModel: Model
     ): Model[] => {
       const refs = new Set<Model>();
       const headExpression = expression.getExpression();
-      const headModel = resolveModelReference(headExpression.getText(), ownerName, headExpression.getType());
+      const headModel = resolveModelReference(headExpression.getText(), ownerModel, headExpression.getType());
       if (headModel) refs.add(headModel);
       for (const typeReference of expression.getDescendantsOfKind(ts.SyntaxKind.TypeReference)) {
         const referencedModel = resolveModelReference(
           typeReference.getText(),
-          ownerName,
+          ownerModel,
           typeReference.getType()
         );
         if (referencedModel) refs.add(referencedModel);
@@ -511,7 +543,7 @@ export class ModelParser extends Parser {
       return [...refs];
     };
 
-    const collectTypeRefModels = (type: Type, ownerName: string): Model[] => {
+    const collectTypeRefModels = (type: Type, ownerModel: Model): Model[] => {
       const refs = new Set<Model>();
       const seen = new Set<Type>();
       const visit = (candidate: Type) => {
@@ -525,7 +557,7 @@ export class ModelParser extends Parser {
         ];
         for (const name of names) {
           if (!name) continue;
-          const candidateModel = resolveModelReference(name, ownerName, candidate);
+          const candidateModel = resolveModelReference(name, ownerModel, candidate);
           if (candidateModel) refs.add(candidateModel);
         }
 
@@ -547,14 +579,14 @@ export class ModelParser extends Parser {
       return [...refs];
     };
 
-    const collectTypeNodeRefModels = (typeNode: TypeNode | undefined, ownerName: string): Model[] => {
+    const collectTypeNodeRefModels = (typeNode: TypeNode | undefined, ownerModel: Model): Model[] => {
       if (!typeNode) return [];
       const refs = new Set<Model>();
       const addTypeNode = (node: TypeNode) => {
         const referenceNode = node.isKind(ts.SyntaxKind.TypeReference) ? node.getTypeName() : node;
         const referencedModel = resolveModelReference(
           referenceNode.getText(),
-          ownerName,
+          ownerModel,
           referenceNode.getType()
         );
         if (referencedModel) refs.add(referencedModel);
@@ -563,6 +595,11 @@ export class ModelParser extends Parser {
       for (const typeReference of typeNode.getDescendantsOfKind(ts.SyntaxKind.TypeReference)) {
         addTypeNode(typeReference);
       }
+
+      for (const typeQuery of typeNode.getDescendantsOfKind(ts.SyntaxKind.TypeQuery)) {
+        addTypeNode(typeQuery);
+      }
+
       return [...refs];
     };
 
@@ -571,11 +608,11 @@ export class ModelParser extends Parser {
       declaration: {
         getTypeParameters: () => TypeParameterDeclaration[];
       },
-      ownerName: string
+      ownerModel: Model
     ): Model[] => {
       const refs = new Set<Model>();
       const addTypeNode = (node: TypeNode) => {
-        const referencedModel = resolveModelReference(node.getText(), ownerName, node.getType());
+        const referencedModel = resolveModelReference(node.getText(), ownerModel, node.getType());
         if (referencedModel) refs.add(referencedModel);
       };
       for (const parameter of declaration.getTypeParameters()) {
@@ -597,12 +634,12 @@ export class ModelParser extends Parser {
     const collectCompilerTypeRefModels = ({
       type,
       typeLocation,
-      ownerName,
+      ownerModel,
       typeParameterNames = new Set<string>(),
     }: {
       type: ts.Type;
       typeLocation: Node;
-      ownerName: string;
+      ownerModel: Model;
       typeParameterNames?: ReadonlySet<string>;
     }) => {
       const typeNode = this.tsChecker.typeToTypeNode(
@@ -618,13 +655,13 @@ export class ModelParser extends Parser {
           const referenceName = getCompilerEntityNameText(node.typeName);
           const referencedModel = typeParameterNames.has(referenceName)
             ? undefined
-            : resolveModelReference(referenceName, ownerName);
+            : resolveModelReference(referenceName, ownerModel);
           if (referencedModel) refs.add(referencedModel);
         } else if (ts.isTypeQueryNode(node)) {
           const referenceName = getCompilerEntityNameText(node.exprName);
           const referencedModel = typeParameterNames.has(referenceName)
             ? undefined
-            : resolveModelReference(referenceName, ownerName);
+            : resolveModelReference(`typeof ${referenceName}`, ownerModel);
           if (referencedModel) refs.add(referencedModel);
         }
         ts.forEachChild(node, visit);
@@ -638,7 +675,7 @@ export class ModelParser extends Parser {
         for (const extendsExpression of item.node.extends) {
           const extendsName = trimImport(extendsExpression.getText());
           item.model.extends.push(
-            resolveExactModelReference(extendsName, item.name, extendsExpression.getType()) ?? extendsName
+            resolveExactModelReference(extendsName, item.model, extendsExpression.getType()) ?? extendsName
           );
         }
       }
@@ -647,12 +684,12 @@ export class ModelParser extends Parser {
         if (extendsExpression) {
           const extendsName = sanitizePropertyName(trimImport(extendsExpression.getText()));
           item.model.extends =
-            resolveExactModelReference(extendsName, item.name, extendsExpression.getType()) ?? extendsName;
+            resolveExactModelReference(extendsName, item.model, extendsExpression.getType()) ?? extendsName;
         }
         for (const implementsExpression of item.node.implements) {
           const implementsName = sanitizePropertyName(trimImport(implementsExpression.getText()));
           item.model.implements.push(
-            resolveExactModelReference(implementsName, item.name, implementsExpression.getType()) ??
+            resolveExactModelReference(implementsName, item.model, implementsExpression.getType()) ??
               implementsName
           );
         }
@@ -661,19 +698,71 @@ export class ModelParser extends Parser {
 
     // second pass: parse schema and root dependencies
     for (const item of items) {
-      const model = modelNameToModelMap.get(item.name);
+      const model =
+        item.type === "interface" && classMergedInterfaces.has(item.name)
+          ? modelNameToModelMap.get(item.name)
+          : item.model;
       if (!model) continue;
 
-      const dependencies = dependencyMap.get(item.name) ?? new Set<Model>();
+      const dependencies = dependencyMap.get(model) ?? new Set<Model>();
 
       const collectTextTypeRefs = (type: Type, typeNode?: TypeNode, renderedModel?: Model) => {
         if (renderedModel) return new Set<Model>();
         const refs = new Set([
-          ...collectTypeNodeRefModels(typeNode, item.name),
-          ...collectTypeRefModels(type, item.name),
+          ...collectTypeNodeRefModels(typeNode, item.model),
+          ...collectTypeRefModels(type, item.model),
         ]);
         for (const ref of refs) dependencies.add(ref);
         return refs;
+      };
+
+      const collectSignatureTypeParameters = (signature: Signature, typeRefs: Set<Model>) => {
+        const declaration = signature.getDeclaration();
+        const declaredParameters = "getTypeParameters" in declaration ? declaration.getTypeParameters() : [];
+        const typeParameters = signature.getTypeParameters();
+        const typeParameterNames = new Set(typeParameters.map((parameter) => parameter.getText()));
+
+        return typeParameters.map((parameter, index) => {
+          const declaredParameter = declaredParameters[index];
+          const argument: Model["arguments"][number] = {
+            name: parameter.getSymbol()?.getName() ?? parameter.getText(item.node.declaration),
+          };
+
+          for (const [key, type, typeNode] of [
+            ["extends", parameter.compilerType.getConstraint(), declaredParameter?.getConstraint()],
+            ["default", parameter.compilerType.getDefault(), declaredParameter?.getDefault()],
+          ] as const) {
+            if (!type) continue;
+
+            const declaredTypeNode = type === typeNode?.getType().compilerType ? typeNode : undefined;
+            const referencedModels = [
+              ...collectTypeNodeRefModels(declaredTypeNode, item.model),
+              ...collectCompilerTypeRefModels({
+                type,
+                typeLocation: item.node.declaration,
+                ownerModel: item.model,
+                typeParameterNames,
+              }),
+            ];
+
+            for (const typeRef of referencedModels) {
+              dependencies.add(typeRef);
+              typeRefs.add(typeRef);
+            }
+
+            argument[key] =
+              declaredTypeNode?.getText() ??
+              trimImport(
+                this.tsChecker.typeToString(
+                  type,
+                  item.node.declaration.compilerNode,
+                  ts.TypeFormatFlags.NoTruncation
+                )
+              );
+          }
+
+          return argument;
+        });
       };
 
       const addFunctionProp = (prop: Prop, type?: Type) => {
@@ -699,21 +788,16 @@ export class ModelParser extends Parser {
           typeRefs: Set<Model>,
           typeNode?: TypeNode
         ) => {
-          let argumentTypeName = trimImport(argumentType.getText());
-
-          if (typeNode?.isKind(ts.SyntaxKind.TypeReference)) {
-            const nodeName = trimImport(typeNode.getText());
-            if (resolveExactModelReference(nodeName, item.name, argumentType)) {
-              argumentTypeName = nodeName;
-            }
-          }
-
+          let argumentTypeName = trimImport(typeNode?.getText() ?? argumentType.getText());
           const aliasSymbol = argumentType.getAliasSymbol();
-          if (!resolveExactModelReference(argumentTypeName, item.name, argumentType) && aliasSymbol) {
+          const shouldUseAliasName =
+            !resolveExactModelReference(argumentTypeName, item.model, argumentType) &&
+            aliasSymbol !== undefined;
+          if (shouldUseAliasName) {
             argumentTypeName = aliasSymbol.getName();
           }
 
-          const argumentTypeModel = resolveExactModelReference(argumentTypeName, item.name, argumentType);
+          const argumentTypeModel = resolveExactModelReference(argumentTypeName, item.model, argumentType);
           if (argumentTypeModel) dependencies.add(argumentTypeModel);
           for (const typeRef of collectTextTypeRefs(argumentType, typeNode, argumentTypeModel)) {
             typeRefs.add(typeRef);
@@ -737,7 +821,7 @@ export class ModelParser extends Parser {
           const declaredName = returnTypeNode ? trimImport(returnTypeNode.getText()) : undefined;
 
           const returnTypeName = declaredName ?? trimImport(returnType.getText());
-          const returnTypeModel = resolveExactModelReference(returnTypeName, item.name, returnType);
+          const returnTypeModel = resolveExactModelReference(returnTypeName, item.model, returnType);
           if (returnTypeModel) dependencies.add(returnTypeModel);
           const typeRefs = collectTextTypeRefs(returnType, returnTypeNode, returnTypeModel);
 
@@ -794,22 +878,26 @@ export class ModelParser extends Parser {
 
         // render every declared signature so overloads are not collapsed into one row
         for (const callSignature of callSignatures) {
-          const functionArguments: { name: string; type: Model | string }[] = [];
+          const functionArguments: FunctionSchemaField["arguments"] = [];
           const typeRefs = new Set<Model>();
+          const typeParameters = collectSignatureTypeParameters(callSignature, typeRefs);
 
           for (const parameter of callSignature.getParameters()) {
             const parameterName = sanitizePropertyName(parameter.getName());
             const parameterType = parameter.getTypeAtLocation(
               "typeLocation" in prop ? prop.typeLocation : prop
             );
-            const parameterDeclaration = parameter.getDeclarations()?.[0];
-            const parameterTypeNode = parameterDeclaration?.isKind(ts.SyntaxKind.Parameter)
-              ? ((parameterDeclaration as ParameterDeclaration).getTypeNode() ?? undefined)
-              : undefined;
+            const declaration = parameter.getDeclarations()[0];
+            const parameterDeclaration = Node.isParameterDeclaration(declaration) ? declaration : undefined;
+            const parameterTypeNode =
+              parameterType.compilerType === parameterDeclaration?.getType().compilerType
+                ? parameterDeclaration.getTypeNode()
+                : undefined;
 
-            functionArguments.push(
-              toArgumentSchema(parameterName, parameterType, typeRefs, parameterTypeNode)
-            );
+            functionArguments.push({
+              ...toArgumentSchema(parameterName, parameterType, typeRefs, parameterTypeNode),
+              ...getParameterModifiers(parameterDeclaration),
+            });
           }
 
           const declaredReturnTypeNode = (() => {
@@ -839,7 +927,7 @@ export class ModelParser extends Parser {
             return (
               candidateNodes.find((node) => {
                 const text = trimImport(node.getText());
-                return Boolean(resolveExactModelReference(text, item.name, node.getType()));
+                return Boolean(resolveExactModelReference(text, item.model, node.getType()));
               }) ?? candidateNodes[0]
             );
           })();
@@ -850,6 +938,10 @@ export class ModelParser extends Parser {
 
           const returnType = callSignature.getReturnType();
           const isArray = returnType.isArray();
+          const shouldUseDeclaredReturnType =
+            !isArray &&
+            !!declaredReturnTypeName &&
+            !!resolveExactModelReference(declaredReturnTypeName, item.model, returnType);
           let returnTypeReference = returnType;
           let returnTypeName = "";
 
@@ -860,20 +952,17 @@ export class ModelParser extends Parser {
               const aliasSymbol = elementType.getAliasSymbol();
               returnTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(elementType.getText());
             }
-          } else if (
-            declaredReturnTypeName &&
-            resolveExactModelReference(declaredReturnTypeName, item.name, returnType)
-          ) {
+          } else if (shouldUseDeclaredReturnType) {
             returnTypeName = declaredReturnTypeName;
           } else {
             const aliasSymbol = returnType.getAliasSymbol();
             const checkerName = aliasSymbol ? aliasSymbol.getName() : trimImport(returnType.getText());
-            returnTypeName = resolveExactModelReference(checkerName, item.name, returnType)
+            returnTypeName = resolveExactModelReference(checkerName, item.model, returnType)
               ? checkerName
               : (declaredReturnTypeName ?? checkerName);
           }
 
-          const returnTypeModel = resolveExactModelReference(returnTypeName, item.name, returnTypeReference);
+          const returnTypeModel = resolveExactModelReference(returnTypeName, item.model, returnTypeReference);
           if (returnTypeModel) dependencies.add(returnTypeModel);
 
           for (const typeRef of collectTextTypeRefs(returnType, declaredReturnTypeNode, returnTypeModel)) {
@@ -884,7 +973,7 @@ export class ModelParser extends Parser {
             const declaredText = trimImport(declaredReturnTypeNode.getText());
             const declaredModel = resolveExactModelReference(
               declaredText,
-              item.name,
+              item.model,
               declaredReturnTypeNode.getType()
             );
             if (declaredModel) dependencies.add(declaredModel);
@@ -894,6 +983,7 @@ export class ModelParser extends Parser {
             name: propName,
             type: "function",
             arguments: functionArguments,
+            ...(typeParameters.length > 0 ? { typeParameters } : {}),
             returnType: isArray ? [returnTypeModel ?? returnTypeName] : (returnTypeModel ?? returnTypeName),
             ...(returnType.isReadonlyArray() ? { returnTypeReadonly: true } : {}),
             optional,
@@ -915,7 +1005,7 @@ export class ModelParser extends Parser {
 
         const aliasSymbol = elementType.getAliasSymbol();
         const elementTypeName = aliasSymbol ? aliasSymbol.getName() : trimImport(elementType.getText());
-        const elementTypeModel = resolveExactModelReference(elementTypeName, item.name, elementType);
+        const elementTypeModel = resolveExactModelReference(elementTypeName, item.model, elementType);
         const typeNode =
           "getTypeNode" in prop && typeof prop.getTypeNode === "function"
             ? (prop.getTypeNode() ?? undefined)
@@ -958,7 +1048,7 @@ export class ModelParser extends Parser {
           const genericName = symbol.getName();
           if (!genericName) return false;
 
-          const genericModel = resolveExactModelReference(genericName, item.name);
+          const genericModel = resolveExactModelReference(genericName, item.model);
           if (genericModel) dependencies.add(genericModel);
           const typeRefs = new Set<Model>();
           if (genericModel) typeRefs.add(genericModel);
@@ -985,7 +1075,7 @@ export class ModelParser extends Parser {
               typeArgumentName = trimImport(typeNodeArguments[i].getText());
             }
 
-            const typeArgumentModel = resolveExactModelReference(typeArgumentName, item.name, typeArgument);
+            const typeArgumentModel = resolveExactModelReference(typeArgumentName, item.model, typeArgument);
 
             schemaField.arguments.push(typeArgumentModel ?? typeArgumentName);
             if (typeArgumentModel) dependencies.add(typeArgumentModel);
@@ -1022,7 +1112,7 @@ export class ModelParser extends Parser {
             const declarationTypeName = trimImport(declarationTypeNode.getText());
             const declarationTypeModel = resolveExactModelReference(
               declarationTypeName,
-              item.name,
+              item.model,
               declarationTypeNode.getType()
             );
             if (declarationTypeModel) {
@@ -1031,14 +1121,14 @@ export class ModelParser extends Parser {
           }
         }
 
-        if (!resolveExactModelReference(typeName, item.name, propType)) {
+        if (!resolveExactModelReference(typeName, item.model, propType)) {
           const aliasSymbol = propType.getAliasSymbol();
           if (aliasSymbol) {
             typeName = aliasSymbol.getName();
           }
         }
 
-        const typeModel = resolveExactModelReference(typeName, item.name, propType);
+        const typeModel = resolveExactModelReference(typeName, item.model, propType);
         if (typeModel) dependencies.add(typeModel);
 
         const typeRefs = collectTextTypeRefs(propType, typeNode, typeModel);
@@ -1105,7 +1195,7 @@ export class ModelParser extends Parser {
         const valueTypeName = trimImport(
           valueTypeNode?.getText() ?? valueType.getAliasSymbol()?.getName() ?? valueType.getText()
         );
-        const valueTypeModel = resolveExactModelReference(valueTypeName, item.name, valueType);
+        const valueTypeModel = resolveExactModelReference(valueTypeName, item.model, valueType);
         if (valueTypeModel) dependencies.add(valueTypeModel);
         const typeRefs = collectTextTypeRefs(valueType, valueTypeNode, valueTypeModel);
         model.schema.push({
@@ -1122,7 +1212,7 @@ export class ModelParser extends Parser {
         const valueTypeName = trimImport(
           indexInfo.type.aliasSymbol?.getName() ?? this.tsChecker.typeToString(indexInfo.type, enclosingNode)
         );
-        const valueTypeModel = resolveExactModelReference(valueTypeName, item.name, valueType);
+        const valueTypeModel = resolveExactModelReference(valueTypeName, item.model, valueType);
         if (valueTypeModel) dependencies.add(valueTypeModel);
         const typeRefs = valueTypeModel
           ? new Set<Model>()
@@ -1130,7 +1220,7 @@ export class ModelParser extends Parser {
               collectCompilerTypeRefModels({
                 type: indexInfo.type,
                 typeLocation: item.node.declaration,
-                ownerName: item.name,
+                ownerModel: item.model,
               })
             );
         for (const typeRef of typeRefs) dependencies.add(typeRef);
@@ -1148,23 +1238,31 @@ export class ModelParser extends Parser {
         parameters,
         returnType,
         returnTypeNode,
+        signature,
         typeParameterNames = new Set<string>(),
         inherited,
       }: {
         displayName: string;
-        parameters: { name: string; type: Type; typeNode?: TypeNode }[];
+        parameters: SignatureParameter[];
         returnType: Type;
         returnTypeNode?: TypeNode;
+        signature: Signature;
         typeParameterNames?: ReadonlySet<string>;
         inherited?: boolean;
       }) => {
-        const functionArguments: { name: string; type: Model | string }[] = [];
+        const functionArguments: FunctionSchemaField["arguments"] = [];
         const signatureTypeRefs = new Set<Model>();
+        const typeParameters = collectSignatureTypeParameters(signature, signatureTypeRefs);
+
         for (const parameter of parameters) {
           const parameterTypeName = trimImport(
             parameter.typeNode?.getText() ?? parameter.type.getText(item.node.declaration)
           );
-          const parameterTypeModel = resolveExactModelReference(parameterTypeName, item.name, parameter.type);
+          const parameterTypeModel = resolveExactModelReference(
+            parameterTypeName,
+            item.model,
+            parameter.type
+          );
           if (parameterTypeModel) dependencies.add(parameterTypeModel);
           for (const typeRef of collectTextTypeRefs(parameter.type, parameter.typeNode, parameterTypeModel)) {
             signatureTypeRefs.add(typeRef);
@@ -1173,7 +1271,7 @@ export class ModelParser extends Parser {
             for (const typeRef of collectCompilerTypeRefModels({
               type: parameter.type.compilerType,
               typeLocation: item.node.declaration,
-              ownerName: item.name,
+              ownerModel: item.model,
               typeParameterNames,
             })) {
               dependencies.add(typeRef);
@@ -1183,13 +1281,16 @@ export class ModelParser extends Parser {
           functionArguments.push({
             name: sanitizePropertyName(parameter.name),
             type: parameterTypeModel ?? parameterTypeName,
+            ...(parameter.isOptional ? { isOptional: true } : {}),
+            ...(parameter.isRest ? { isRest: true } : {}),
+            ...(parameter.initializer ? { initializer: parameter.initializer } : {}),
           });
         }
 
         const returnTypeName = trimImport(
           returnTypeNode?.getText() ?? returnType.getText(item.node.declaration)
         );
-        const returnTypeModel = resolveExactModelReference(returnTypeName, item.name, returnType);
+        const returnTypeModel = resolveExactModelReference(returnTypeName, item.model, returnType);
         if (returnTypeModel) dependencies.add(returnTypeModel);
         for (const typeRef of collectTextTypeRefs(returnType, returnTypeNode, returnTypeModel)) {
           signatureTypeRefs.add(typeRef);
@@ -1198,7 +1299,7 @@ export class ModelParser extends Parser {
           for (const typeRef of collectCompilerTypeRefModels({
             type: returnType.compilerType,
             typeLocation: item.node.declaration,
-            ownerName: item.name,
+            ownerModel: item.model,
             typeParameterNames,
           })) {
             dependencies.add(typeRef);
@@ -1210,6 +1311,7 @@ export class ModelParser extends Parser {
           name: displayName,
           type: "function",
           arguments: functionArguments,
+          ...(typeParameters.length > 0 ? { typeParameters } : {}),
           returnType: returnTypeModel ?? returnTypeName,
           optional: false,
           ...(inherited ? { inherited } : {}),
@@ -1228,10 +1330,12 @@ export class ModelParser extends Parser {
       ) => {
         addSignatureRow({
           displayName,
+          signature: signature.getSignature(),
           parameters: signature.getParameters().map((parameter) => ({
             name: parameter.getName(),
             type: parameter.getType(),
             typeNode: parameter.getTypeNode(),
+            ...getParameterModifiers(parameter),
           })),
           returnType: signature.getReturnType(),
           returnTypeNode: signature.getReturnTypeNode(),
@@ -1244,11 +1348,22 @@ export class ModelParser extends Parser {
       const addEffectiveSignature = (signature: Signature, displayName: string) => {
         addSignatureRow({
           displayName,
+          signature,
           inherited: item.type === "interface",
-          parameters: signature.getParameters().map((parameter) => ({
-            name: parameter.getName(),
-            type: this.checker.getTypeOfSymbolAtLocation(parameter, item.node.declaration),
-          })),
+          parameters: signature.getParameters().map((parameter) => {
+            const declaration = parameter.getDeclarations()[0];
+            const parameterDeclaration = Node.isParameterDeclaration(declaration) ? declaration : undefined;
+            const type = this.checker.getTypeOfSymbolAtLocation(parameter, item.node.declaration);
+            return {
+              name: parameter.getName(),
+              type,
+              typeNode:
+                type.compilerType === parameterDeclaration?.getType().compilerType
+                  ? parameterDeclaration.getTypeNode()
+                  : undefined,
+              ...getParameterModifiers(parameterDeclaration),
+            };
+          }),
           returnType: signature.getReturnType(),
           typeParameterNames: new Set(
             signature
@@ -1261,13 +1376,13 @@ export class ModelParser extends Parser {
       };
 
       if (item.type === "typeAlias") {
-        for (const constraintRef of collectConstraintRefs(item.node.declaration, item.name)) {
+        for (const constraintRef of collectConstraintRefs(item.node.declaration, item.model)) {
           dependencies.add(constraintRef);
         }
 
         const typeNode = item.node.declaration.getTypeNode();
         const registerDeclaredTypeDependencies = () => {
-          for (const typeRef of collectTypeNodeRefModels(typeNode, item.name)) dependencies.add(typeRef);
+          for (const typeRef of collectTypeNodeRefModels(typeNode, item.model)) dependencies.add(typeRef);
         };
 
         // intersection constituents link like union members do
@@ -1275,10 +1390,10 @@ export class ModelParser extends Parser {
           for (const intersectionType of item.node.type.getIntersectionTypes()) {
             const memberName =
               intersectionType.getAliasSymbol()?.getName() ?? trimImport(intersectionType.getText());
-            const memberModel = resolveExactModelReference(memberName, item.name, intersectionType);
+            const memberModel = resolveExactModelReference(memberName, item.model, intersectionType);
             if (memberModel) dependencies.add(memberModel);
             else {
-              for (const typeRef of collectTypeRefModels(intersectionType, item.name)) {
+              for (const typeRef of collectTypeRefModels(intersectionType, item.model)) {
                 dependencies.add(typeRef);
               }
             }
@@ -1293,7 +1408,7 @@ export class ModelParser extends Parser {
         for (const typeQueryNode of typeQueryNodes) {
           const queriedModel = resolveExactModelReference(
             typeQueryNode.getExprName().getText(),
-            item.name,
+            item.model,
             typeQueryNode.getType()
           );
           if (queriedModel) dependencies.add(queriedModel);
@@ -1307,7 +1422,7 @@ export class ModelParser extends Parser {
             const objectTypeName = trimImport(objectType.getText());
             const objectTypeModel = resolveExactModelReference(
               objectTypeName,
-              item.name,
+              item.model,
               objectType.getType()
             );
             if (objectTypeModel) {
@@ -1320,7 +1435,7 @@ export class ModelParser extends Parser {
         if (typeNode?.isKind(ts.SyntaxKind.ConditionalType)) {
           registerDeclaredTypeDependencies();
           model.schema.push({ name: "==>", type: typeNode.getText(), optional: false });
-          dependencyMap.set(item.name, dependencies);
+          dependencyMap.set(model, dependencies);
           continue;
         }
 
@@ -1337,7 +1452,7 @@ export class ModelParser extends Parser {
             trimImport(item.node.type.getText(item.node.declaration, ts.TypeFormatFlags.InTypeAlias));
 
           model.schema.push({ name: "==>", type: typeText, optional: false });
-          dependencyMap.set(item.name, dependencies);
+          dependencyMap.set(model, dependencies);
           continue;
         }
 
@@ -1371,7 +1486,7 @@ export class ModelParser extends Parser {
               item.node.type.getText(item.node.declaration, ts.TypeFormatFlags.InTypeAlias),
             optional: false,
           });
-          dependencyMap.set(item.name, dependencies);
+          dependencyMap.set(model, dependencies);
           continue;
         }
 
@@ -1380,7 +1495,7 @@ export class ModelParser extends Parser {
           let types: (Model | ({} & string))[] = [];
           for (const type of unionTypes) {
             const typeName = trimImport(type.getText());
-            const typeModel = resolveExactModelReference(typeName, item.name, type);
+            const typeModel = resolveExactModelReference(typeName, item.model, type);
             if (typeModel) dependencies.add(typeModel);
             types.push(typeModel ?? typeName);
           }
@@ -1405,12 +1520,12 @@ export class ModelParser extends Parser {
 
           for (const typeReference of typeNode?.getDescendantsOfKind(ts.SyntaxKind.TypeReference) ?? []) {
             const referenceName = trimImport(typeReference.getText());
-            const referencedModel = resolveModelReference(referenceName, item.name, typeReference.getType());
+            const referencedModel = resolveModelReference(referenceName, item.model, typeReference.getType());
             if (referencedModel) dependencies.add(referencedModel);
           }
 
           model.schema.push({ name: "==>", type: "union", types, optional: false });
-          dependencyMap.set(item.name, dependencies);
+          dependencyMap.set(model, dependencies);
           continue;
         }
 
@@ -1483,13 +1598,13 @@ export class ModelParser extends Parser {
       if (item.type === "interface") {
         const headerModel = model.type === "class" ? model : item.model;
         const headerRefs = new Set(headerModel.headerRefs);
-        for (const constraintRef of collectConstraintRefs(item.node.declaration, item.name)) {
+        for (const constraintRef of collectConstraintRefs(item.node.declaration, item.model)) {
           headerRefs.add(constraintRef);
           dependencies.add(constraintRef);
         }
         for (const extended of item.node.extends) {
           const extendsName = trimImport(extended.getText());
-          const extendsModel = resolveExactModelReference(extendsName, item.name, extended.getType());
+          const extendsModel = resolveExactModelReference(extendsName, item.model, extended.getType());
           if (extendsModel) {
             dependencies.add(extendsModel);
             if (
@@ -1499,7 +1614,7 @@ export class ModelParser extends Parser {
               headerRefs.add(extendsModel);
             }
           } else {
-            for (const headerRef of collectHeaderExpressionRefs(extended, item.name)) {
+            for (const headerRef of collectHeaderExpressionRefs(extended, item.model)) {
               headerRefs.add(headerRef);
               dependencies.add(headerRef);
             }
@@ -1572,16 +1687,14 @@ export class ModelParser extends Parser {
       }
 
       if (item.type === "function") {
-        for (const constraintRef of collectConstraintRefs(item.node.declaration, item.name)) {
-          dependencies.add(constraintRef);
+        for (const signature of item.node.signatures) {
+          addSignatureProp(signature, "");
         }
-        // 1 row per overload, with no name: the header carries the name
-        for (const signature of item.node.signatures) addSignatureProp(signature, "");
       }
 
       if (item.type === "class") {
         const headerRefs = new Set(item.model.headerRefs);
-        for (const constraintRef of collectConstraintRefs(item.node.declaration, item.name)) {
+        for (const constraintRef of collectConstraintRefs(item.node.declaration, item.model)) {
           headerRefs.add(constraintRef);
           dependencies.add(constraintRef);
         }
@@ -1589,13 +1702,13 @@ export class ModelParser extends Parser {
           const extendsName = trimImport(item.node.extends.getText());
           const extendsModel = resolveExactModelReference(
             extendsName,
-            item.name,
+            item.model,
             item.node.extends.getType()
           );
           if (extendsModel) {
             dependencies.add(extendsModel);
           } else {
-            for (const headerRef of collectHeaderExpressionRefs(item.node.extends, item.name)) {
+            for (const headerRef of collectHeaderExpressionRefs(item.node.extends, item.model)) {
               headerRefs.add(headerRef);
               dependencies.add(headerRef);
             }
@@ -1606,13 +1719,13 @@ export class ModelParser extends Parser {
           const implementsName = trimImport(implemented.getText());
           const implementsModel = resolveExactModelReference(
             implementsName,
-            item.name,
+            item.model,
             implemented.getType()
           );
           if (implementsModel) {
             dependencies.add(implementsModel);
           } else {
-            for (const headerRef of collectHeaderExpressionRefs(implemented, item.name)) {
+            for (const headerRef of collectHeaderExpressionRefs(implemented, item.model)) {
               headerRefs.add(headerRef);
               dependencies.add(headerRef);
             }
@@ -1641,14 +1754,11 @@ export class ModelParser extends Parser {
         }
       }
 
-      dependencyMap.set(item.name, dependencies);
+      dependencyMap.set(model, dependencies);
     }
 
     // third pass: link dependencies
-    for (const [name, dependencies] of dependencyMap.entries()) {
-      const model = modelNameToModelMap.get(name);
-      if (!model) continue;
-
+    for (const [model, dependencies] of dependencyMap.entries()) {
       for (const dependency of dependencies) {
         model.dependencies.push(dependency);
         dependency.dependants.push(model);

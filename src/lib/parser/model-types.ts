@@ -20,7 +20,14 @@ export type GenericSchemaField = SharedSchemaField & {
 export type FunctionSchemaField = SharedSchemaField & {
   type: "function";
   accessor?: "get" | "set";
-  arguments: { name: string; type: Model | string }[];
+  arguments: {
+    name: string;
+    type: Model | string;
+    isOptional?: boolean;
+    isRest?: boolean;
+    initializer?: string;
+  }[];
+  typeParameters?: ModelBase["arguments"];
   returnType: Model | [Model | string] | string;
   returnTypeReadonly?: boolean;
 };
@@ -82,7 +89,6 @@ export type ClassModel = ModelBase & {
 export type EnumModel = ModelBase & {
   type: "enum";
 };
-/** A top-level function. Each overload is 1 function row of the schema. */
 export type FunctionModel = ModelBase & {
   type: "function";
 };

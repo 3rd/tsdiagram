@@ -56,9 +56,7 @@ export type ParsedClass = {
 
 export type ParsedFunction = {
   name: string;
-  /** The first declaration. Closures that need a location use it. */
   declaration: FunctionDeclaration;
-  /** The signatures to show: the overloads without a body, or the implementation when it is the only declaration. */
   signatures: FunctionDeclaration[];
 };
 
@@ -286,6 +284,7 @@ export class Parser {
 
   get functions(): ParsedFunction[] {
     const result = new Map<string, ParsedFunction>();
+    const visitedPositions = new Set<number>();
     const declarations = collectQualifiedDeclarations(
       this.source.getFunctions(),
       this.source.getModules(),
@@ -293,22 +292,30 @@ export class Parser {
     );
 
     for (const { moduleName, declaration } of declarations) {
+      if (visitedPositions.has(declaration.getPos())) continue;
+
       const baseName = declaration.getName();
       if (!baseName) continue;
+
       const name = moduleName ? `${moduleName}.${baseName}` : baseName;
       const item = result.get(name) ?? { name, declaration, signatures: [] };
-      // ts-morph lists only the implementation of an overloaded function; the
-      // overloads hang off it. An ambient function has no implementation.
+
       for (const candidate of [...declaration.getOverloads(), declaration]) {
-        if (item.signatures.some((signature) => signature.getPos() === candidate.getPos())) continue;
+        const position = candidate.getPos();
+        if (visitedPositions.has(position)) continue;
+
+        visitedPositions.add(position);
         item.signatures.push(candidate);
       }
+
       result.set(name, item);
     }
 
     for (const item of result.values()) {
       const overloads = item.signatures.filter((signature) => !signature.hasBody());
-      if (overloads.length > 0) item.signatures = overloads;
+      if (overloads.length > 0) {
+        item.signatures = overloads;
+      }
     }
 
     return Array.from(result.values());

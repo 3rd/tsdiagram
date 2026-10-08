@@ -146,3 +146,21 @@ it("parses functions, groups overloads, and reads namespaces", () => {
   expect(functions[1].signatures.every((s) => !s.hasBody())).toBe(true);
   expect(functions[2].signatures).toHaveLength(1);
 });
+
+it("keeps ambient overloads in source order across merged namespaces", () => {
+  const parser = new Parser(`
+    declare function run(value: string): string;
+    declare function run(value: number): number;
+    namespace N { export declare function run(value: boolean): boolean; }
+    namespace N { export declare function run(value: bigint): bigint; }
+  `);
+  const functions = parser.functions;
+
+  expect(functions.map((item) => item.name)).toEqual(["run", "N.run"]);
+  expect(
+    functions.map((item) => item.signatures.map((signature) => signature.getReturnType().getText()))
+  ).toEqual([
+    ["string", "number"],
+    ["boolean", "bigint"],
+  ]);
+});
