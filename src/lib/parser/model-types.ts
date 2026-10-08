@@ -82,5 +82,9 @@ export type ClassModel = ModelBase & {
 export type EnumModel = ModelBase & {
   type: "enum";
 };
+/** A top-level function. Each overload is 1 function row of the schema. */
+export type FunctionModel = ModelBase & {
+  type: "function";
+};
 
-export type Model = ClassModel | EnumModel | InterfaceModel | TypeAliasModel;
+export type Model = ClassModel | EnumModel | FunctionModel | InterfaceModel | TypeAliasModel;

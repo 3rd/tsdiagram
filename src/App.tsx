@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { Editor } from "./components/Editor";
 import { Header } from "./components/Header";
+import { HeadlessExport } from "./components/HeadlessExport";
 import { Panels } from "./components/Panels";
 import { Preferences } from "./components/Preferences";
 import { RendererWrapper } from "./components/Renderer";
@@ -40,6 +41,7 @@ function App() {
         </main>
         <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />
         <Share isOpen={showShare} onClose={handleShareClick} />
+        <HeadlessExport />
       </div>
     </ReactFlowProvider>
   );

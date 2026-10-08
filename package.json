@@ -65,5 +65,8 @@
     "overrides": {
       "rollup": ">=4.59.0"
     }
+  },
+  "bin": {
+    "tsdiagram-export": "bin/tsdiagram-export.mjs"
   }
 }

@@ -1,16 +1,9 @@
-import { Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
 import { CopyIcon, DownloadIcon, Link2Icon } from "@radix-ui/react-icons";
-import { getNodesBounds, useNodesInitialized, useStore, useStoreApi } from "@xyflow/react";
-import { graphStore } from "../stores/graph";
-import {
-  copySVG,
-  createAbortError,
-  downloadSVG,
-  exportReactFlowToSVG,
-  GraphSnapshotMismatchError,
-  isAbortError,
-} from "../utils/svg-export";
+import { useNodesInitialized, useStore, useStoreApi } from "@xyflow/react";
+import { copySVG, downloadSVG, GraphSnapshotMismatchError, isAbortError } from "../utils/svg-export";
+import { createSVGExporter } from "../utils/svg-export-flow";
 
 export type ShareProps = {
   isOpen: boolean;
@@ -22,32 +15,11 @@ const getExportErrorMessage = (error: unknown) => {
   return `Export failed: ${error instanceof Error ? error.message : String(error)}`;
 };
 
-const waitForExportRender = (signal: AbortSignal) => {
-  if (signal.aborted) return Promise.reject(createAbortError());
-
-  return new Promise<void>((resolve, reject) => {
-    let frame = 0;
-    const rejectOnAbort = () => {
-      cancelAnimationFrame(frame);
-      signal.removeEventListener("abort", rejectOnAbort);
-      reject(createAbortError());
-    };
-    signal.addEventListener("abort", rejectOnAbort, { once: true });
-    frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => {
-        signal.removeEventListener("abort", rejectOnAbort);
-        resolve();
-      });
-    });
-  });
-};
-
 const ShareContent = memo(() => {
   const [hasCopiedLink, setHasCopiedLink] = useState(false);
   const [hasCopiedSVG, setHasCopiedSVG] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [previewImageURL, setPreviewImageURL] = useState<string | null>(null);
-  const activeExportsRef = useRef(new Set<AbortController>());
   const copySVGOperationRef = useRef(0);
   const edges = useStore((state) => state.edges);
   const nodes = useStore((state) => state.nodes);
@@ -61,100 +33,8 @@ const ShareContent = memo(() => {
     return state.nodes === nodes && state.edges === edges && (nodes.length === 0 || state.nodesInitialized);
   }, [edges, nodes, reactFlowStore]);
 
-  const exportDepthRef = useRef(0);
-  const getSVGSource = useCallback(
-    async (callerSignal?: AbortSignal) => {
-      const exportState = reactFlowStore.getState();
-      const edgesToExport = exportState.edges;
-      const nodesToExport = exportState.nodes;
-      const exportGraphIsCurrent = () => {
-        const state = reactFlowStore.getState();
-        return (
-          state.nodes === nodesToExport &&
-          state.edges === edgesToExport &&
-          (nodesToExport.length === 0 || state.nodesInitialized)
-        );
-      };
-
-      const controller = new AbortController();
-      const abortFromCaller = () => controller.abort();
-      callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
-      if (callerSignal?.aborted) controller.abort();
-      activeExportsRef.current.add(controller);
-
-      const abortOnGraphChange = () => {
-        if (!exportGraphIsCurrent()) controller.abort();
-      };
-      const unsubscribe = reactFlowStore.subscribe(abortOnGraphChange);
-      abortOnGraphChange();
-
-      exportDepthRef.current += 1;
-      graphStore.state.svgExportMode = true;
-      try {
-        if (nodesToExport.length > 0 && !exportState.nodesInitialized) throw createAbortError();
-        await waitForExportRender(controller.signal);
-        return await exportReactFlowToSVG({
-          edgeIds: edgesToExport.map((edge) => edge.id),
-          nodeBounds: getNodesBounds(nodesToExport),
-          nodeIds: nodesToExport.map((node) => node.id),
-          signal: controller.signal,
-        });
-      } finally {
-        callerSignal?.removeEventListener("abort", abortFromCaller);
-        unsubscribe();
-        activeExportsRef.current.delete(controller);
-        exportDepthRef.current -= 1;
-        if (exportDepthRef.current === 0) graphStore.state.svgExportMode = false;
-      }
-    },
-    [reactFlowStore]
-  );
-
-  const getCurrentSVGSource = useCallback(async () => {
-    const operationController = new AbortController();
-    activeExportsRef.current.add(operationController);
-
-    const waitForInitializedGraph = () => {
-      if (operationController.signal.aborted) return Promise.reject(createAbortError());
-      const state = reactFlowStore.getState();
-      if (state.nodes.length === 0 || state.nodesInitialized) return Promise.resolve();
-
-      return new Promise<void>((resolve, reject) => {
-        let unsubscribe = () => {};
-        const cleanup = () => {
-          operationController.signal.removeEventListener("abort", rejectOnAbort);
-          unsubscribe();
-        };
-        const rejectOnAbort = () => {
-          cleanup();
-          reject(createAbortError());
-        };
-        const resolveWhenInitialized = () => {
-          const currentState = reactFlowStore.getState();
-          if (currentState.nodes.length > 0 && !currentState.nodesInitialized) return;
-          cleanup();
-          resolve();
-        };
-
-        unsubscribe = reactFlowStore.subscribe(resolveWhenInitialized);
-        operationController.signal.addEventListener("abort", rejectOnAbort, { once: true });
-        resolveWhenInitialized();
-      });
-    };
-
-    try {
-      while (true) {
-        await waitForInitializedGraph();
-        try {
-          return await getSVGSource(operationController.signal);
-        } catch (error) {
-          if (!isAbortError(error) || operationController.signal.aborted) throw error;
-        }
-      }
-    } finally {
-      activeExportsRef.current.delete(operationController);
-    }
-  }, [getSVGSource, reactFlowStore]);
+  const exporter = useMemo(() => createSVGExporter(reactFlowStore), [reactFlowStore]);
+  const { getSVGSource, getCurrentSVGSource } = exporter;
 
   useEffect(() => {
     const previewController = new AbortController();
@@ -182,12 +62,7 @@ const ShareContent = memo(() => {
     return () => URL.revokeObjectURL(previewImageURL);
   }, [previewImageURL]);
 
-  useEffect(() => {
-    const activeExports = activeExportsRef.current;
-    return () => {
-      for (const controller of activeExports) controller.abort();
-    };
-  }, []);
+  useEffect(() => () => exporter.abortAll(), [exporter]);
 
   const handleExportSVGToFile = async () => {
     setExportError(null);
