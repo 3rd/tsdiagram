@@ -1289,27 +1289,18 @@ export class ModelParser extends Parser {
         }
 
         // tuples render as their type text instead of dumping Array.prototype members
-        if (item.node.type.isTuple()) {
+        const isTupleOrBrandedPrimitive =
+          item.node.type.isTuple() ||
+          (item.node.type.isIntersection() &&
+            item.node.type.getIntersectionTypes().some(isPrimitiveLikeType));
+        if (isTupleOrBrandedPrimitive) {
           registerDeclaredTypeDependencies();
-          const tupleText =
-            typeNode?.getText() ??
-            item.node.type.getText(item.node.declaration, ts.TypeFormatFlags.InTypeAlias);
-          model.schema.push({ name: "==>", type: trimImport(tupleText), optional: false });
-          dependencyMap.set(item.name, dependencies);
-          continue;
-        }
 
-        // a branded primitive (`string & { __brand: ... }`) renders as its declared type
-        // instead of dumping the members of String or Number
-        if (
-          item.node.type.isIntersection() &&
-          item.node.type.getIntersectionTypes().some(isPrimitiveLikeType)
-        ) {
-          registerDeclaredTypeDependencies();
-          const brandedText =
+          const typeText =
             typeNode?.getText() ??
-            item.node.type.getText(item.node.declaration, ts.TypeFormatFlags.InTypeAlias);
-          model.schema.push({ name: "==>", type: trimImport(brandedText), optional: false });
+            trimImport(item.node.type.getText(item.node.declaration, ts.TypeFormatFlags.InTypeAlias));
+
+          model.schema.push({ name: "==>", type: typeText, optional: false });
           dependencyMap.set(item.name, dependencies);
           continue;
         }

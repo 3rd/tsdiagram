@@ -3106,3 +3106,11 @@ it("renders a branded primitive as its declared type, not as the members of Stri
   expect(employee?.schema.map((field) => field.name)).toEqual(["id", "head"]);
   expect(employee?.dependencies.map((m) => m.name).sort()).toEqual(["Count", "EmployeeId"]);
 });
+
+it.each([`number & { readonly __brand: 'import("/source").Id' }`, `['import("/source").Id']`])(
+  "preserves import-like literal text in %s",
+  (declaredType) => {
+    const [model] = new ModelParser(`type Id = ${declaredType};`).getModels();
+    expect(model.schema).toEqual([{ name: "==>", type: declaredType, optional: false }]);
+  }
+);
