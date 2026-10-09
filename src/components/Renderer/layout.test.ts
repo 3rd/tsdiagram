@@ -4,6 +4,21 @@ import { compactLayoutedNodes, extractModelEdges, fieldHasSourceEdge, ModelNodeS
 
 const NO_PINS: ReadonlySet<string> = new Set();
 
+it("connects constraints and defaults from every displayed function overload", () => {
+  const models = new ModelParser(`
+    interface User { id: string }
+    interface Team { count: number }
+    declare function choose<T extends User>(value: T): T;
+    declare function choose<T = Team>(value: T[]): T;
+  `).getModels();
+  const edges = extractModelEdges(models);
+
+  expect(edges.map((edge) => [edge.source, edge.target, edge.sourceHandle])).toEqual([
+    ["function:choose", "User", "function:choose-source-"],
+    ["function:choose", "Team", "function:choose-source-"],
+  ]);
+});
+
 const makeNode = (id: string, x: number, y: number, width: number, height: number): ModelNodeState => ({
   data: {
     badgeHubIds: new Set<string>(),

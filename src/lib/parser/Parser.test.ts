@@ -129,3 +129,38 @@ it("collects inherited getter and setter declarations separately from methods", 
     expect(item.methods).toEqual([]);
   }
 });
+
+it("parses functions, groups overloads, and reads namespaces", () => {
+  const parser = new Parser(`
+    declare function a(x: string): void;
+    function b(x: string): void;
+    function b(x: number): void;
+    function b(x: string | number): void {}
+    namespace N { export function c(): void {} }
+    export default function () {}
+  `);
+
+  const functions = parser.functions;
+  expect(functions.map((f) => f.name)).toEqual(["a", "b", "N.c"]);
+  expect(functions[1].signatures).toHaveLength(2);
+  expect(functions[1].signatures.every((s) => !s.hasBody())).toBe(true);
+  expect(functions[2].signatures).toHaveLength(1);
+});
+
+it("keeps ambient overloads in source order across merged namespaces", () => {
+  const parser = new Parser(`
+    declare function run(value: string): string;
+    declare function run(value: number): number;
+    namespace N { export declare function run(value: boolean): boolean; }
+    namespace N { export declare function run(value: bigint): bigint; }
+  `);
+  const functions = parser.functions;
+
+  expect(functions.map((item) => item.name)).toEqual(["run", "N.run"]);
+  expect(
+    functions.map((item) => item.signatures.map((signature) => signature.getReturnType().getText()))
+  ).toEqual([
+    ["string", "number"],
+    ["boolean", "bigint"],
+  ]);
+});

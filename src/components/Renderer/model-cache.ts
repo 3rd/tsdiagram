@@ -36,7 +36,8 @@ const schemaFieldToken = (field: SchemaField) => {
       ...shared,
       kind: "function",
       accessor: field.accessor,
-      arguments: field.arguments.map((argument) => ({ name: argument.name, type: refToken(argument.type) })),
+      arguments: field.arguments.map((argument) => ({ ...argument, type: refToken(argument.type) })),
+      typeParameters: field.typeParameters,
       returnType: Array.isArray(field.returnType)
         ? [refToken(field.returnType[0])]
         : refToken(field.returnType),

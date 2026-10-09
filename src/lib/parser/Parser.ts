@@ -5,6 +5,7 @@ import {
   EnumDeclaration,
   EnumMember,
   ExpressionWithTypeArguments,
+  FunctionDeclaration,
   GetAccessorDeclaration,
   IndexSignatureDeclaration,
   InterfaceDeclaration,
@@ -51,6 +52,12 @@ export type ParsedClass = {
   getAccessors: GetAccessorDeclaration[];
   setAccessors: SetAccessorDeclaration[];
   synthesizedProperties: TsMorphSymbol[];
+};
+
+export type ParsedFunction = {
+  name: string;
+  declaration: FunctionDeclaration;
+  signatures: FunctionDeclaration[];
 };
 
 export type ParsedEnum = {
@@ -270,6 +277,45 @@ export class Parser {
       const item = result.get(name) ?? { name, declaration, members: [] };
       item.members.push(...declaration.getMembers());
       result.set(name, item);
+    }
+
+    return Array.from(result.values());
+  }
+
+  get functions(): ParsedFunction[] {
+    const result = new Map<string, ParsedFunction>();
+    const visitedPositions = new Set<number>();
+    const declarations = collectQualifiedDeclarations(
+      this.source.getFunctions(),
+      this.source.getModules(),
+      (module) => module.getFunctions()
+    );
+
+    for (const { moduleName, declaration } of declarations) {
+      if (visitedPositions.has(declaration.getPos())) continue;
+
+      const baseName = declaration.getName();
+      if (!baseName) continue;
+
+      const name = moduleName ? `${moduleName}.${baseName}` : baseName;
+      const item = result.get(name) ?? { name, declaration, signatures: [] };
+
+      for (const candidate of [...declaration.getOverloads(), declaration]) {
+        const position = candidate.getPos();
+        if (visitedPositions.has(position)) continue;
+
+        visitedPositions.add(position);
+        item.signatures.push(candidate);
+      }
+
+      result.set(name, item);
+    }
+
+    for (const item of result.values()) {
+      const overloads = item.signatures.filter((signature) => !signature.hasBody());
+      if (overloads.length > 0) {
+        item.signatures = overloads;
+      }
     }
 
     return Array.from(result.values());

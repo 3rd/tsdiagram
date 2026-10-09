@@ -99,6 +99,25 @@ const TYPE_TEXT_COLORS = {
   reference: MODEL_NODE_CLASSES.field.modelTypeColor,
 };
 
+const formatTypeParameters = (parameters: Model["arguments"]) => {
+  if (parameters.length === 0) return "";
+
+  const parts = parameters.map((parameter) => {
+    let text = parameter.name;
+
+    if (parameter.extends) {
+      text += ` extends ${parameter.extends}`;
+    }
+
+    if (parameter.default) {
+      text += ` = ${parameter.default}`;
+    }
+
+    return text;
+  });
+  return `<${parts.join(", ")}>`;
+};
+
 const TypeText = ({ segments }: { segments: TypeTextSegment[] }) => (
   <span className={MODEL_NODE_CLASSES.field.defaultTypeColor}>
     {segments.map((segment, index) => {
@@ -296,6 +315,17 @@ const ModelNodeContent = ({ id, data }: ModelNodeProps) => {
           </span>
         );
       } else if (isFunctionSchemaField(field)) {
+        if (field.typeParameters) {
+          keyFragments.push(
+            <span
+              key={`${model.id}-${field.name}-type-parameters`}
+              className={MODEL_NODE_CLASSES.field.defaultTypeColor}
+            >
+              {formatTypeParameters(field.typeParameters)}
+            </span>
+          );
+        }
+
         keyFragments.push(
           <span
             key={`${model.id}-${field.name}-arguments-start`}
@@ -311,17 +341,23 @@ const ModelNodeContent = ({ id, data }: ModelNodeProps) => {
           if (isModelReference(argument.type)) {
             argumentFragments.push(
               <span key={argumentKey}>
+                {argument.isRest && "..."}
                 {argument.name}
+                {argument.isOptional && "?"}
                 <span className={MODEL_NODE_CLASSES.field.defaultTypeColor}>: </span>
                 <TypeNameSpan badgeHubIds={badgeHubIds} refModel={argument.type} />
+                {argument.initializer && ` = ${argument.initializer}`}
               </span>
             );
           } else {
             argumentFragments.push(
               <span key={argumentKey}>
+                {argument.isRest && "..."}
                 {argument.name}
+                {argument.isOptional && "?"}
                 <span className={MODEL_NODE_CLASSES.field.defaultTypeColor}>: </span>
                 <TypeText segments={model.typeTextSegments[argument.type]} />
+                {argument.initializer && ` = ${argument.initializer}`}
               </span>
             );
           }
@@ -435,20 +471,11 @@ const ModelNodeContent = ({ id, data }: ModelNodeProps) => {
       nameParts.unshift("abstract ");
     }
 
-    if (model.arguments.length > 0) {
-      const argumentsParts = [];
-      for (const argument of model.arguments) {
-        let argumentStr = argument.name;
-        if (argument.extends) {
-          argumentStr += ` extends ${argument.extends}`;
-        }
-        if (argument.default) {
-          argumentStr += ` = ${argument.default}`;
-        }
-        argumentsParts.push(argumentStr);
-      }
-      nameParts.push(`<${argumentsParts.join(", ")}>`);
+    if (model.type === "function") {
+      nameParts.unshift("\u0192 ");
     }
+
+    nameParts.push(formatTypeParameters(model.arguments));
 
     if (model.type === "interface" && model.extends.length > 0) {
       const extendParts = [];
