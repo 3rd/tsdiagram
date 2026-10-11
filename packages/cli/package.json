@@ -1,6 +1,6 @@
 {
   "name": "tsdiagram",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Render TypeScript diagrams to SVG and PNG.",
   "repository": "https://github.com/3rd/tsdiagram",
   "type": "module",
