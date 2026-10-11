@@ -1,0 +1,35 @@
+{
+  "name": "tsdiagram",
+  "version": "0.1.0",
+  "description": "Render TypeScript diagrams to SVG and PNG.",
+  "repository": "https://github.com/3rd/tsdiagram",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "bin": {
+    "tsdiagram": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "pnpm --filter @tsdiagram/renderer build && vite build && node scripts/copy-renderer-assets.mjs",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "elkjs": "^0.12.0",
+    "gunsmith": "^0.6.0",
+    "react": "^19.2.7",
+    "takumi-js": "2.14.0",
+    "ts-morph": "^28.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tsdiagram/renderer": "workspace:*"
+  }
+}

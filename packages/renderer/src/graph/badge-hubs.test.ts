@@ -1,0 +1,96 @@
+import { describe, expect, it } from "vitest";
+import { parseModels } from "@tsdiagram/core";
+import { computeBadgeHubIds, EMPTY_BADGE_HUB_IDS } from "./badge-hubs";
+
+const consumersOf = (typeName: string, count: number) =>
+  Array.from({ length: count }, (_, i) => `interface Consumer${i} { ref: ${typeName} }`).join("\n");
+
+describe("computeBadgeHubIds", () => {
+  it("keeps a generic default visible when other consumers could badge it", () => {
+    const models = parseModels(`
+      type Id = string;
+      ${consumersOf("Id", 6)}
+      declare function find<T = Id>(value: T): T;
+    `);
+
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+  });
+
+  it("badges a simple leaf alias at the enter threshold", () => {
+    const models = parseModels(`type Id = string;\n${consumersOf("Id", 6)}`);
+    const badgeHubIds = computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS);
+    expect([...badgeHubIds]).toEqual(["Id"]);
+  });
+
+  it("does not badge below the enter threshold", () => {
+    const models = parseModels(`type Id = string;\n${consumersOf("Id", 5)}`);
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+  });
+
+  it("keeps an existing badge between exit and enter thresholds (hysteresis)", () => {
+    const source = `type Id = string;\n${consumersOf("Id", 4)}`;
+    const models = parseModels(source);
+    // 4 consumers: below enter (6) but at exit (4)
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+    expect([...computeBadgeHubIds(models, new Set(["Id"]))]).toEqual(["Id"]);
+  });
+
+  it("drops a badge below the exit threshold", () => {
+    const models = parseModels(`type Id = string;\n${consumersOf("Id", 3)}`);
+    expect(computeBadgeHubIds(models, new Set(["Id"])).size).toBe(0);
+  });
+
+  it("never badges aliases whose schema references models", () => {
+    const source = `interface Other { x: string }\ntype Wrap = { a: Other };\n${consumersOf("Wrap", 8)}`;
+    const models = parseModels(source);
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+  });
+
+  it("never badges structured aliases that contain only primitive fields", () => {
+    const source = `
+      type Address = { street: string; city: string; zip: string; active: boolean };
+      ${consumersOf("Address", 8)}
+    `;
+    const models = parseModels(source);
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+  });
+
+  it("never badges aliases whose relationships render only as text", () => {
+    const anonymousUnionConsumers = Array.from(
+      { length: 6 },
+      (_, i) => `type Consumer${i} = { ref: Id } | { empty: true }`
+    ).join("\n");
+    const models = parseModels(`type Id = string;\n${anonymousUnionConsumers}`);
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+  });
+
+  it("never badges aliases nested inside generic field text", () => {
+    const consumers = Array.from(
+      { length: 6 },
+      (_, i) => `interface Consumer${i} { ref: Promise<Array<Id>> }`
+    ).join("\n");
+    const models = parseModels(`type Id = string;\n${consumers}`);
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+  });
+
+  it("never badges aliases referenced through extends text", () => {
+    const consumers = Array.from({ length: 6 }, (_, i) => `interface Consumer${i} extends Empty {}`).join(
+      "\n"
+    );
+    const models = parseModels(`type Empty = {};\n${consumers}`);
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+  });
+
+  it("never badges interfaces regardless of fan-in", () => {
+    const source = `interface Id { value: string }\n${consumersOf("Id", 8)}`;
+    const models = parseModels(source);
+    expect(computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS).size).toBe(0);
+  });
+
+  it("returns the previous set identity when the classification is unchanged", () => {
+    const models = parseModels(`type Id = string;\n${consumersOf("Id", 6)}`);
+    const first = computeBadgeHubIds(models, EMPTY_BADGE_HUB_IDS);
+    const second = computeBadgeHubIds(models, first);
+    expect(second).toBe(first);
+  });
+});

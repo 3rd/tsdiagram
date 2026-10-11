@@ -1,0 +1,220 @@
+@import "@tsdiagram/renderer/styles.css";
+
+@source "./";
+
+/* base */
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentcolor);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: var(--font-weight-strong);
+  }
+
+  th,
+  b,
+  strong {
+    font-weight: 500;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  select {
+    background-color: var(--color-pane);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: var(--color-border-strong);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-faint);
+  }
+}
+
+html {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font: 13px/18px var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--color-text);
+  background: var(--color-canvas);
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root,
+  :root[data-theme="dark"],
+  .theme-dark {
+    --color-border: var(--color-border-strong);
+    --color-text-faint: var(--color-text-muted);
+  }
+
+  :focus-visible {
+    outline-width: 3px;
+  }
+}
+
+/* primitives */
+
+@layer components {
+  .dialog-backdrop {
+    @apply fixed inset-0 bg-overlay backdrop-blur-[4px];
+  }
+
+  .dialog-panel {
+    @apply flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border-strong bg-raised text-left text-text shadow-(--shadow-popover);
+  }
+
+  .dialog-title {
+    @apply px-5 pt-5 text-title font-strong text-text;
+  }
+
+  .dialog-body {
+    @apply flex flex-col gap-4 overflow-y-auto px-5 py-4;
+  }
+
+  .dialog-footer {
+    @apply flex justify-end gap-2 border-t border-border px-5 py-3;
+  }
+
+  .field-group {
+    @apply flex flex-col gap-1;
+  }
+
+  .field-label {
+    @apply block text-ui font-medium text-text-muted;
+  }
+
+  .field-control {
+    @apply block h-7 w-full rounded-control border border-border bg-pane px-2 text-body text-text transition-[border-color] duration-(--duration-hover) ease-out placeholder:text-text-faint hover:border-border-strong focus:border-accent;
+  }
+
+  .check-row {
+    @apply flex items-center gap-2;
+  }
+
+  .check-input {
+    @apply size-3.5 shrink-0 accent-accent;
+  }
+
+  .check-label {
+    @apply select-none text-body text-text;
+  }
+
+  .switch-input {
+    @apply relative my-[5px] h-3.5 w-6 shrink-0 cursor-pointer appearance-none rounded-full bg-inset shadow-[inset_0_0_0_1px_var(--color-border-strong)] transition-[background-color,box-shadow] duration-(--duration-quick) ease-out checked:bg-accent checked:shadow-none;
+  }
+
+  .switch-input::before {
+    @apply absolute top-0.5 left-0.5 size-2.5 rounded-full bg-text-faint transition-[transform,background-color] duration-(--duration-quick) ease-out content-[''];
+  }
+
+  .switch-input:checked::before {
+    @apply translate-x-2.5 bg-accent-fg;
+  }
+
+  .button-primary {
+    @apply inline-flex h-7 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-control bg-accent px-[9px] text-ui font-medium text-accent-fg transition-[color,background-color,border-color,box-shadow] duration-(--duration-hover) ease-out hover:bg-accent-hover active:duration-(--duration-instant) [&_svg]:size-3.5;
+  }
+
+  .button-secondary {
+    @apply inline-flex h-7 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-control border border-border bg-pane px-[9px] text-ui font-medium text-text transition-[color,background-color,border-color,box-shadow] duration-(--duration-hover) ease-out hover:border-border-strong hover:bg-control-hover active:duration-(--duration-instant) [&_svg]:size-3.5;
+  }
+}
+
+.checkered {
+  background-color: var(--color-pane);
+  background-image:
+    linear-gradient(
+      45deg,
+      var(--color-inset) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-inset) 75%,
+      var(--color-inset) 100%
+    ),
+    linear-gradient(
+      45deg,
+      var(--color-inset) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-inset) 75%,
+      var(--color-inset) 100%
+    );
+  background-size: 20px 20px;
+  background-position:
+    0 0,
+    10px 10px;
+}
+
+.vim-status input {
+  @apply bg-inset;
+}

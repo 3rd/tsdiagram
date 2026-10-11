@@ -1,0 +1,1 @@
+export { ModelCardHandle } from "./ModelCardHandle";
