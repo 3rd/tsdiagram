@@ -1,0 +1,30 @@
+{
+  "name": "@tsdiagram/web",
+  "version": "0.0.3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --open",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tsdiagram/core": "workspace:*",
+    "@tsdiagram/renderer": "workspace:*",
+    "@headlessui/react": "^2.2.10",
+    "@monaco-editor/react": "^4.7.0",
+    "@radix-ui/react-icons": "^1.3.2",
+    "classnames": "^2.5.1",
+    "lodash": "^4.18.1",
+    "lz-string": "^1.5.0",
+    "monaco-editor": "^0.55.1",
+    "monaco-vim": "^0.4.4",
+    "nanoid": "^5.1.16",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-resizable-panels": "^4.12.1",
+    "statelift": "^1.4.0",
+    "zod": "^4.4.3"
+  }
+}

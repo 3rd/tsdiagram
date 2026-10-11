@@ -1,0 +1,129 @@
+@import "tailwindcss";
+@import "./react-flow.css";
+@source "./";
+
+/* tokens */
+
+@theme static {
+  --color-canvas: oklch(97.4% 0 0);
+  --color-pane: oklch(100% 0 0);
+  --color-inset: oklch(95.8% 0 0);
+  --color-raised: oklch(100% 0 0);
+  --color-text: oklch(23% 0 0);
+  --color-text-muted: oklch(43% 0 0);
+  --color-text-faint: oklch(50% 0 0);
+  --color-border: oklch(88.5% 0 0);
+  --color-border-strong: oklch(78% 0 0);
+  --color-overlay: oklch(0% 0 0 / 0.42);
+
+  --color-accent: oklch(52% 0.19 255);
+  --color-accent-hover: oklch(46% 0.19 255);
+  --color-accent-fg: oklch(100% 0 0);
+  --color-selection: oklch(93% 0.04 255);
+  --color-selection-hover: oklch(90.5% 0.055 255);
+
+  --color-error: oklch(52% 0.18 25);
+
+  --color-brand: oklch(52% 0.19 255);
+  --color-brand-strong: oklch(46% 0.19 255);
+  --color-brand-fg: oklch(100% 0 0);
+
+  --color-header: oklch(36% 0.12 255);
+  --color-header-fg: oklch(97% 0.01 255);
+  --color-header-fg-muted: oklch(84% 0.05 255);
+  --color-header-control: oklch(100% 0 0 / 0.1);
+  --color-header-control-hover: oklch(100% 0 0 / 0.18);
+  --color-header-border: oklch(100% 0 0 / 0.14);
+
+  --color-node-selected: color-mix(in oklab, var(--color-brand) 6%, var(--color-pane));
+  --color-divider: color-mix(in oklab, var(--color-text) 11%, transparent);
+
+  --color-code-literal: oklch(55% 0.15 50);
+  --color-edge: oklch(72% 0 0);
+
+  --font-sans:
+    Inter, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue",
+    "Noto Sans", "Liberation Sans", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-weight-strong: 600;
+
+  --text-micro: 11px;
+  --text-micro--line-height: 14px;
+  --text-ui: 12px;
+  --text-ui--line-height: 16px;
+  --text-body: 13px;
+  --text-body--line-height: 18px;
+  --text-title: 14px;
+  --text-title--line-height: 20px;
+  --text-title--letter-spacing: -0.01em;
+
+  --radius-sm: 4px;
+  --radius-control: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-fade: cubic-bezier(0, 0, 0.58, 1);
+}
+
+@theme inline {
+  --color-control-hover: var(--color-inset);
+}
+
+:root {
+  color-scheme: light;
+
+  --shadow-card: 0 1px 1px oklch(0% 0 0 / 0.03);
+  --shadow-popover: 0 12px 32px oklch(0% 0 0 / 0.14);
+
+  --duration-instant: 0ms;
+  --duration-hover: 120ms;
+  --duration-quick: 140ms;
+  --duration-fade: 180ms;
+  --duration-enter: 200ms;
+  --duration-walk: 220ms;
+  --duration-move: 300ms;
+}
+
+:root[data-theme="dark"],
+.theme-dark {
+  color-scheme: dark;
+
+  --color-canvas: oklch(19% 0 0);
+  --color-pane: oklch(26% 0 0);
+  --color-inset: oklch(30% 0 0);
+  --color-raised: oklch(28.5% 0 0);
+  --color-text: oklch(93% 0 0);
+  --color-text-muted: oklch(79% 0 0);
+  --color-text-faint: oklch(68% 0 0);
+  --color-border: oklch(34.5% 0 0);
+  --color-border-strong: oklch(43% 0 0);
+  --color-overlay: oklch(0% 0 0 / 0.62);
+
+  --color-accent: oklch(74% 0.15 255);
+  --color-accent-hover: oklch(80% 0.15 255);
+  --color-accent-fg: oklch(16.5% 0 0);
+  --color-selection: oklch(34% 0.065 255);
+  --color-selection-hover: oklch(37.5% 0.08 255);
+
+  --color-error: oklch(74% 0.13 22);
+
+  --color-node-selected: color-mix(in oklab, var(--color-brand) 16%, var(--color-pane));
+  --color-divider: color-mix(in oklab, var(--color-text) 12%, transparent);
+
+  --color-code-literal: oklch(78% 0.12 60);
+  --color-edge: oklch(58% 0 0);
+
+  --shadow-card: none;
+  --shadow-popover: 0 14px 36px oklch(0% 0 0 / 0.5);
+}
+
+.tsdiagram {
+  font: 13px/18px var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--color-text);
+}

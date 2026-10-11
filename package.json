@@ -1,15 +1,18 @@
 {
-  "name": "tsdiagram",
-  "version": "0.0.3",
+  "name": "tsdiagram-workspace",
+  "version": "0.1.0",
   "repository": "https://github.com/3rd/tsdiagram",
   "description": "Create diagrams and plan your code with TypeScript.",
   "type": "module",
   "scripts": {
-    "dev": "vite --open",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
+    "dev": "pnpm --filter @tsdiagram/web dev",
+    "build": "pnpm typecheck && pnpm -r --filter \"!@tsdiagram/renderer\" --workspace-concurrency=1 --if-present run build",
+    "preview": "pnpm --filter @tsdiagram/web preview",
     "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit && pnpm -r --if-present run typecheck",
     "coverage": "vitest run --coverage",
+    "pack:cli": "pnpm --dir packages/cli pack --pack-destination ../../dist",
     "format": "prettier --write .",
     "prepare": "husky"
   },
@@ -18,31 +21,8 @@
       "prettier --write --ignore-unknown"
     ]
   },
-  "dependencies": {
-    "@headlessui/react": "^2.2.10",
-    "@jspm/core": "^2.1.0",
-    "@monaco-editor/react": "^4.7.0",
-    "@radix-ui/react-icons": "^1.3.2",
-    "@xyflow/react": "^12.11.1",
-    "classnames": "^2.5.1",
-    "dom-to-svg": "^0.12.2",
-    "elkjs": "^0.9.3",
-    "lodash": "^4.18.1",
-    "lz-string": "^1.5.0",
-    "monaco-editor": "^0.55.1",
-    "monaco-vim": "^0.4.4",
-    "nanoid": "^5.1.16",
-    "path-browserify": "^1.0.1",
-    "process": "^0.11.10",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "react-resizable-panels": "^4.12.1",
-    "source-map-js": "^1.2.1",
-    "statelift": "^1.4.0",
-    "ts-morph": "^28.0.0",
-    "zod": "^4.4.3"
-  },
   "devDependencies": {
+    "@jspm/core": "^2.1.0",
     "@tailwindcss/postcss": "4.3.2",
     "@types/lodash": "^4.17.24",
     "@types/node": "^24.13.2",
@@ -59,11 +39,17 @@
     "typescript": "^6.0.3",
     "vite": "^8.1.3",
     "vitest": "^4.1.9",
-    "web-worker": "1.5.0"
+    "web-worker": "1.5.0",
+    "process": "^0.11.10",
+    "source-map-js": "^1.2.1"
   },
   "pnpm": {
     "overrides": {
       "rollup": ">=4.59.0"
     }
+  },
+  "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
