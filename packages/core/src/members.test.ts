@@ -574,6 +574,123 @@ it("includes static members and surfaces member modifiers", () => {
   expect(base.schema).toContainEqual({ name: "plain", type: "string", optional: false });
 });
 
+it("renders constructor parameter properties as own field rows in declaration order", () => {
+  const models = parseModels(`
+    interface Order { id: string }
+    interface Repository<T> { items: T[] }
+    class Service {
+      before: string;
+      constructor(
+        private orders: Repository<Order>,
+        public readonly name: string,
+        plain: number,
+        protected readonly count = 0,
+        public tag?: Order
+      ) {}
+      after: number;
+    }
+  `);
+  const order = models.find((model) => model.name === "Order");
+  const repository = models.find((model) => model.name === "Repository");
+  const service = models.find((model) => model.name === "Service");
+  assert.exists(order);
+  assert.exists(repository);
+  assert.exists(service);
+
+  expect(service.schema).toEqual([
+    { name: "before", type: "string", optional: false },
+    {
+      name: "orders",
+      type: "generic",
+      genericName: "Repository",
+      arguments: [order],
+      typeRefs: [repository],
+      optional: false,
+      modifiers: ["private"],
+    },
+    { name: "name", type: "string", optional: false, modifiers: ["readonly"] },
+    { name: "count", type: "number", optional: false, modifiers: ["protected", "readonly"] },
+    { name: "tag", type: order, optional: true },
+    { name: "after", type: "number", optional: false },
+  ]);
+  expect(service.dependencies).toEqual(expect.arrayContaining([repository, order]));
+  expect(order.dependants).toContain(service);
+  expect(repository.dependants).toContain(service);
+});
+
+it.each([
+  "public value: Order",
+  "public maybe?: Order",
+  "private list: Order[]",
+  "protected readonly repo: Repository<Order>",
+  "public either: Order | null",
+  "readonly handler: (order: Order) => Repository<Order>",
+  "public count = 0",
+])("renders the parameter property %s like the equivalent field", (member) => {
+  const models = parseModels(`
+    interface Order { id: string }
+    interface Repository<T> { items: T[] }
+    class Field { ${member}; }
+    class Parameter { constructor(${member}) {} }
+  `);
+  const field = models.find((model) => model.name === "Field");
+  const parameter = models.find((model) => model.name === "Parameter");
+  assert.exists(field);
+  assert.exists(parameter);
+
+  expect(parameter.schema).toHaveLength(1);
+  expect(parameter.schema).toEqual(field.schema);
+  expect(parameter.dependencies).toEqual(field.dependencies);
+});
+
+it("renders parameter properties from a generic base constructor like inherited fields", () => {
+  const models = parseModels(`
+    interface Order { id: string }
+    class ParameterBase<T> {
+      constructor(protected item: T, public readonly items: T[], public handler: (item: T) => T) {}
+    }
+    class FieldBase<T> { protected item: T; public readonly items: T[]; public handler: (item: T) => T; }
+    class ParameterChild extends ParameterBase<Order> {}
+    class FieldChild extends FieldBase<Order> {}
+  `);
+  const order = models.find((model) => model.name === "Order");
+  const parameterChild = models.find((model) => model.name === "ParameterChild");
+  const fieldChild = models.find((model) => model.name === "FieldChild");
+  assert.exists(order);
+  assert.exists(parameterChild);
+  assert.exists(fieldChild);
+
+  expect(parameterChild.schema).toEqual([
+    { name: "item", type: order, optional: false, inherited: true, modifiers: ["protected"] },
+    {
+      name: "items",
+      type: "array",
+      elementType: order,
+      optional: false,
+      inherited: true,
+      modifiers: ["readonly"],
+    },
+    expect.objectContaining({ name: "handler", type: "function", returnType: order, inherited: true }),
+  ]);
+  expect(parameterChild.schema).toEqual(fieldChild.schema);
+  expect(parameterChild.dependencies).toContain(order);
+});
+
+it("preserves named parameter property types through mapped types", () => {
+  const models = parseModels(`
+    type Id = string;
+    class Source { constructor(public readonly id: Id) {} }
+    type View = Pick<Source, "id">;
+  `);
+  const id = models.find((model) => model.name === "Id");
+  const view = models.find((model) => model.name === "View");
+  assert.exists(id);
+  assert.exists(view);
+
+  expect(view.schema).toEqual([{ name: "id", type: id, optional: false, modifiers: ["readonly"] }]);
+  expect(view.dependencies).toContain(id);
+});
+
 it("substitutes generic type arguments for inherited and aliased members", () => {
   const models = parseModels(`
     interface User { id: string }

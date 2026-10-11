@@ -6,6 +6,7 @@ import {
   type MappedTypeNode,
   type MethodDeclaration,
   type MethodSignature,
+  type ParameterDeclaration,
   type PropertyDeclaration,
   type PropertySignature,
   type SetAccessorDeclaration,
@@ -35,12 +36,14 @@ import {
   type TypeBindings,
 } from "./type-parameters";
 
+type ClassPropertyDeclaration = ParameterDeclaration | PropertyDeclaration;
+
 type MemberDeclaration =
+  | ClassPropertyDeclaration
   | EnumMember
   | GetAccessorDeclaration
   | MethodDeclaration
   | MethodSignature
-  | PropertyDeclaration
   | PropertySignature
   | SetAccessorDeclaration;
 
@@ -78,14 +81,20 @@ type GenericPropertyInput = {
 
 const READONLY_CHECK_FLAG = 1 << 3;
 
+const isClassPropertyDeclaration = (node: Node | undefined): node is ClassPropertyDeclaration =>
+  Node.isPropertyDeclaration(node) || (Node.isParameterDeclaration(node) && node.isParameterProperty());
+
 const isMemberDeclaration = (node: Node | undefined) =>
   Node.isEnumMember(node) ||
-  Node.isPropertyDeclaration(node) ||
+  isClassPropertyDeclaration(node) ||
   Node.isPropertySignature(node) ||
   Node.isMethodDeclaration(node) ||
   Node.isMethodSignature(node) ||
   Node.isGetAccessorDeclaration(node) ||
   Node.isSetAccessorDeclaration(node);
+
+const getMemberContainer = (declaration: MemberDeclaration) =>
+  Node.isParameterDeclaration(declaration) ? declaration.getParent().getParent() : declaration.getParent();
 
 const isSynthesizedReadonly = (symbol: CompilerSymbol) => {
   const links: unknown = Reflect.get(symbol.compilerSymbol, "links");
@@ -108,7 +117,9 @@ const getMemberModifiers = (declaration: MemberDeclaration | undefined, symbol?:
     return modifiers;
   }
 
-  const scope = Node.isScoped(declaration) ? declaration.getScope() : undefined;
+  const hasScope = Node.isScoped(declaration) || Node.isScopeable(declaration);
+
+  const scope = hasScope ? declaration.getScope() : undefined;
   const hasRestrictedScope = scope === "private" || scope === "protected";
   if (hasRestrictedScope) {
     modifiers.push(scope);
@@ -193,7 +204,7 @@ const findMappedPropertyAnnotation = (type: Type, symbol: CompilerSymbol) => {
 
       const original = symbol
         .getDeclarations()
-        .find((node) => Node.isPropertySignature(node) || Node.isPropertyDeclaration(node));
+        .find((node) => Node.isPropertySignature(node) || isClassPropertyDeclaration(node));
       return original?.getTypeNode();
     }
 
@@ -229,7 +240,7 @@ const createMember = ({ owner, symbol, declaration, context }: MemberInput) => {
 
   const isInherited =
     owner.kind !== "typeAlias" &&
-    (!declaration || declaration.getParent().getSymbol() !== owner.declaration.getSymbol());
+    (!declaration || getMemberContainer(declaration).getSymbol() !== owner.declaration.getSymbol());
   const typeBindings = collectTypeBindings(owner, name);
   const memberContext = { ...context, typeBindings };
   const member: Member = {
@@ -501,10 +512,10 @@ const projectFunctionProperty = (member: Member, signatures: Signature[], contex
     member.typeNode && Node.isFunctionTypeNode(member.typeNode)
       ? member.typeNode.getReturnTypeNode()
       : undefined;
-  const memberTypeNode =
-    Node.isPropertySignature(member.declaration) || Node.isPropertyDeclaration(member.declaration)
-      ? member.declaration.getTypeNode()
-      : member.typeNode;
+  const declaration = member.declaration;
+  const hasPropertyDeclaration =
+    Node.isPropertySignature(declaration) || isClassPropertyDeclaration(declaration);
+  const memberTypeNode = hasPropertyDeclaration ? declaration.getTypeNode() : member.typeNode;
   const rows = bindSignatureTypeArguments({
     signatures,
     context,
