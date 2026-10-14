@@ -65,7 +65,8 @@ const saveURLState = (state: DocumentsState) => {
     currentDocumentId: state.currentDocumentId,
   };
   const compressed = compressToEncodedURIComponent(serializeState(monoState));
-  history.replaceState(null, "", `#/${compressed}`);
+  const url = new URL(`#/${compressed}`, location.href);
+  history.replaceState(null, "", url.href);
 };
 
 const SAVE_LOCAL_STORAGE_DELAY_MS = 300;
@@ -134,9 +135,23 @@ const urlState = (() => {
   return null;
 })();
 
+let shouldReuseLocalDefaultDocument = false;
+
 if (urlState && urlState.state.currentDocumentId === "default") {
-  urlState.state.currentDocumentId = nanoid();
-  urlState.state.documents[0].id = urlState.state.currentDocumentId;
+  const urlDocument = urlState.state.documents.find((document) => document.id === "default");
+  const localDocument = localStorageState?.documents.find((document) => document.id === "default");
+
+  shouldReuseLocalDefaultDocument =
+    urlDocument !== undefined &&
+    localDocument !== undefined &&
+    urlDocument.title === localDocument.title &&
+    urlDocument.source === localDocument.source;
+
+  const shouldRekeyDefaultDocument = urlDocument !== undefined && !shouldReuseLocalDefaultDocument;
+  if (shouldRekeyDefaultDocument) {
+    urlState.state.currentDocumentId = nanoid();
+    urlDocument.id = urlState.state.currentDocumentId;
+  }
 }
 
 const combinedState = localStorageState ?? urlState?.state ?? defaultState;
@@ -152,11 +167,14 @@ if (localStorageState && urlState) {
   const localStorageDocument = localStorageState?.documents.find((d) => d.id === urlDocumentId);
 
   if (urlDocument && localStorageDocument) {
-    if (!isEqual(urlDocument, localStorageDocument)) {
+    const shouldUpdateLocalDocument =
+      !shouldReuseLocalDefaultDocument && !isEqual(urlDocument, localStorageDocument);
+    if (shouldUpdateLocalDocument) {
       localStorageDocument.title = urlDocument.title;
       localStorageDocument.source = urlDocument.source;
       hasIngestedForeignState = true;
     }
+
     combinedState.currentDocumentId = urlDocumentId;
   }
 
@@ -233,6 +251,10 @@ export const documentsStore = createStore<DocumentsStore>((root) => ({
 
 if (hasIngestedForeignState) {
   documentsStore.state.sortByLastModified();
+}
+
+const shouldSaveReconciledState = hasIngestedForeignState || shouldReuseLocalDefaultDocument;
+if (shouldSaveReconciledState) {
   saveImmediately(documentsStore.state);
 }
 

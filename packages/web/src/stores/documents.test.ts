@@ -1,4 +1,4 @@
-import { compressToEncodedURIComponent } from "lz-string";
+import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from "lz-string";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Document, DocumentsState } from "./documents";
 
@@ -26,9 +26,14 @@ const setPersistenceState = ({
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
   });
-  vi.stubGlobal("location", {
-    hash: urlState ? `#/${compressToEncodedURIComponent(JSON.stringify(urlState))}` : "",
-  });
+
+  const url = new URL("https://tsdiagram.test/editor?theme=dark");
+
+  if (urlState) {
+    url.hash = `#/${compressToEncodedURIComponent(JSON.stringify(urlState))}`;
+  }
+
+  vi.stubGlobal("location", url);
   vi.stubGlobal("history", { replaceState: vi.fn() });
   vi.stubGlobal("window", {
     addEventListener: (event: string, listener: () => void) => {
@@ -46,6 +51,20 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+it("saves shared documents with an absolute URL while preserving the path and query", async () => {
+  const sharedDocument = createDocument("shared", "Shared");
+  const state = { documents: [sharedDocument], currentDocumentId: sharedDocument.id };
+  setPersistenceState({ urlState: state });
+
+  const { flushDocumentURL } = await import("./documents");
+  flushDocumentURL();
+
+  const [, , savedURL] = vi.mocked(history.replaceState).mock.calls[0];
+  const url = new URL(String(savedURL));
+  expect(`${url.origin}${url.pathname}${url.search}`).toBe("https://tsdiagram.test/editor?theme=dark");
+  expect(JSON.parse(decompressFromEncodedURIComponent(url.hash.slice(2)))).toEqual(state);
 });
 
 it("falls back to the default document for a URL state with an empty document list", async () => {
@@ -151,4 +170,81 @@ it("assigns a fresh id to a valid shared default document", async () => {
 
   expect(documentsStore.state.currentDocumentId).not.toBe("default");
   expect(documentsStore.state.currentDocument.id).toBe(documentsStore.state.currentDocumentId);
+});
+
+it("reuses matching default content across reloads despite a different URL timestamp", async () => {
+  const localDocument = createDocument("default", "Welcome", "interface Example {}");
+  const existingCopy = { ...localDocument, id: "existing-copy" };
+  const otherDocument = createDocument("other", "Other");
+  const localState = {
+    documents: [otherDocument, localDocument, existingCopy],
+    currentDocumentId: otherDocument.id,
+  };
+  const { storage } = setPersistenceState({
+    localState,
+    urlState: { documents: [{ ...localDocument, lastModified: 2 }], currentDocumentId: localDocument.id },
+  });
+
+  const { documentsStore } = await import("./documents");
+
+  expect(documentsStore.state.documents).toEqual(localState.documents);
+  expect(documentsStore.state.currentDocument).toEqual(localDocument);
+
+  const expectedState = { ...localState, currentDocumentId: localDocument.id };
+  expect(storage.get("documents")).toBe(JSON.stringify(expectedState));
+
+  const [, , savedURLValue] = vi.mocked(history.replaceState).mock.calls[0];
+  const savedURL = new URL(String(savedURLValue));
+  expect(JSON.parse(decompressFromEncodedURIComponent(savedURL.hash.slice(2)))).toEqual({
+    documents: [localDocument],
+    currentDocumentId: localDocument.id,
+  });
+
+  vi.resetModules();
+  vi.stubGlobal("location", savedURL);
+
+  const { documentsStore: reloadedStore } = await import("./documents");
+
+  expect(reloadedStore.state.documents).toEqual(expectedState.documents);
+  expect(reloadedStore.state.currentDocument).toEqual(localDocument);
+  expect(storage.get("documents")).toBe(JSON.stringify(expectedState));
+});
+
+it.each([
+  { title: "Shared title", source: "interface Local {}" },
+  { title: "Local", source: "interface Shared {}" },
+])("imports differing default content separately: $title / $source", async ({ title, source }) => {
+  const localDocument = createDocument("default", "Local", "interface Local {}");
+  const sharedDocument = createDocument("default", title, source);
+  const { storage } = setPersistenceState({
+    localState: { documents: [localDocument], currentDocumentId: localDocument.id },
+    urlState: { documents: [sharedDocument], currentDocumentId: sharedDocument.id },
+  });
+
+  const { documentsStore } = await import("./documents");
+  const currentDocument = documentsStore.state.currentDocument;
+
+  expect(currentDocument.id).not.toBe("default");
+  expect(currentDocument).toEqual({ ...sharedDocument, id: currentDocument.id });
+  expect(documentsStore.state.documents).toEqual([currentDocument, localDocument]);
+  expect(storage.get("documents")).toBe(
+    JSON.stringify({ documents: [currentDocument, localDocument], currentDocumentId: currentDocument.id })
+  );
+});
+
+it("rekeys the selected default URL document when the local workspace has no default record", async () => {
+  const localDocument = createDocument("local", "Local");
+  const unselectedDocument = createDocument("unselected", "Unselected");
+  const sharedDocument = createDocument("default", "Shared default");
+  setPersistenceState({
+    localState: { documents: [localDocument], currentDocumentId: localDocument.id },
+    urlState: { documents: [unselectedDocument, sharedDocument], currentDocumentId: sharedDocument.id },
+  });
+
+  const { documentsStore } = await import("./documents");
+  const currentDocument = documentsStore.state.currentDocument;
+
+  expect(currentDocument.id).not.toBe("default");
+  expect(currentDocument).toEqual({ ...sharedDocument, id: currentDocument.id });
+  expect(documentsStore.state.documents).toEqual([currentDocument, localDocument]);
 });

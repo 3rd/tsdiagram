@@ -180,6 +180,35 @@ it("isolates selection, processing, and export ownership between diagram instanc
   graphStore.state.acquireSvgExport();
 
   expect(otherDiagram.state.selectedEdge).toBeNull();
-  expect(otherDiagram.state.exportStatus).toEqual({ status: "pending" });
+  expect(otherDiagram.state.exportStatus).toEqual({
+    status: "error",
+    message: "The diagram is unavailable.",
+  });
   expect(otherDiagram.state.svgExportMode).toBe(false);
+});
+
+it("clears a released diagram without letting old exports release a new diagram's lease", () => {
+  graphStore.state.hoveredNode = hoveredNode(model("A"));
+  graphStore.state.selectedEdge = { id: "A-B", source: "A", target: "B" };
+  graphStore.state.setHoveredBadgeHub("Id", "pill");
+  const releaseOldExport = graphStore.state.acquireSvgExport();
+  graphStore.state.releaseDiagram();
+
+  expect(graphStore.state.hoveredNode).toBeNull();
+  expect(graphStore.state.selectedEdge).toBeNull();
+  expect(graphStore.state.highlightedNodeIds).toEqual({});
+  expect(graphStore.state.hoveredBadgeHubId).toBeNull();
+  expect(graphStore.state.svgExportMode).toBe(false);
+  expect(graphStore.state.exportStatus).toEqual({ status: "error", message: "The diagram is unavailable." });
+
+  graphStore.state.selectedNode = hoveredNode(model("B"));
+  const releaseNewExport = graphStore.state.acquireSvgExport();
+  releaseOldExport();
+  expect(getNodeDecoration(graphStore.state, "B")).toBe("none");
+
+  releaseNewExport();
+  expect(getNodeDecoration(graphStore.state, "B")).toBe("selected");
+
+  graphStore.state.releaseDiagram();
+  expect(graphStore.state.selectedNode).toBeNull();
 });

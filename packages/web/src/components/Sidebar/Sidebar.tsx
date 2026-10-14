@@ -26,8 +26,14 @@ const SidebarItem = memo(({ id, title, onClick, onDelete, isActive }: SidebarIte
     }
   };
 
-  const handleMouseLeave = () => {
+  const resetDeleteConfirmation = () => {
     setDeleteConfirmationState("default");
+  };
+
+  const handleDeleteKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "Escape") return;
+
+    resetDeleteConfirmation();
   };
 
   return (
@@ -47,8 +53,10 @@ const SidebarItem = memo(({ id, title, onClick, onDelete, isActive }: SidebarIte
       <button
         aria-label={deleteButtonLabel}
         className="mr-0.5 flex h-6 min-w-6 items-center justify-center rounded-control px-1 text-text-faint transition-[color,background-color] duration-(--duration-hover) ease-out hover:bg-control-hover hover:text-text focus-visible:-outline-offset-2 active:duration-(--duration-instant)"
+        onBlur={resetDeleteConfirmation}
         onClick={handleDeleteClick}
-        onMouseLeave={handleMouseLeave}
+        onKeyDown={handleDeleteKeyDown}
+        onMouseLeave={resetDeleteConfirmation}
       >
         {deleteConfirmationState === "default" && <Cross2Icon />}
         {deleteConfirmationState === "confirm" && (

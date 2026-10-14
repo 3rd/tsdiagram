@@ -124,6 +124,16 @@ it("cancels a pending readiness wait without cancelling another exporter", async
   await expect(survivingResult).resolves.toBe("<svg />");
 });
 
+it("rejects a waiting export when its diagram is released", async () => {
+  graphStore.state.parserStatus = { status: "pending" };
+  const exporter = createSVGExporter(createFlowStore());
+  const result = exporter.getCurrentSVGSource();
+  const rejection = expect(result).rejects.toThrow("The diagram is unavailable.");
+  graphStore.state.releaseDiagram();
+
+  await rejection;
+});
+
 it("restarts capture when parsing changes before the SVG result is delivered", async () => {
   vi.mocked(exportReactFlowToSVG)
     .mockImplementationOnce(() => {

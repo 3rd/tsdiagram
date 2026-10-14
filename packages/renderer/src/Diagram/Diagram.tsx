@@ -132,6 +132,7 @@ export type DiagramProps = {
   onOptionsChange: (change: Partial<DiagramOptions>) => void;
   viewportRevision?: string;
   disableMiniMap?: boolean;
+  isSourceEmpty?: boolean;
 };
 
 export const Diagram = memo(
@@ -143,6 +144,7 @@ export const Diagram = memo(
     onOptionsChange,
     disableMiniMap,
     viewportRevision,
+    isSourceEmpty = false,
   }: DiagramProps) => {
     const graphStore = useDiagramStore();
 
@@ -189,7 +191,7 @@ export const Diagram = memo(
 
     useLayoutEffect(() => {
       return () => {
-        graphStore.state.parserStatus = { status: "pending" };
+        graphStore.state.releaseDiagram();
       };
     }, [graphStore]);
 
@@ -791,7 +793,8 @@ export const Diagram = memo(
 
     const { isFullscreen, toggleFullscreen } = useFullscreen(containerRef);
     const isLoading = isParsing || isPlacing;
-    const isEmpty = !isLoading && models.length === 0;
+    const shouldShowParseError = !isLoading && processingStatus.status === "error";
+    const isEmpty = !isLoading && processingStatus.status === "ready" && models.length === 0;
 
     return (
       <div
@@ -809,12 +812,36 @@ export const Diagram = memo(
             Loading diagram…
           </div>
         )}
+        {shouldShowParseError && (
+          <div
+            className={classNames("pointer-events-none absolute inset-0 z-10 flex justify-center p-6", {
+              "items-center": models.length === 0,
+              "items-start pt-16": models.length > 0,
+            })}
+          >
+            <div
+              className="pointer-events-auto max-h-full max-w-xl overflow-auto rounded-lg border border-border bg-pane p-4 shadow-(--shadow-card)"
+              role="alert"
+            >
+              <p className="text-title font-strong text-error">Could not parse TypeScript</p>
+              {models.length > 0 && (
+                <p className="mt-1 text-ui text-text">Showing the last successful diagram.</p>
+              )}
+              <p className="mt-1 text-ui break-words text-text-muted">{processingStatus.message}</p>
+            </div>
+          </div>
+        )}
         {isEmpty && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-6 text-center">
+          <div
+            className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-6 text-center"
+            role="status"
+          >
             <ComponentNoneIcon className="mb-3 size-8 text-text-faint" />
-            <p className="text-title font-strong text-text">No types to diagram</p>
+            <p className="text-title font-strong text-text">
+              {isSourceEmpty ? "This document is empty" : "No supported declarations found"}
+            </p>
             <p className="mt-1 text-ui text-text-muted">
-              Declare an interface, type alias, or class in the editor.
+              Declare an interface, type alias, class, enum, or function in the editor.
             </p>
           </div>
         )}

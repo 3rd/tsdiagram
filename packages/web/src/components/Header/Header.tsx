@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   ArrowLeftIcon,
@@ -49,6 +49,40 @@ type HeaderProps = {
 export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) => {
   const options = useUserOptions();
   const documentTitle = useStore(documentsStore, (state) => state.currentDocument.title);
+  const [isSiteSwitcherOpen, setIsSiteSwitcherOpen] = useState(false);
+  const siteSwitcherId = useId();
+  const siteSwitcherButtonRef = useRef<HTMLButtonElement>(null);
+
+  const handleSiteSwitcherPointerEnter = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "mouse") return;
+
+    setIsSiteSwitcherOpen(true);
+  };
+
+  const handleSiteSwitcherPointerLeave = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(document.activeElement)) return;
+
+    setIsSiteSwitcherOpen(false);
+  };
+
+  const handleSiteSwitcherBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+
+    setIsSiteSwitcherOpen(false);
+  };
+
+  const handleSiteSwitcherKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const shouldClose = event.key === "Escape" && isSiteSwitcherOpen;
+    if (!shouldClose) return;
+
+    event.preventDefault();
+    setIsSiteSwitcherOpen(false);
+    siteSwitcherButtonRef.current?.focus();
+  };
+
+  const handleSiteSwitcherClick = () => {
+    setIsSiteSwitcherOpen((isOpen) => !isOpen);
+  };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     documentsStore.state.setCurrentDocumentTitle(e.target.value);
@@ -98,16 +132,35 @@ export const Header = memo(({ onPreferencesClick, onShareClick }: HeaderProps) =
           </button>
 
           <div className="hidden items-center sm:flex">
-            <div className="relative group">
-              <div className="flex h-7 cursor-pointer items-center gap-1.5 rounded-control px-1.5 text-body font-strong transition-[background-color] duration-(--duration-hover) ease-out hover:bg-header-control">
+            <div
+              className="relative"
+              onBlur={handleSiteSwitcherBlur}
+              onKeyDown={handleSiteSwitcherKeyDown}
+              onPointerEnter={handleSiteSwitcherPointerEnter}
+              onPointerLeave={handleSiteSwitcherPointerLeave}
+            >
+              <button
+                ref={siteSwitcherButtonRef}
+                aria-controls={siteSwitcherId}
+                aria-expanded={isSiteSwitcherOpen}
+                aria-label="TS Diagram site switcher"
+                className="flex h-7 cursor-pointer items-center gap-1.5 rounded-control px-1.5 text-body font-strong transition-[background-color] duration-(--duration-hover) ease-out hover:bg-header-control focus-visible:outline-header-fg"
+                type="button"
+                onClick={handleSiteSwitcherClick}
+              >
                 <span className="flex h-5 items-center rounded-sm bg-brand px-1 text-brand-fg">
                   <span className="[text-box:trim-both_cap_alphabetic]">TS</span>
                 </span>
                 <span className="[text-box:trim-both_cap_alphabetic]">Diagram</span>
                 <ChevronDownIcon className="size-3.5 -translate-y-px text-header-fg-muted" />
-              </div>
+              </button>
 
-              <div className="invisible absolute top-full left-0 z-50 w-64 -translate-y-[3px] pt-1.5 opacity-0 transition-[opacity,transform,visibility] duration-(--duration-quick) ease-out group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
+              <div
+                id={siteSwitcherId}
+                className="invisible absolute top-full left-0 z-50 w-64 -translate-y-[3px] pt-1.5 opacity-0 transition-[opacity,transform,visibility] duration-(--duration-quick) ease-out data-[open=true]:visible data-[open=true]:translate-y-0 data-[open=true]:opacity-100"
+                data-open={isSiteSwitcherOpen}
+                inert={!isSiteSwitcherOpen}
+              >
                 <div className="flex flex-col gap-0.5 rounded-lg border border-border-strong bg-raised p-1 text-text shadow-(--shadow-popover)">
                   {RELATED_SITES.map((site) => (
                     <a

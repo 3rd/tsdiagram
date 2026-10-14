@@ -36,6 +36,11 @@
     color: inherit;
   }
 
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
   select {
     background-color: var(--color-pane);
   }

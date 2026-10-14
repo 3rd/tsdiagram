@@ -20,11 +20,13 @@ const getExportErrorMessage = (error: unknown) => {
 };
 
 const ShareContent = memo(() => {
-  const [hasCopiedLink, setHasCopiedLink] = useState(false);
+  const [linkCopyStatus, setLinkCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [hasCopiedSVG, setHasCopiedSVG] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewImageURL, setPreviewImageURL] = useState<string | null>(null);
-  const copySVGOperationRef = useRef(0);
+  const svgExportOperationRef = useRef(0);
+  const copyLinkOperationRef = useRef(0);
 
   const exportStatus = useDiagramStatus();
   const { getCurrentSVGSource } = useDiagramSVGExporter();
@@ -46,10 +48,11 @@ const ShareContent = memo(() => {
         }
 
         setPreviewImageURL(imageURL);
-        setExportError(null);
+        setPreviewError(null);
       } catch (error) {
         if (isAbortError(error)) return;
-        setExportError(getExportErrorMessage(error));
+
+        setPreviewError(getExportErrorMessage(error));
       }
     };
 
@@ -63,42 +66,64 @@ const ShareContent = memo(() => {
   }, [previewImageURL]);
 
   const handleExportSVGToFile = async () => {
+    const operation = ++svgExportOperationRef.current;
     setExportError(null);
+
     try {
       const svgSource = await getCurrentSVGSource();
       downloadSVG(svgSource, "diagram.svg");
     } catch (error) {
       if (isAbortError(error)) return;
+      if (operation !== svgExportOperationRef.current) return;
+
       setExportError(getExportErrorMessage(error));
     }
   };
 
   const handleCopySVG = async () => {
-    const operation = ++copySVGOperationRef.current;
+    const operation = ++svgExportOperationRef.current;
     setExportError(null);
     setHasCopiedSVG(false);
+
     try {
       await copySVG(getCurrentSVGSource());
     } catch (error) {
-      if (isAbortError(error) || operation !== copySVGOperationRef.current) return;
+      if (isAbortError(error)) return;
+      if (operation !== svgExportOperationRef.current) return;
+
       setExportError(getExportErrorMessage(error));
       return;
     }
-    if (operation === copySVGOperationRef.current) setHasCopiedSVG(true);
+
+    if (operation !== svgExportOperationRef.current) return;
+
+    setHasCopiedSVG(true);
   };
 
   const handleCopyLink = async () => {
+    const operation = ++copyLinkOperationRef.current;
+    setLinkCopyStatus("idle");
+
     try {
       await navigator.clipboard.writeText(window.location.href);
     } catch {
+      if (operation !== copyLinkOperationRef.current) return;
+
+      setLinkCopyStatus("error");
       return;
     }
-    setHasCopiedLink(true);
+
+    if (operation !== copyLinkOperationRef.current) return;
+
+    setLinkCopyStatus("copied");
   };
+
+  const canShowPreview = previewImageURL !== null && exportStatus.status !== "error";
+  const visibleExportError = exportError ?? previewError;
 
   return (
     <>
-      {previewImageURL && (
+      {canShowPreview && (
         <div className="checkered mt-4 flex justify-center border-y border-border p-3">
           <img alt="diagram" className="h-auto max-h-[22vh] w-auto max-w-full" src={previewImageURL} />
         </div>
@@ -126,9 +151,14 @@ const ShareContent = memo(() => {
               onClick={handleCopyLink}
             >
               <Link2Icon />
-              {hasCopiedLink ? "Copied" : "Copy"}
+              {linkCopyStatus === "copied" ? "Copied" : "Copy"}
             </button>
           </div>
+          {linkCopyStatus === "error" && (
+            <p className="text-ui text-error" role="alert">
+              Link copy failed. Select and copy the link above.
+            </p>
+          )}
         </div>
 
         <div className="field-group">
@@ -144,9 +174,9 @@ const ShareContent = memo(() => {
               Download .svg
             </button>
           </div>
-          {exportError && (
+          {visibleExportError && (
             <p className="text-ui text-error" role="alert">
-              {exportError}
+              {visibleExportError}
             </p>
           )}
         </div>

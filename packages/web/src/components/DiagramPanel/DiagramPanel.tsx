@@ -132,8 +132,11 @@ export const DiagramPanel = () => {
   const rendererOptions = useStore(optionsStore, (state) => ({ ...state.renderer }), { equalityFn: shallow });
   const panelDirection = useStore(optionsStore, (state) => state.panels.splitDirection);
   const isMobile = useIsMobile();
+
   const debouncedSource = useDebounced(documentSource, PARSE_DEBOUNCE_MS, currentDocumentId);
   const { parsed, workerError } = useParsedDocument(debouncedSource, currentDocumentId);
+  const currentParsed = parsed?.documentId === currentDocumentId ? parsed : null;
+  const isSourceEmpty = useMemo(() => currentParsed?.source.trim().length === 0, [currentParsed]);
 
   const processingStatus = useMemo<DiagramProcessingStatus>(() => {
     if (workerError !== null) return { status: "error", message: workerError };
@@ -157,15 +160,18 @@ export const DiagramPanel = () => {
           {workerError}
         </div>
       )}
-      <Diagram
-        disableMiniMap={isMobile}
-        documentId={parsed?.documentId ?? currentDocumentId}
-        models={parsed?.models ?? EMPTY_MODELS}
-        options={rendererOptions}
-        processingStatus={processingStatus}
-        viewportRevision={panelDirection}
-        onOptionsChange={updateRendererOptions}
-      />
+      <div className="h-full" hidden={workerError !== null}>
+        <Diagram
+          disableMiniMap={isMobile}
+          documentId={currentDocumentId}
+          isSourceEmpty={isSourceEmpty}
+          models={currentParsed?.models ?? EMPTY_MODELS}
+          options={rendererOptions}
+          processingStatus={processingStatus}
+          viewportRevision={panelDirection}
+          onOptionsChange={updateRendererOptions}
+        />
+      </div>
     </div>
   );
 };

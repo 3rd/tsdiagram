@@ -7,6 +7,7 @@ import { Preferences } from "./components/Preferences";
 import { DiagramPanel } from "./components/DiagramPanel";
 import { Share } from "./components/Share";
 import { Sidebar } from "./components/Sidebar";
+import { RecoveryBoundary } from "./components/RecoveryBoundary";
 import { useUserOptions } from "./stores/user-options";
 import "./App.css";
 
@@ -36,7 +37,14 @@ function App() {
         <Header onPreferencesClick={handlePreferencesClick} onShareClick={handleShareClick} />
         <main className="flex flex-1 overflow-hidden">
           {options.general.sidebarOpen && <Sidebar />}
-          <Panels editorChildren={<Editor />} rendererChildren={<DiagramPanel />} />
+          <Panels
+            editorChildren={<Editor />}
+            rendererChildren={
+              <RecoveryBoundary region="diagram">
+                <DiagramPanel />
+              </RecoveryBoundary>
+            }
+          />
         </main>
         <Preferences isOpen={showPreferences} onClose={handlePreferencesClick} />
         <Share isOpen={showShare} onClose={handleShareClick} />

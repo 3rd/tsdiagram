@@ -86,6 +86,7 @@ export const Editor = memo(() => {
     <div className="flex flex-col h-full">
       <MonacoEditor
         defaultLanguage="typescript"
+        wrapperProps={{ className: "min-h-0 flex-1" }}
         options={editorOptions}
         theme={EDITOR_THEME_NAMES[options.renderer.theme]}
         value={currentDocumentSource}
@@ -95,7 +96,7 @@ export const Editor = memo(() => {
       {isVimMode && (
         <div
           ref={vimStatusLineRef}
-          className="border-t border-border bg-inset px-2 py-1 font-mono text-ui text-text vim-status"
+          className="shrink-0 border-t border-border bg-inset px-2 py-1 font-mono text-ui text-text vim-status"
         />
       )}
     </div>

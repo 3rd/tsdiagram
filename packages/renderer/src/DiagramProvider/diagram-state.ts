@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Edge, EdgeProps, Node } from "@xyflow/react";
-import { createStore, createStoreContext } from "statelift";
+import { batch, createStore, createStoreContext } from "statelift";
 import { Model } from "@tsdiagram/core/model";
 
 type GraphNode = Node<{ model: Model }>;
@@ -13,6 +13,7 @@ export type DiagramProcessingStatus =
 
 type GraphState = {
   acquireSvgExport: () => () => void;
+  releaseDiagram: () => void;
   clearHoveredBadgeHub: (pillId: string) => void;
   hoveredNode: GraphNode | null;
   hoveredNodeId: string | null;
@@ -81,11 +82,14 @@ const computeEdgeEndIds = (edge: GraphEdge) => {
   return endIds;
 };
 
-export const createDiagramStore = () =>
-  createStore<GraphState>(() => {
+const DIAGRAM_UNAVAILABLE_MESSAGE = "The diagram is unavailable.";
+
+export const createDiagramStore = () => {
+  const store = createStore<GraphState>(() => {
     let hoveredNode: GraphNode | null = null;
     let selectedNode: GraphNode | null = null;
     let selectedEdge: GraphEdge | null = null;
+    let exportGeneration = 0;
 
     const reconcileFocus = (state: GraphState) => {
       const focusedNode = hoveredNode ?? selectedNode;
@@ -101,14 +105,30 @@ export const createDiagramStore = () =>
     const initialState: GraphState = {
       acquireSvgExport() {
         this.svgExportCount += 1;
+        const generation = exportGeneration;
         let hasReleased = false;
 
         return () => {
-          if (hasReleased) return;
+          const isReleasedOrStale = hasReleased || generation !== exportGeneration;
+          if (isReleasedOrStale) return;
 
           hasReleased = true;
           this.svgExportCount -= 1;
         };
+      },
+      releaseDiagram() {
+        batch(store, () => {
+          exportGeneration += 1;
+          this.svgExportCount = 0;
+          this.hoveredNode = null;
+          this.selectedNode = null;
+          this.selectedEdge = null;
+          this.hoveredBadgeHubId = null;
+          this.hoveredBadgePillId = null;
+          this.parserStatus = { status: "error", message: DIAGRAM_UNAVAILABLE_MESSAGE };
+          this.layoutStatus = { status: "pending" };
+          this.routingStatus = { status: "pending" };
+        });
       },
       clearHoveredBadgeHub(pillId) {
         if (this.hoveredBadgePillId !== pillId) return;
@@ -125,7 +145,7 @@ export const createDiagramStore = () =>
       get svgExportMode() {
         return this.svgExportCount > 0;
       },
-      parserStatus: { status: "pending" },
+      parserStatus: { status: "error", message: DIAGRAM_UNAVAILABLE_MESSAGE },
       layoutStatus: { status: "pending" },
       routingStatus: { status: "pending" },
       get exportStatus() {
@@ -176,6 +196,9 @@ export const createDiagramStore = () =>
 
     return initialState;
   });
+
+  return store;
+};
 
 export const getNodeDecoration = (state: GraphState, modelId: string) => {
   if (state.svgExportMode) return "none";
